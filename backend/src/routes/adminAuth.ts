@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import passport from 'passport';
 import { Strategy as GoogleStrategy, Profile } from 'passport-google-oauth20';
+import crypto from 'crypto';
 import pool from '../db/pool';
 
 const router = Router();
@@ -8,12 +9,18 @@ const router = Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
 const GOOGLE_REDIRECT_URL = process.env.GOOGLE_OAUTH_REDIRECT_URL || 'http://localhost:3000/api/admin/auth/google/callback';
-const ADMIN_SESSION_SECRET = process.env.AUTH_SECRET || 'dev-secret-key';
 
 interface AdminUser {
   id: string;
   email: string;
+  google_sub: string;
   is_active: boolean;
+}
+
+declare module 'express-session' {
+  interface SessionData {
+    oauthState?: string;
+  }
 }
 
 declare global {
@@ -31,10 +38,14 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
     clientID: GOOGLE_CLIENT_ID,
     clientSecret: GOOGLE_CLIENT_SECRET,
     callbackURL: GOOGLE_REDIRECT_URL,
-    scope: ['email', 'profile']
-  }, async (accessToken: string, refreshToken: string, profile: Profile, done: (error: Error | null, user?: AdminUser | false) => void) => {
+    scope: ['email', 'profile'],
+    state: true,
+    passReqToCallback: true
+  }, async (req: Request, accessToken: string, refreshToken: string, profile: Profile, done: (error: Error | null, user?: AdminUser | false) => void) => {
     try {
       const email = profile.emails?.[0]?.value;
+      const googleSub = profile.id;
+      
       if (!email) {
         return done(null, false);
       }
@@ -56,6 +67,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
       return done(null, {
         id: admin.id,
         email: admin.email,
+        google_sub: googleSub,
         is_active: admin.is_active
       });
     } catch (error) {
@@ -85,6 +97,10 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
   });
 }
 
+function generateState(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
 router.get('/google/start', (req: Request, res: Response, next: NextFunction) => {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     res.status(503).json({
@@ -99,11 +115,52 @@ router.get('/google/start', (req: Request, res: Response, next: NextFunction) =>
     });
     return;
   }
-  passport.authenticate('google', { scope: ['email', 'profile'] })(req, res, next);
+  
+  const state = generateState();
+  req.session.oauthState = state;
+  
+  req.session.save((err) => {
+    if (err) {
+      console.error('Session save error:', err);
+      res.status(500).json({
+        error: 'INTERNAL_ERROR',
+        message: 'セッション保存に失敗しました',
+        details: {}
+      });
+      return;
+    }
+    passport.authenticate('google', { 
+      scope: ['email', 'profile'],
+      state: state
+    })(req, res, next);
+  });
 });
 
 router.get('/google/callback',
   (req: Request, res: Response, next: NextFunction) => {
+    const stateFromQuery = req.query.state as string | undefined;
+    const stateFromSession = req.session.oauthState;
+    
+    if (!stateFromQuery || !stateFromSession) {
+      res.status(400).json({
+        error: 'INVALID_STATE',
+        message: 'OAuth stateパラメータが欠落しています',
+        details: {}
+      });
+      return;
+    }
+    
+    if (stateFromQuery !== stateFromSession) {
+      res.status(400).json({
+        error: 'INVALID_STATE',
+        message: 'OAuth stateパラメータが一致しません',
+        details: {}
+      });
+      return;
+    }
+    
+    delete req.session.oauthState;
+    
     passport.authenticate('google', { session: true }, (err: Error | null, user: AdminUser | false) => {
       if (err) {
         console.error('Google OAuth error:', err);
