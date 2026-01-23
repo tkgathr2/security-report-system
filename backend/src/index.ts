@@ -10,6 +10,7 @@ import adminRecipientsRouter from './routes/adminRecipients';
 import projectsRouter from './routes/projects';
 import draftsRouter from './routes/drafts';
 import reportsRouter from './routes/reports';
+import adminCsvImportRouter from './routes/adminCsvImport';
 
 dotenv.config();
 
@@ -49,6 +50,7 @@ app.use('/api/admin/recipients', adminRecipientsRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/drafts', draftsRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/admin/csv', adminCsvImportRouter);
 
 // Test-only endpointfor simulating admin login (development only)
 if (process.env.NODE_ENV !== 'production') {
