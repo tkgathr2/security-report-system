@@ -4,6 +4,20 @@
 
 ---
 
+## 0. バックエンド起動方法
+
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+起動後のエンドポイント:
+- GET http://localhost:3000/health → `{ "ok": true }`
+- GET http://localhost:3000/version → `{ "spec": "plan_v2", "app": "security-report-system" }`
+
+---
+
 ## 1. 実装の前提
 - ホスティング：Railway
 - DB：PostgreSQL
