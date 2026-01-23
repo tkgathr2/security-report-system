@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import authRouter from './routes/auth';
 import adminAuthRouter from './routes/adminAuth';
 import adminRouter from './routes/admin';
+import adminReportsRouter from './routes/adminReports';
 
 dotenv.config();
 
@@ -39,6 +40,25 @@ app.get('/version', (_req: Request, res: Response) => {
 app.use('/api/auth', authRouter);
 app.use('/api/admin/auth', adminAuthRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/admin/reports', adminReportsRouter);
+
+// Test-only endpoint for simulating admin login (development only)
+if (process.env.NODE_ENV !== 'production') {
+  app.post('/api/test/admin-login', async (req: Request, res: Response) => {
+    const testAdmin = {
+      id: 'test-admin-id',
+      email: 'atsuhiro@takagi.bz',
+      is_active: true
+    };
+    req.login(testAdmin, (err) => {
+      if (err) {
+        res.status(500).json({ error: 'Login failed' });
+        return;
+      }
+      res.json({ message: 'Test admin logged in', admin: testAdmin });
+    });
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

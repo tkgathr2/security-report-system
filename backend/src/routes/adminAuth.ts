@@ -33,6 +33,28 @@ declare global {
   }
 }
 
+// Passport serialization (always configured for session support)
+passport.serializeUser((user: Express.User, done) => {
+  done(null, user.email);
+});
+
+passport.deserializeUser(async (email: string, done) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, is_active FROM admin_allowlist WHERE email = $1 AND is_active = true',
+      [email]
+    );
+
+    if (result.rows.length === 0) {
+      return done(null, false);
+    }
+
+    done(null, result.rows[0]);
+  } catch (error) {
+    done(error);
+  }
+});
+
 if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
   passport.use(new GoogleStrategy({
     clientID: GOOGLE_CLIENT_ID,
@@ -74,27 +96,6 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
       return done(error as Error);
     }
   }));
-
-  passport.serializeUser((user: Express.User, done) => {
-    done(null, user.email);
-  });
-
-  passport.deserializeUser(async (email: string, done) => {
-    try {
-      const result = await pool.query(
-        'SELECT id, email, is_active FROM admin_allowlist WHERE email = $1 AND is_active = true',
-        [email]
-      );
-
-      if (result.rows.length === 0) {
-        return done(null, false);
-      }
-
-      done(null, result.rows[0]);
-    } catch (error) {
-      done(error);
-    }
-  });
 }
 
 function generateState(): string {
