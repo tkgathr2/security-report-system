@@ -1,283 +1,517 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 
-interface Recipient {
+type Screen = 'login' | 'csv' | 'projects' | 'reports'
+
+interface AdminUser {
   id: string
-  company_name: string
-  contact_name: string
   email: string
-  is_active?: boolean
 }
 
-interface GroupedRecipients {
-  [company: string]: Recipient[]
+interface Project {
+  id: string
+  project_key: string
+  client_name_raw: string
+  work_date: string
+  work_name: string
+  location: string
+  status: string
+  unique_url: string
+  url_expires_at: string
+  created_at: string
+  client_name: string | null
+}
+
+interface Report {
+  id: string
+  project_id: string
+  supervisor_name: string
+  writer_name: string
+  weather: string
+  status: string
+  approved_at: string
+  created_at: string
+  pdf_generation_status: string
+  pdf_size: number
+  client_name_raw: string
+  work_date: string
+  work_name: string
+  location: string
+}
+
+interface ImportResult {
+  status: string
+  message: string
+  projects_created: number
+  projects_updated: number
+  casts_assigned: number
+  rows_skipped: number
+  pending_client_count: number
 }
 
 function App() {
-  const [recipients, setRecipients] = useState<Recipient[]>([])
-  const [grouped, setGrouped] = useState<GroupedRecipients>({})
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(new Set())
-  const [searchQuery, setSearchQuery] = useState('')
+  const [screen, setScreen] = useState<Screen>('login')
+  const [admin, setAdmin] = useState<AdminUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const reportId = new URLSearchParams(window.location.search).get('reportId') || ''
+  
+  const [projects, setProjects] = useState<Project[]>([])
+  const [reports, setReports] = useState<Report[]>([])
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [importing, setImporting] = useState(false)
 
   useEffect(() => {
-    fetchRecipients()
-    if (reportId) {
-      fetchSelectedRecipients()
-    }
-  }, [reportId])
+    checkAuth()
+  }, [])
 
-  const fetchRecipients = async () => {
+  const checkAuth = async () => {
     try {
-      const response = await fetch('/api/admin/recipients', {
+      const response = await fetch('/api/admin/me', {
         credentials: 'include'
       })
-      if (!response.ok) {
-        if (response.status === 401) {
-          setError('ログインが必要です。管理者としてログインしてください。')
-          return
-        }
-        throw new Error('Failed to fetch recipients')
+      if (response.ok) {
+        const data = await response.json()
+        setAdmin(data.admin)
+        setScreen('csv')
+      } else {
+        setScreen('login')
       }
-      const data = await response.json()
-      setRecipients(data.recipients)
-      setGrouped(data.grouped)
-      setExpandedCompanies(new Set(Object.keys(data.grouped)))
-    } catch (err) {
-      setError('送付先の取得に失敗しました')
+    } catch {
+      setScreen('login')
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchSelectedRecipients = async () => {
+  const handleGoogleLogin = () => {
+    window.location.href = '/api/admin/auth/google/start'
+  }
+
+  const handleLogout = async () => {
     try {
-      const response = await fetch(`/api/admin/recipients/for-report/${reportId}`, {
+      await fetch('/api/admin/auth/logout', {
+        method: 'POST',
         credentials: 'include'
       })
-      if (response.ok) {
-        const data = await response.json()
-        setSelectedIds(new Set(data.recipients.map((r: Recipient) => r.id)))
-      }
-    } catch (err) {
-      console.error('Failed to fetch selected recipients:', err)
+    } catch {
+      // ignore
     }
+    setAdmin(null)
+    setScreen('login')
   }
 
-  const filteredGrouped = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return grouped
-    }
-    const query = searchQuery.toLowerCase()
-    const result: GroupedRecipients = {}
-    
-    for (const [company, contacts] of Object.entries(grouped)) {
-      const filteredContacts = contacts.filter(
-        c => c.company_name.toLowerCase().includes(query) ||
-             c.contact_name.toLowerCase().includes(query) ||
-             c.email.toLowerCase().includes(query)
-      )
-      if (filteredContacts.length > 0) {
-        result[company] = filteredContacts
-      }
-    }
-    return result
-  }, [grouped, searchQuery])
-
-  const toggleCompanyExpand = (company: string) => {
-    const newExpanded = new Set(expandedCompanies)
-    if (newExpanded.has(company)) {
-      newExpanded.delete(company)
-    } else {
-      newExpanded.add(company)
-    }
-    setExpandedCompanies(newExpanded)
-  }
-
-  const toggleContact = (id: string) => {
-    const newSelected = new Set(selectedIds)
-    if (newSelected.has(id)) {
-      newSelected.delete(id)
-    } else {
-      newSelected.add(id)
-    }
-    setSelectedIds(newSelected)
-  }
-
-  const toggleCompany = (company: string) => {
-    const contacts = filteredGrouped[company] || []
-    const allSelected = contacts.every(c => selectedIds.has(c.id))
-    const newSelected = new Set(selectedIds)
-    
-    if (allSelected) {
-      contacts.forEach(c => newSelected.delete(c.id))
-    } else {
-      contacts.forEach(c => newSelected.add(c.id))
-    }
-    setSelectedIds(newSelected)
-  }
-
-  const isCompanySelected = (company: string): boolean => {
-    const contacts = filteredGrouped[company] || []
-    return contacts.length > 0 && contacts.every(c => selectedIds.has(c.id))
-  }
-
-  const isCompanyPartiallySelected = (company: string): boolean => {
-    const contacts = filteredGrouped[company] || []
-    const selectedCount = contacts.filter(c => selectedIds.has(c.id)).length
-    return selectedCount > 0 && selectedCount < contacts.length
-  }
-
-  const selectedRecipients = useMemo(() => {
-    return recipients.filter(r => selectedIds.has(r.id))
-  }, [recipients, selectedIds])
-
-  const uniqueEmails = useMemo(() => {
-    const emails = selectedRecipients.map(r => r.email.toLowerCase())
-    return [...new Set(emails)]
-  }, [selectedRecipients])
-
-  const handleSave = async () => {
-    if (!reportId) {
-      setError('報告書IDが指定されていません')
-      return
-    }
-
-    setSaving(true)
+  const fetchProjects = async () => {
+    setLoading(true)
     setError(null)
-    setSuccess(null)
+    try {
+      const response = await fetch('/api/admin/projects', {
+        credentials: 'include'
+      })
+      if (!response.ok) throw new Error('Failed to fetch projects')
+      const data = await response.json()
+      setProjects(data.projects)
+    } catch {
+      setError('案件一覧の取得に失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchReports = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/admin/reports', {
+        credentials: 'include'
+      })
+      if (!response.ok) throw new Error('Failed to fetch reports')
+      const data = await response.json()
+      setReports(data.reports)
+    } catch {
+      setError('報告書一覧の取得に失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    setError(null)
+    setImportResult(null)
+
+    const formData = new FormData()
+    formData.append('file', file)
 
     try {
-      const response = await fetch(`/api/admin/recipients/for-report/${reportId}`, {
+      const response = await fetch('/api/admin/csv/import', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
         credentials: 'include',
-        body: JSON.stringify({
-          recipient_ids: Array.from(selectedIds)
-        })
+        body: formData
       })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.message || '保存に失敗しました')
-      }
-
       const data = await response.json()
-      setSuccess(`宛先を保存しました（${data.recipient_count}件、ユニークメール${data.unique_email_count}件）`)
+      if (!response.ok) {
+        throw new Error(data.message || 'インポートに失敗しました')
+      }
+      setImportResult(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存に失敗しました')
+      setError(err instanceof Error ? err.message : 'インポートに失敗しました')
     } finally {
-      setSaving(false)
+      setImporting(false)
+      e.target.value = ''
     }
   }
 
-  if (loading) {
-    return <div className="container"><div className="loading">読み込み中...</div></div>
+  const handleDownloadPdf = (reportId: string) => {
+    window.open(`/api/admin/reports/${reportId}/pdf`, '_blank')
+  }
+
+  const navigateTo = (newScreen: Screen) => {
+    setScreen(newScreen)
+    setError(null)
+    if (newScreen === 'projects') fetchProjects()
+    if (newScreen === 'reports') fetchReports()
+  }
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '-'
+    return new Date(dateStr).toLocaleDateString('ja-JP')
+  }
+
+  const formatDateTime = (dateStr: string) => {
+    if (!dateStr) return '-'
+    return new Date(dateStr).toLocaleString('ja-JP')
+  }
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      'active': '有効',
+      'pending_client': '会社未登録',
+      'completed': '完了',
+      'expired': '期限切れ'
+    }
+    return labels[status] || status
+  }
+
+  if (loading && screen === 'login') {
+    return <div style={styles.container}><p>読み込み中...</p></div>
+  }
+
+  if (screen === 'login') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.loginBox}>
+          <h1 style={styles.title}>ほうこちゃん 管理画面</h1>
+          <p style={styles.subtitle}>管理者としてログインしてください</p>
+          <button style={styles.googleButton} onClick={handleGoogleLogin}>
+            Googleでログイン
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="container">
-      <div className="main-content">
-        <h1>送付先選択</h1>
-        
-        {error && <div className="error">{error}</div>}
-        {success && <div className="success">{success}</div>}
-
-        <input
-          type="text"
-          className="search-box"
-          placeholder="会社名・担当者名・メールで検索..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-
-        {Object.keys(filteredGrouped).length === 0 ? (
-          <div className="loading">
-            {searchQuery ? '検索結果がありません' : '送付先が登録されていません'}
-          </div>
-        ) : (
-          Object.entries(filteredGrouped).map(([company, contacts]) => (
-            <div key={company} className="company-group">
-              <div className="company-header" onClick={() => toggleCompanyExpand(company)}>
-                <input
-                  type="checkbox"
-                  className="company-checkbox"
-                  checked={isCompanySelected(company)}
-                  ref={(el) => {
-                    if (el) el.indeterminate = isCompanyPartiallySelected(company)
-                  }}
-                  onChange={(e) => {
-                    e.stopPropagation()
-                    toggleCompany(company)
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <span className="company-name">{company}</span>
-                <span className="company-count">{contacts.length}名</span>
-                <span className={`toggle-icon ${expandedCompanies.has(company) ? 'expanded' : ''}`}>
-                  ▼
-                </span>
-              </div>
-              
-              {expandedCompanies.has(company) && (
-                <div className="contacts-list">
-                  {contacts.map(contact => (
-                    <div key={contact.id} className="contact-item">
-                      <input
-                        type="checkbox"
-                        className="contact-checkbox"
-                        checked={selectedIds.has(contact.id)}
-                        onChange={() => toggleContact(contact.id)}
-                      />
-                      <div className="contact-info">
-                        <div className="contact-name">{contact.contact_name}</div>
-                        <div className="contact-email">{contact.email}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="summary-panel">
-        <div className="summary-content">
-          <div className="summary-header">
-            <div>
-              <span className="summary-count">
-                選択済み: {selectedRecipients.length}件
-                {selectedRecipients.length !== uniqueEmails.length && 
-                  ` (ユニークメール: ${uniqueEmails.length}件)`
-                }
-              </span>
-            </div>
-            <button 
-              className="save-button" 
-              onClick={handleSave}
-              disabled={saving || !reportId || selectedIds.size === 0}
-            >
-              {saving ? '保存中...' : '宛先を保存'}
-            </button>
-          </div>
-          <div className="summary-emails">
-            {uniqueEmails.length > 0 
-              ? uniqueEmails.join(', ')
-              : '宛先が選択されていません'
-            }
-          </div>
+    <div style={styles.app}>
+      <header style={styles.header}>
+        <h1 style={styles.headerTitle}>ほうこちゃん 管理画面</h1>
+        <div style={styles.headerRight}>
+          <span style={styles.adminEmail}>{admin?.email}</span>
+          <button style={styles.logoutButton} onClick={handleLogout}>ログアウト</button>
         </div>
-      </div>
+      </header>
+
+      <nav style={styles.nav}>
+        <button 
+          style={screen === 'csv' ? styles.navButtonActive : styles.navButton}
+          onClick={() => navigateTo('csv')}
+        >
+          CSV取込
+        </button>
+        <button 
+          style={screen === 'projects' ? styles.navButtonActive : styles.navButton}
+          onClick={() => navigateTo('projects')}
+        >
+          案件一覧
+        </button>
+        <button 
+          style={screen === 'reports' ? styles.navButtonActive : styles.navButton}
+          onClick={() => navigateTo('reports')}
+        >
+          報告書一覧
+        </button>
+      </nav>
+
+      <main style={styles.main}>
+        {error && <div style={styles.error}>{error}</div>}
+
+        {screen === 'csv' && (
+          <div style={styles.section}>
+            <h2>CSV取込</h2>
+            <p>案件データのCSVファイルを選択してインポートします。</p>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              disabled={importing}
+              style={styles.fileInput}
+            />
+            {importing && <p>インポート中...</p>}
+            {importResult && (
+              <div style={styles.resultBox}>
+                <h3>インポート結果</h3>
+                <p>ステータス: {importResult.status}</p>
+                <p>作成された案件: {importResult.projects_created}件</p>
+                <p>更新された案件: {importResult.projects_updated}件</p>
+                <p>割り当てられたキャスト: {importResult.casts_assigned}件</p>
+                <p>スキップされた行: {importResult.rows_skipped}件</p>
+                {importResult.pending_client_count > 0 && (
+                  <p style={styles.warning}>
+                    未登録会社: {importResult.pending_client_count}件（pending_client状態）
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {screen === 'projects' && (
+          <div style={styles.section}>
+            <h2>案件一覧</h2>
+            {loading ? (
+              <p>読み込み中...</p>
+            ) : projects.length === 0 ? (
+              <p>案件がありません</p>
+            ) : (
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>実施日</th>
+                    <th style={styles.th}>会社名</th>
+                    <th style={styles.th}>作業名</th>
+                    <th style={styles.th}>場所</th>
+                    <th style={styles.th}>状態</th>
+                    <th style={styles.th}>URL有効期限</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projects.map(project => (
+                    <tr key={project.id}>
+                      <td style={styles.td}>{formatDate(project.work_date)}</td>
+                      <td style={styles.td}>{project.client_name || project.client_name_raw}</td>
+                      <td style={styles.td}>{project.work_name}</td>
+                      <td style={styles.td}>{project.location}</td>
+                      <td style={styles.td}>{getStatusLabel(project.status)}</td>
+                      <td style={styles.td}>{formatDate(project.url_expires_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {screen === 'reports' && (
+          <div style={styles.section}>
+            <h2>報告書一覧</h2>
+            {loading ? (
+              <p>読み込み中...</p>
+            ) : reports.length === 0 ? (
+              <p>報告書がありません</p>
+            ) : (
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>承認日時</th>
+                    <th style={styles.th}>会社名</th>
+                    <th style={styles.th}>実施日</th>
+                    <th style={styles.th}>作業名</th>
+                    <th style={styles.th}>監督者</th>
+                    <th style={styles.th}>PDF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reports.map(report => (
+                    <tr key={report.id}>
+                      <td style={styles.td}>{formatDateTime(report.approved_at)}</td>
+                      <td style={styles.td}>{report.client_name_raw}</td>
+                      <td style={styles.td}>{formatDate(report.work_date)}</td>
+                      <td style={styles.td}>{report.work_name}</td>
+                      <td style={styles.td}>{report.supervisor_name}</td>
+                      <td style={styles.td}>
+                        {report.pdf_generation_status === 'success' ? (
+                          <button 
+                            style={styles.downloadButton}
+                            onClick={() => handleDownloadPdf(report.id)}
+                          >
+                            ダウンロード ({Math.round(report.pdf_size / 1024)}KB)
+                          </button>
+                        ) : (
+                          <span style={styles.pdfPending}>
+                            {report.pdf_generation_status === 'pending' ? '生成中' : '未生成'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   )
+}
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '100vh',
+    backgroundColor: '#f5f5f5'
+  },
+  loginBox: {
+    backgroundColor: 'white',
+    padding: '40px',
+    borderRadius: '8px',
+    boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+    textAlign: 'center'
+  },
+  title: {
+    margin: '0 0 10px 0',
+    fontSize: '24px',
+    color: '#333'
+  },
+  subtitle: {
+    margin: '0 0 30px 0',
+    color: '#666'
+  },
+  googleButton: {
+    backgroundColor: '#4285f4',
+    color: 'white',
+    border: 'none',
+    padding: '12px 24px',
+    fontSize: '16px',
+    borderRadius: '4px',
+    cursor: 'pointer'
+  },
+  app: {
+    minHeight: '100vh',
+    backgroundColor: '#f5f5f5'
+  },
+  header: {
+    backgroundColor: '#333',
+    color: 'white',
+    padding: '15px 20px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  headerTitle: {
+    margin: 0,
+    fontSize: '20px'
+  },
+  headerRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '15px'
+  },
+  adminEmail: {
+    fontSize: '14px'
+  },
+  logoutButton: {
+    backgroundColor: 'transparent',
+    color: 'white',
+    border: '1px solid white',
+    padding: '6px 12px',
+    borderRadius: '4px',
+    cursor: 'pointer'
+  },
+  nav: {
+    backgroundColor: 'white',
+    padding: '10px 20px',
+    borderBottom: '1px solid #ddd',
+    display: 'flex',
+    gap: '10px'
+  },
+  navButton: {
+    backgroundColor: 'transparent',
+    border: '1px solid #ddd',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    cursor: 'pointer'
+  },
+  navButtonActive: {
+    backgroundColor: '#333',
+    color: 'white',
+    border: '1px solid #333',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    cursor: 'pointer'
+  },
+  main: {
+    padding: '20px'
+  },
+  section: {
+    backgroundColor: 'white',
+    padding: '20px',
+    borderRadius: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+  },
+  error: {
+    backgroundColor: '#fee',
+    color: '#c00',
+    padding: '10px 15px',
+    borderRadius: '4px',
+    marginBottom: '20px'
+  },
+  fileInput: {
+    display: 'block',
+    margin: '20px 0'
+  },
+  resultBox: {
+    backgroundColor: '#f0f8ff',
+    padding: '15px',
+    borderRadius: '4px',
+    marginTop: '20px'
+  },
+  warning: {
+    color: '#c60',
+    fontWeight: 'bold'
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    marginTop: '15px'
+  },
+  th: {
+    backgroundColor: '#f5f5f5',
+    padding: '10px',
+    textAlign: 'left',
+    borderBottom: '2px solid #ddd',
+    fontSize: '14px'
+  },
+  td: {
+    padding: '10px',
+    borderBottom: '1px solid #eee',
+    fontSize: '14px'
+  },
+  downloadButton: {
+    backgroundColor: '#4caf50',
+    color: 'white',
+    border: 'none',
+    padding: '6px 12px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px'
+  },
+  pdfPending: {
+    color: '#999',
+    fontSize: '12px'
+  }
 }
 
 export default App
