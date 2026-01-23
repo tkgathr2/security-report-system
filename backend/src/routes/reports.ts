@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../db/pool';
+import { sendReportApprovalNotifications } from '../services/notifications';
 
 const router = Router();
 
@@ -126,7 +127,11 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     }
 
     const projectResult = await pool.query(
-      `SELECT id, status, url_expires_at FROM projects WHERE unique_url = $1`,
+      `SELECT p.id, p.status, p.url_expires_at, p.client_name_raw, p.work_date, p.work_title_raw,
+              c.emails as client_emails
+       FROM projects p
+       LEFT JOIN clients c ON p.client_id = c.id
+       WHERE p.unique_url = $1`,
       [project_unique_url]
     );
 
@@ -193,11 +198,30 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     const reportId = reportResult.rows[0].id;
 
+    const clientEmails = project.client_emails || [];
+    const workDateStr = project.work_date instanceof Date 
+      ? project.work_date.toISOString().split('T')[0]
+      : String(project.work_date).split('T')[0];
+
+    const notificationResult = await sendReportApprovalNotifications({
+      reportId,
+      companyName: project.client_name_raw,
+      workDate: workDateStr,
+      projectName: project.work_title_raw,
+      clientEmails,
+      pdfBytes: pdfBuffer
+    });
+
     res.status(201).json({
       ok: true,
       report_id: reportId,
       pdf_saved: true,
-      signature_saved: true
+      signature_saved: true,
+      notifications: {
+        email_sent: notificationResult.emailSent,
+        slack_sent: notificationResult.slackSent
+      },
+      warnings: notificationResult.warnings.length > 0 ? notificationResult.warnings : undefined
     });
 
   } catch (error) {
