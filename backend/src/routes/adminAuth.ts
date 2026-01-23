@@ -87,10 +87,15 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
 
 router.get('/google/start', (req: Request, res: Response, next: NextFunction) => {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'Google OAuth is not configured',
-      details: {}
+    res.status(503).json({
+      error: 'OAUTH_NOT_CONFIGURED',
+      message: 'Google OAuth認証が設定されていません。環境変数 GOOGLE_OAUTH_CLIENT_ID と GOOGLE_OAUTH_CLIENT_SECRET を設定してください。',
+      details: {
+        missing: [
+          !GOOGLE_CLIENT_ID ? 'GOOGLE_OAUTH_CLIENT_ID' : null,
+          !GOOGLE_CLIENT_SECRET ? 'GOOGLE_OAUTH_CLIENT_SECRET' : null
+        ].filter(Boolean)
+      }
     });
     return;
   }
