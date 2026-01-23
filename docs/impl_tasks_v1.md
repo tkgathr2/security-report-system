@@ -16,6 +16,14 @@ npm run dev
 - GET http://localhost:3000/health → `{ "ok": true }`
 - GET http://localhost:3000/version → `{ "spec": "plan_v2", "app": "security-report-system" }`
 
+マイグレーション実行:
+```bash
+cd backend
+npm run migrate up
+```
+
+マイグレーションツール: node-pg-migrate（シンプルでSQL直書き可能、ORMに依存しない）
+
 ---
 
 ## 1. 実装の前提
