@@ -9,6 +9,7 @@ import adminReportsRouter from './routes/adminReports';
 import adminRecipientsRouter from './routes/adminRecipients';
 import projectsRouter from './routes/projects';
 import draftsRouter from './routes/drafts';
+import reportsRouter from './routes/reports';
 
 dotenv.config();
 
@@ -47,6 +48,7 @@ app.use('/api/admin/reports', adminReportsRouter);
 app.use('/api/admin/recipients', adminRecipientsRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/drafts', draftsRouter);
+app.use('/api/reports', reportsRouter);
 
 // Test-only endpointfor simulating admin login (development only)
 if (process.env.NODE_ENV !== 'production') {
