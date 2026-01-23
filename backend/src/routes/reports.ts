@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../db/pool';
 import { sendReportApprovalNotifications } from '../services/notifications';
+import { generateReportPdf } from '../services/pdfGenerator';
 
 const router = Router();
 
@@ -128,7 +129,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     const projectResult = await pool.query(
       `SELECT p.id, p.status, p.url_expires_at, p.client_name_raw, p.work_date, p.work_title_raw,
-              c.emails as client_emails
+              p.location, p.work_name, c.emails as client_emails
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
        WHERE p.unique_url = $1`,
@@ -167,7 +168,34 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     }
 
     const signaturePngBuffer = Buffer.from(signature_png_base64, 'base64');
-    const pdfBuffer = generateDummyPdf();
+    
+    const workDateStr = project.work_date instanceof Date 
+      ? project.work_date.toISOString().split('T')[0]
+      : String(project.work_date).split('T')[0];
+
+    let pdfBuffer: Buffer;
+    let pdfGenerationStatus = 'success';
+    try {
+      pdfBuffer = await generateReportPdf({
+        companyName: project.client_name_raw,
+        workDate: workDateStr,
+        location: project.location,
+        workName: project.work_name || project.work_title_raw,
+        supervisorName: supervisor_name || '',
+        writerName: castUser.email,
+        guardContents: guard_contents,
+        guardOtherText: guard_other_text,
+        overtimeHours: overtime_hours,
+        hasQualifier: has_qualifier || false,
+        qualifierName: qualifier_name,
+        signaturePng: signaturePngBuffer
+      });
+      console.log(`[PDF] Generated PDF: ${pdfBuffer.length} bytes`);
+    } catch (pdfError) {
+      console.error('[PDF] Generation failed, using dummy PDF:', pdfError);
+      pdfBuffer = generateDummyPdf();
+      pdfGenerationStatus = 'failed';
+    }
 
     const reportResult = await pool.query(
       `INSERT INTO reports (
@@ -191,7 +219,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         pdfBuffer,
         'approved',
         now,
-        'success',
+        pdfGenerationStatus,
         now
       ]
     );
@@ -199,9 +227,6 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     const reportId = reportResult.rows[0].id;
 
     const clientEmails = project.client_emails || [];
-    const workDateStr = project.work_date instanceof Date 
-      ? project.work_date.toISOString().split('T')[0]
-      : String(project.work_date).split('T')[0];
 
     const notificationResult = await sendReportApprovalNotifications({
       reportId,
