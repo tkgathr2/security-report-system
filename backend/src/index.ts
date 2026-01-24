@@ -83,12 +83,11 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/admin/csv', adminCsvImportRouter);
 
 // Serve frontend static files in production
-// __dirname is backend/dist after compilation, so ../frontend-dist points to backend/frontend-dist
-const frontendDistPath = path.join(__dirname, '../frontend-dist');
+const frontendDistPath = path.join(__dirname, '../../frontend-dist');
 app.use(express.static(frontendDistPath));
 
-// SPA fallback - serve index.html for non-API routes (Express 5.x compatible syntax)
-app.get('/report/:uniqueUrl', (_req: Request, res: Response) => {
+// SPA fallback - serve index.html for non-API routes
+app.get('/report/*', (_req: Request, res: Response) => {
   res.sendFile(path.join(frontendDistPath, 'index.html'));
 });
 
