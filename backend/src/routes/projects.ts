@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import pool from '../db/pool';
 
 const router = Router();
@@ -89,6 +90,51 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     res.status(500).json({
       error: 'INTERNAL_ERROR',
       message: '案件取得中にエラーが発生しました',
+      details: {}
+    });
+  }
+});
+
+router.post('/test/create', async (req: Request, res: Response) => {
+  try {
+    const uniqueUrl = crypto.randomUUID();
+    const projectKey = crypto.randomBytes(8).toString('hex');
+    const workDate = new Date();
+    const urlExpiresAt = new Date();
+    urlExpiresAt.setDate(urlExpiresAt.getDate() + 7);
+
+    const result = await pool.query(
+      `INSERT INTO projects (
+        project_key, client_name_raw, work_date, work_name, location,
+        work_title_raw, unique_url, url_expires_at, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id, unique_url`,
+      [
+        projectKey,
+        'テスト株式会社',
+        workDate,
+        'テスト警備業務',
+        '東京都渋谷区テストビル',
+        'テスト案件',
+        uniqueUrl,
+        urlExpiresAt,
+        'active'
+      ]
+    );
+
+    res.status(201).json({
+      ok: true,
+      project: {
+        id: result.rows[0].id,
+        unique_url: result.rows[0].unique_url,
+        report_url: `/report/${result.rows[0].unique_url}`
+      }
+    });
+  } catch (error) {
+    console.error('Test project creation error:', error);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'テスト案件の作成に失敗しました',
       details: {}
     });
   }
