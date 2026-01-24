@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import session from 'express-session';
 import passport from 'passport';
 import dotenv from 'dotenv';
+import path from 'path';
 import authRouter from './routes/auth';
 import adminAuthRouter from './routes/adminAuth';
 import adminRouter from './routes/admin';
@@ -80,6 +81,15 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/drafts', draftsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/admin/csv', adminCsvImportRouter);
+
+// Serve frontend static files in production
+const frontendDistPath = path.join(__dirname, '../../frontend-dist');
+app.use(express.static(frontendDistPath));
+
+// SPA fallback - serve index.html for non-API routes
+app.get('/report/*', (_req: Request, res: Response) => {
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
 
 // Test-only endpointfor simulating admin login (development only)
 if (process.env.NODE_ENV !== 'production') {
