@@ -5,6 +5,7 @@
 "scripts": {
     "build:backend": "tsc",
     "build": "tsc",
+    "build:backend": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "migrate": "node-pg-migrate",
