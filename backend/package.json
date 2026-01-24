@@ -2,8 +2,9 @@
   "name": "security-report-system-backend",
   "version": "1.0.0",
   "main": "dist/index.js",
-    "scripts": {
-      "build": "tsc && cd ../frontend && npm install && npm run build && cp -r dist ../backend/frontend-dist",
+"scripts": {
+    "build:backend": "tsc",
+    "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "migrate": "node-pg-migrate",

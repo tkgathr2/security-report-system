@@ -1,0 +1,9 @@
+{
+  "name": "security-report-system",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build && cp -r dist ../backend/frontend-dist && cd ../backend && npm install && npm run build:backend",
+    "start": "cd backend && npm run migrate:up && npm start"
+  }
+}
