@@ -97,20 +97,34 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
 
 router.post('/test/create', async (req: Request, res: Response) => {
   try {
+    const { client_email } = req.body;
     const uniqueUrl = crypto.randomUUID();
     const projectKey = crypto.randomBytes(8).toString('hex');
     const workDate = new Date();
+    workDate.setDate(workDate.getDate() + 2);
     const urlExpiresAt = new Date();
     urlExpiresAt.setDate(urlExpiresAt.getDate() + 7);
 
+    let clientId = null;
+    if (client_email) {
+      const clientResult = await pool.query(
+        `INSERT INTO clients (name, emails) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET emails = $2
+         RETURNING id`,
+        ['テスト株式会社', [client_email]]
+      );
+      clientId = clientResult.rows[0].id;
+    }
+
     const result = await pool.query(
       `INSERT INTO projects (
-        project_key, client_name_raw, work_date, work_name, location,
+        project_key, client_id, client_name_raw, work_date, work_name, location,
         work_title_raw, unique_url, url_expires_at, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id, unique_url`,
       [
         projectKey,
+        clientId,
         'テスト株式会社',
         workDate,
         'テスト警備業務',
@@ -127,7 +141,8 @@ router.post('/test/create', async (req: Request, res: Response) => {
       project: {
         id: result.rows[0].id,
         unique_url: result.rows[0].unique_url,
-        report_url: `/report/${result.rows[0].unique_url}`
+        report_url: `/report/${result.rows[0].unique_url}`,
+        client_email: client_email || null
       }
     });
   } catch (error) {
