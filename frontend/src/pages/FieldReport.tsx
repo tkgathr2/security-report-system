@@ -52,6 +52,7 @@ export default function FieldReport() {
   const [token, setToken] = useState<string | null>(null)
   const [showSignatureModal, setShowSignatureModal] = useState(false)
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
+  const [showTutorial, setShowTutorial] = useState(false)
   
   const [supervisorName, setSupervisorName] = useState('')
   const [weather, setWeather] = useState('sunny')
@@ -102,39 +103,45 @@ export default function FieldReport() {
     }
   }
 
-  const authenticateCast = async (_staffName: string) => {
-    try {
-      const email = `cast-${uniqueUrl}@field.local`
-      const pin = '0000'
+    const authenticateCast = async (_staffName: string) => {
+      try {
+        const email = `cast-${uniqueUrl}@field.local`
+        const pin = '0000'
       
-      let response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, pin })
-      })
-      
-      if (response.status === 401) {
-        response = await fetch('/api/auth/register', {
+        let response = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, pin })
         })
+      
+        if (response.status === 401) {
+          response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, pin })
+          })
+        }
+      
+        if (!response.ok) {
+          throw new Error('Authentication failed')
+        }
+      
+        const data = await response.json()
+        setToken(data.token)
+      
+        await fetchDraft(data.token)
+        setPageState('form')
+      
+        // Show tutorial on first visit
+        if (!localStorage.getItem('tutorial_shown')) {
+          setShowTutorial(true)
+          localStorage.setItem('tutorial_shown', 'true')
+        }
+      } catch {
+        setErrorMessage('認証に失敗しました')
+        setPageState('error')
       }
-      
-      if (!response.ok) {
-        throw new Error('Authentication failed')
-      }
-      
-      const data = await response.json()
-      setToken(data.token)
-      
-      await fetchDraft(data.token)
-      setPageState('form')
-    } catch {
-      setErrorMessage('認証に失敗しました')
-      setPageState('error')
     }
-  }
 
   const fetchDraft = async (authToken: string) => {
     try {
@@ -303,11 +310,25 @@ export default function FieldReport() {
 
   const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null && guardContents.length > 0
 
+  const handleCloseTutorial = () => {
+    setShowTutorial(false)
+  }
+
   return (
     <div style={styles.page}>
       <header style={styles.header}>
-        <h1 style={styles.headerTitle}>ほうこちゃん</h1>
-        <p style={styles.headerSubtitle}>警備報告書</p>
+        <div style={styles.headerContent}>
+          <div>
+            <h1 style={styles.headerTitle}>ほうこちゃん</h1>
+            <p style={styles.headerSubtitle}>警備報告書</p>
+          </div>
+          <button 
+            style={styles.helpButton}
+            onClick={() => setShowTutorial(true)}
+          >
+            使い方
+          </button>
+        </div>
       </header>
 
       <main style={styles.main}>
@@ -473,6 +494,36 @@ export default function FieldReport() {
         onClose={() => setShowSignatureModal(false)}
         onSave={handleSignatureSave}
       />
+
+      {showTutorial && (
+        <div style={styles.tutorialOverlay} onClick={handleCloseTutorial}>
+          <div style={styles.tutorialCard} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.tutorialHeader}>
+              <h2 style={styles.tutorialTitle}>使い方ガイド</h2>
+              <button style={styles.tutorialCloseBtn} onClick={handleCloseTutorial}>&times;</button>
+            </div>
+            <div style={styles.tutorialContent}>
+              <div style={styles.tutorialSection}>
+                <h3 style={styles.tutorialSectionTitle}>1. 案件情報の確認</h3>
+                <p style={styles.tutorialText}>画面上部に表示される会社名、実施日、作業名、場所を確認してください。</p>
+              </div>
+              <div style={styles.tutorialSection}>
+                <h3 style={styles.tutorialSectionTitle}>2. 報告内容の入力</h3>
+                <p style={styles.tutorialText}>監督者名（必須）、天気、警備内容（1つ以上必須）、残業時間、備考を入力してください。</p>
+              </div>
+              <div style={styles.tutorialSection}>
+                <h3 style={styles.tutorialSectionTitle}>3. 署名</h3>
+                <p style={styles.tutorialText}>「タップして署名」をタップし、指またはペンで署名を描いてください。署名は必須です。</p>
+              </div>
+              <div style={styles.tutorialSection}>
+                <h3 style={styles.tutorialSectionTitle}>4. 送信</h3>
+                <p style={styles.tutorialText}>すべての必須項目を入力後、「報告書を送信」ボタンをタップして完了です。</p>
+              </div>
+            </div>
+            <button style={styles.tutorialOkBtn} onClick={handleCloseTutorial}>OK</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -751,5 +802,89 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     color: '#999',
     marginTop: '10px'
+  },
+  headerContent: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    maxWidth: '600px',
+    margin: '0 auto'
+  },
+  helpButton: {
+    backgroundColor: 'transparent',
+    color: 'white',
+    border: '1px solid white',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    fontSize: '14px',
+    cursor: 'pointer'
+  },
+  tutorialOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 1000,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  tutorialCard: {
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    maxWidth: '500px',
+    width: '90%',
+    maxHeight: '80vh',
+    overflowY: 'auto'
+  },
+  tutorialHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '24px 24px 0 24px'
+  },
+  tutorialTitle: {
+    fontSize: '20px',
+    fontWeight: 700,
+    margin: 0
+  },
+  tutorialCloseBtn: {
+    background: 'none',
+    border: 'none',
+    fontSize: '24px',
+    cursor: 'pointer',
+    color: '#666'
+  },
+  tutorialContent: {
+    padding: '20px 24px',
+    fontSize: '14px',
+    lineHeight: 1.8
+  },
+  tutorialSection: {
+    marginBottom: '20px'
+  },
+  tutorialSectionTitle: {
+    fontSize: '16px',
+    fontWeight: 600,
+    marginBottom: '8px',
+    color: '#333'
+  },
+  tutorialText: {
+    margin: 0,
+    color: '#666'
+  },
+  tutorialOkBtn: {
+    margin: '0 24px 24px 24px',
+    width: 'calc(100% - 48px)',
+    padding: '12px',
+    backgroundColor: '#333',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '15px',
+    fontWeight: 600,
+    cursor: 'pointer'
   }
 }
