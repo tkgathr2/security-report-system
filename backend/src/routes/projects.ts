@@ -107,13 +107,27 @@ router.post('/test/create', async (req: Request, res: Response) => {
 
     let clientId = null;
     if (client_email) {
-      const clientResult = await pool.query(
-        `INSERT INTO clients (name, emails) VALUES ($1, $2)
-         ON CONFLICT (name) DO UPDATE SET emails = $2
-         RETURNING id`,
-        ['テスト株式会社', [client_email]]
+      // First try to find existing client
+      const existingClient = await pool.query(
+        `SELECT id FROM clients WHERE name = $1`,
+        ['テスト株式会社']
       );
-      clientId = clientResult.rows[0].id;
+      
+      if (existingClient.rows.length > 0) {
+        // Update existing client's emails
+        await pool.query(
+          `UPDATE clients SET emails = $1 WHERE id = $2`,
+          [[client_email], existingClient.rows[0].id]
+        );
+        clientId = existingClient.rows[0].id;
+      } else {
+        // Create new client
+        const clientResult = await pool.query(
+          `INSERT INTO clients (name, emails) VALUES ($1, $2) RETURNING id`,
+          ['テスト株式会社', [client_email]]
+        );
+        clientId = clientResult.rows[0].id;
+      }
     }
 
     const result = await pool.query(
