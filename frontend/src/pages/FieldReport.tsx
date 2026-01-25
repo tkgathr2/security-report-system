@@ -301,7 +301,7 @@ export default function FieldReport() {
     )
   }
 
-  const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null
+  const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null && guardContents.length > 0
 
   return (
     <div style={styles.page}>
@@ -462,7 +462,7 @@ export default function FieldReport() {
           </button>
           {!isFormValid && (
             <p style={styles.submitHint}>
-              監督者名と署名を入力してください
+              監督者名、警備内容（1つ以上）、署名を入力してください
             </p>
           )}
         </section>
