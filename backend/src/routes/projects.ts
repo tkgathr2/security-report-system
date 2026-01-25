@@ -121,10 +121,10 @@ router.post('/test/create', async (req: Request, res: Response) => {
         );
         clientId = existingClient.rows[0].id;
       } else {
-        // Create new client
+        // Create new client with name_normalized
         const clientResult = await pool.query(
-          `INSERT INTO clients (name, emails) VALUES ($1, $2) RETURNING id`,
-          ['テスト株式会社', [client_email]]
+          `INSERT INTO clients (name, name_normalized, emails) VALUES ($1, $2, $3) RETURNING id`,
+          ['テスト株式会社', 'テスト株式会社', [client_email]]
         );
         clientId = clientResult.rows[0].id;
       }
