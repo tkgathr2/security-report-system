@@ -28,6 +28,17 @@ interface SlackNotification {
 }
 
 export async function sendEmail(options: EmailOptions): Promise<{ success: boolean; error?: string }> {
+  console.log('[EMAIL] SMTP Config check - HOST:', SMTP_HOST ? 'SET' : 'NOT SET');
+  console.log('[EMAIL] SMTP Config check - USER:', SMTP_USER ? 'SET' : 'NOT SET');
+  console.log('[EMAIL] SMTP Config check - PASS:', SMTP_PASS ? 'SET' : 'NOT SET');
+  console.log('[EMAIL] SMTP Config check - FROM:', SMTP_FROM);
+  console.log('[EMAIL] Recipients:', options.to.length > 0 ? options.to.join(', ') : 'EMPTY');
+  
+  if (options.to.length === 0) {
+    console.log('[EMAIL] No recipients, skipping email send');
+    return { success: false, error: 'No recipients' };
+  }
+  
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
     console.log('[EMAIL] SMTP not configured, skipping email send');
     console.log('[EMAIL] Would send to:', options.to.join(', '));
