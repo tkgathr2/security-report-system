@@ -19,6 +19,7 @@ interface Draft {
     supervisor_name?: string
     weather?: string
     guard_contents?: string[]
+    guard_contents_other?: string
     overtime_hours?: number
     has_qualifier?: boolean
     notes?: string
@@ -36,11 +37,14 @@ const WEATHER_OPTIONS = [
 ]
 
 const GUARD_CONTENTS = [
-  { value: 'patrol', label: '巡回警備' },
-  { value: 'standing', label: '立哨警備' },
-  { value: 'traffic', label: '交通誘導' },
-  { value: 'facility', label: '施設警備' },
-  { value: 'event', label: 'イベント警備' }
+  { value: 'traffic', label: '①交通誘導' },
+  { value: 'pedestrian', label: '②歩行者誘導' },
+  { value: 'construction', label: '③工事関係者、車両の誘導' },
+  { value: 'worker_safety', label: '④作業員の安全確保' },
+  { value: 'property_safety', label: '⑤占有物の安全確保' },
+  { value: 'detour', label: '⑥通行止・迂回案内' },
+  { value: 'alternating', label: '⑦交互通行' },
+  { value: 'other', label: '⑧その他' }
 ]
 
 export default function FieldReport() {
@@ -57,6 +61,7 @@ export default function FieldReport() {
   const [supervisorName, setSupervisorName] = useState('')
   const [weather, setWeather] = useState('sunny')
   const [guardContents, setGuardContents] = useState<string[]>([])
+  const [guardContentsOther, setGuardContentsOther] = useState('')
   const [overtimeHours, setOvertimeHours] = useState(0)
   const [hasQualifier, setHasQualifier] = useState(false)
   const [notes, setNotes] = useState('')
@@ -155,6 +160,7 @@ export default function FieldReport() {
           setSupervisorName(data.payload_json.supervisor_name || '')
           setWeather(data.payload_json.weather || 'sunny')
           setGuardContents(data.payload_json.guard_contents || [])
+          setGuardContentsOther(data.payload_json.guard_contents_other || '')
           setOvertimeHours(data.payload_json.overtime_hours || 0)
           setHasQualifier(data.payload_json.has_qualifier || false)
           setNotes(data.payload_json.notes || '')
@@ -180,6 +186,7 @@ export default function FieldReport() {
             supervisor_name: supervisorName,
             weather,
             guard_contents: guardContents,
+            guard_contents_other: guardContentsOther,
             overtime_hours: overtimeHours,
             has_qualifier: hasQualifier,
             notes
@@ -225,6 +232,7 @@ export default function FieldReport() {
           supervisor_name: supervisorName,
           weather,
           guard_contents: guardContents,
+          guard_contents_other: guardContentsOther,
           overtime_hours: overtimeHours,
           has_qualifier: hasQualifier,
           notes,
@@ -391,7 +399,7 @@ export default function FieldReport() {
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.label}>警備内容</label>
+            <label style={styles.label}>警備内容 <span style={styles.required}>*</span></label>
             <div style={styles.checkboxGroup}>
               {GUARD_CONTENTS.map(option => (
                 <label key={option.value} style={styles.checkboxLabel}>
@@ -405,6 +413,16 @@ export default function FieldReport() {
                 </label>
               ))}
             </div>
+            {guardContents.includes('other') && (
+              <input
+                type="text"
+                style={styles.otherInput}
+                value={guardContentsOther}
+                onChange={(e) => setGuardContentsOther(e.target.value)}
+                onBlur={saveDraft}
+                placeholder="その他の内容を入力してください"
+              />
+            )}
           </div>
 
           <div style={styles.formGroup}>
@@ -886,5 +904,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '15px',
     fontWeight: 600,
     cursor: 'pointer'
+  },
+  otherInput: {
+    width: '100%',
+    padding: '12px',
+    fontSize: '16px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    boxSizing: 'border-box',
+    marginTop: '10px'
   }
 }
