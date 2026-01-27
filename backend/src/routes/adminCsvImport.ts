@@ -92,6 +92,11 @@ function extractQualifierHint(projectName: string): string | null {
   return match ? match[1] : null;
 }
 
+function hasQualifierFromProjectName(projectName: string): boolean {
+  const hint = extractQualifierHint(projectName);
+  return hint !== null && hint.includes('有');
+}
+
 function requireAdminAuth(req: Request, res: Response, next: () => void): void {
   if (!req.isAuthenticated || !req.isAuthenticated() || !req.user) {
     res.status(401).json({
