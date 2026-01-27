@@ -202,7 +202,7 @@ function App() {
     return (
       <div style={styles.container}>
         <div style={styles.loginBox}>
-          <h1 style={styles.title}>ほうこちゃん 管理画面</h1>
+          <h1 style={styles.title}>デジタル警備報告書システム【ほうこちゃん】管理画面</h1>
           <p style={styles.subtitle}>管理者としてログインしてください</p>
           <button style={styles.googleButton} onClick={handleGoogleLogin}>
             Googleでログイン
@@ -215,7 +215,7 @@ function App() {
   return (
     <div style={styles.app}>
       <header style={styles.header}>
-        <h1 style={styles.headerTitle}>ほうこちゃん 管理画面</h1>
+        <h1 style={styles.headerTitle}>デジタル警備報告書システム【ほうこちゃん】</h1>
         <div style={styles.headerRight}>
           <span style={styles.adminEmail}>{admin?.email}</span>
           <button style={styles.logoutButton} onClick={handleLogout}>ログアウト</button>

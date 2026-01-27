@@ -35,8 +35,8 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
         size: 'A4',
         margin: 50,
         info: {
-          Title: 'デジタル警備報告書「ほうこちゃん」',
-          Author: 'ほうこちゃん',
+          Title: 'デジタル警備報告書システム【ほうこちゃん】',
+          Author: 'デジタル警備報告書システム【ほうこちゃん】',
           Subject: `警備報告書 - ${data.companyName} - ${data.workDate}`
         }
       });
@@ -49,7 +49,7 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
       doc.registerFont('IPAGothic', FONT_PATH);
       doc.font('IPAGothic');
 
-      doc.fontSize(20).text('デジタル警備報告書「ほうこちゃん」', { align: 'center' });
+      doc.fontSize(20).text('デジタル警備報告書システム【ほうこちゃん】', { align: 'center' });
       doc.moveDown(2);
 
       doc.fontSize(14).text(`${data.companyName} 御中`, { align: 'left' });
@@ -140,7 +140,7 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
       const now = new Date();
       const generatedAt = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       doc.fontSize(9).text(`生成日時: ${generatedAt}`, { align: 'right' });
-      doc.text('Powered by ほうこちゃん', { align: 'right' });
+      doc.text('Powered by デジタル警備報告書システム【ほうこちゃん】', { align: 'right' });
 
       doc.end();
     } catch (error) {
