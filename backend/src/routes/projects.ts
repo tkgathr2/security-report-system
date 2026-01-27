@@ -48,6 +48,14 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
 
     const project: Project = result.rows[0];
 
+    const castsResult = await pool.query(
+      `SELECT staff_no, cast_name FROM project_casts WHERE project_id = $1 ORDER BY row_index`,
+      [project.id]
+    );
+    const casts = castsResult.rows;
+
+    const hasQualifier = project.qualifier_hint !== null && project.qualifier_hint.includes('有');
+
     if (project.status === 'pending_client') {
       res.status(403).json({
         error: 'FORBIDDEN',
@@ -82,7 +90,9 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
         work_title_raw: project.work_title_raw,
         qualifier_hint: project.qualifier_hint,
         unique_url: project.unique_url,
-        status: project.status
+        status: project.status,
+        has_qualifier: hasQualifier,
+        casts: casts.map(c => ({ staff_no: c.staff_no, name: c.cast_name }))
       }
     });
   } catch (error) {

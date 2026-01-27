@@ -229,6 +229,12 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     const reportId = reportResult.rows[0].id;
 
     const clientEmails = project.client_emails || [];
+    
+    const writerEmail = writer_name || castUser.email;
+    const allRecipientEmails = [...clientEmails];
+    if (writerEmail && !allRecipientEmails.includes(writerEmail)) {
+      allRecipientEmails.push(writerEmail);
+    }
 
     // CSV生成
     const rows: string[] = [];
@@ -265,7 +271,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       companyName: project.client_name_raw,
       workDate: workDateStr,
       projectName: project.work_title_raw,
-      clientEmails,
+      clientEmails: allRecipientEmails,
       pdfBytes: pdfBuffer,
       csvBytes: Buffer.from(csvContent, 'utf-8')
     });
