@@ -232,7 +232,7 @@ export default function FieldReport() {
           supervisor_name: supervisorName,
           weather,
           guard_contents: guardContents,
-          guard_contents_other: guardContentsOther,
+          guard_other_text: guardContentsOther,
           overtime_hours: overtimeHours,
           has_qualifier: hasQualifier,
           notes,
