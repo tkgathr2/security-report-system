@@ -43,7 +43,7 @@ app.get('/', (_req: Request, res: Response) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>ほうこちゃん - デジタル警備報告書システム</title>
+      <title>デジタル警備報告書システム【ほうこちゃん】</title>
       <style>
         body { font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
         h1 { color: #333; }
@@ -52,8 +52,8 @@ app.get('/', (_req: Request, res: Response) => {
       </style>
     </head>
     <body>
-      <h1>ほうこちゃん</h1>
-      <p>デジタル警備報告書システム API サーバー</p>
+      <h1>デジタル警備報告書システム【ほうこちゃん】</h1>
+      <p>API サーバー</p>
       <p class="status">Status: Online</p>
       <h2>エンドポイント</h2>
       <ul>
