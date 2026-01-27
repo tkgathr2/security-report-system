@@ -82,10 +82,11 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     const {
       project_unique_url,
       supervisor_name,
+      writer_name,
       weather,
       guard_contents,
       guard_other_text,
-      overtime_hours,
+      guards,
       has_qualifier,
       qualifier_name,
       signature_png_base64
@@ -182,10 +183,10 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         location: project.location,
         workName: project.work_name || project.work_title_raw,
         supervisorName: supervisor_name || '',
-        writerName: castUser.email,
+        writerName: writer_name || castUser.email,
         guardContents: guard_contents,
         guardOtherText: guard_other_text,
-        overtimeHours: overtime_hours,
+        guards: Array.isArray(guards) ? guards : [],
         hasQualifier: has_qualifier || false,
         qualifierName: qualifier_name,
         signaturePng: signaturePngBuffer
@@ -201,18 +202,18 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       `INSERT INTO reports (
         project_id, cast_user_id, supervisor_name, writer_name, weather,
         guard_contents, guard_other_text, overtime_hours, has_qualifier, qualifier_name,
-        signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING id`,
       [
         project.id,
         castUser.userId,
         supervisor_name || '',
-        castUser.email,
+        writer_name || castUser.email,
         weather || 'sunny',
         guard_contents,
         guard_other_text || null,
-        overtime_hours || null,
+        null,
         has_qualifier || false,
         qualifier_name || null,
         signaturePngBuffer,
@@ -220,7 +221,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         'approved',
         now,
         pdfGenerationStatus,
-        now
+        now,
+        Array.isArray(guards) ? JSON.stringify(guards) : null
       ]
     );
 
@@ -228,13 +230,44 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     const clientEmails = project.client_emails || [];
 
+    // CSV生成
+    const rows: string[] = [];
+    const headers = [
+      '記入者','報告日','天気','案件名','案件住所','作業内容','協力会社名',
+      '警備内容1','警備内容2','警備内容3','警備内容4','警備内容5','警備内容6','警備内容7','警備内容8',
+      '警備員番号','氏名','勤務開始','勤務終了','早出残業(h)','資格有無','資格者氏名','備考'
+    ];
+    const weatherMap: Record<string,string> = { sunny: '晴', cloudy: '曇', rainy: '雨', snowy: '雪' };
+    const guardFlags = (['traffic','pedestrian','construction','worker_safety','property_safety','detour','alternating','other'] as const)
+      .map(code => (guard_contents || []).includes(code as any) ? '1' : '0');
+    const guardsArr = Array.isArray(guards) ? guards : [];
+    if (guardsArr.length === 0) {
+      rows.push([
+        (writer_name || castUser.email), workDateStr, weatherMap[weather] || weather,
+        (project.work_name || project.work_title_raw || ''), project.location || '', project.work_name || project.work_title_raw || '', project.client_name_raw || '',
+        ...guardFlags,
+        '', '', '', '', '', (has_qualifier ? '有' : '無'), (qualifier_name || ''), ''
+      ].map(v => typeof v === 'string' ? `"${v.replace(/"/g,'""')}"` : String(v)).join(','));
+    } else {
+      for (const g of guardsArr) {
+        rows.push([
+          (writer_name || castUser.email), workDateStr, weatherMap[weather] || weather,
+          (project.work_name || project.work_title_raw || ''), project.location || '', project.work_name || project.work_title_raw || '', project.client_name_raw || '',
+          ...guardFlags,
+          g.index ?? '', g.name || '', g.start_time || '', g.end_time || '', (g.early_overtime_hours ?? ''), (has_qualifier ? '有' : '無'), (qualifier_name || ''), ''
+        ].map(v => typeof v === 'string' ? `"${v.replace(/"/g,'""')}"` : String(v)).join(','));
+      }
+    }
+    const csvContent = [headers.join(','), ...rows].join('\n');
+
     const notificationResult = await sendReportApprovalNotifications({
       reportId,
       companyName: project.client_name_raw,
       workDate: workDateStr,
       projectName: project.work_title_raw,
       clientEmails,
-      pdfBytes: pdfBuffer
+      pdfBytes: pdfBuffer,
+      csvBytes: Buffer.from(csvContent, 'utf-8')
     });
 
     res.status(201).json({
