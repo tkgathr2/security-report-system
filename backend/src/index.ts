@@ -12,6 +12,7 @@ import projectsRouter from './routes/projects';
 import draftsRouter from './routes/drafts';
 import reportsRouter from './routes/reports';
 import adminCsvImportRouter from './routes/adminCsvImport';
+import pool from './db/pool';
 
 dotenv.config();
 
@@ -81,6 +82,14 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/drafts', draftsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/admin/csv', adminCsvImportRouter);
+
+async function ensureSchema() {
+  try {
+    await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
+  } catch (e) {
+    console.error('[DB] ensureSchema failed:', e);
+  }
+}
 
 // Serve frontend static files in production
 // __dirname is backend/dist after compilation, so ../frontend-dist points to backend/frontend-dist

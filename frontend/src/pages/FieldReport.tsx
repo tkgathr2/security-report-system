@@ -17,10 +17,11 @@ interface Project {
 interface Draft {
   payload_json: {
     supervisor_name?: string
+    writer_name?: string
     weather?: string
     guard_contents?: string[]
-    guard_contents_other?: string
-    overtime_hours?: number
+    guard_other_text?: string
+    guards?: { index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[]
     has_qualifier?: boolean
     notes?: string
   }
@@ -59,10 +60,11 @@ export default function FieldReport() {
   const [showTutorial, setShowTutorial] = useState(false)
   
   const [supervisorName, setSupervisorName] = useState('')
+  const [writerName, setWriterName] = useState('')
   const [weather, setWeather] = useState('sunny')
   const [guardContents, setGuardContents] = useState<string[]>([])
   const [guardContentsOther, setGuardContentsOther] = useState('')
-  const [overtimeHours, setOvertimeHours] = useState(0)
+  const [guards, setGuards] = useState<{ index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[]>([])
   const [hasQualifier, setHasQualifier] = useState(false)
   const [notes, setNotes] = useState('')
   
@@ -158,10 +160,11 @@ export default function FieldReport() {
         const data: Draft = await response.json()
         if (data.payload_json) {
           setSupervisorName(data.payload_json.supervisor_name || '')
+          setWriterName(data.payload_json.writer_name || '')
           setWeather(data.payload_json.weather || 'sunny')
           setGuardContents(data.payload_json.guard_contents || [])
-          setGuardContentsOther(data.payload_json.guard_contents_other || '')
-          setOvertimeHours(data.payload_json.overtime_hours || 0)
+          setGuardContentsOther(data.payload_json.guard_other_text || '')
+          setGuards(data.payload_json.guards || [])
           setHasQualifier(data.payload_json.has_qualifier || false)
           setNotes(data.payload_json.notes || '')
         }
@@ -184,10 +187,11 @@ export default function FieldReport() {
         body: JSON.stringify({
           payload_json: {
             supervisor_name: supervisorName,
+            writer_name: writerName,
             weather,
             guard_contents: guardContents,
-            guard_contents_other: guardContentsOther,
-            overtime_hours: overtimeHours,
+            guard_other_text: guardContentsOther,
+            guards,
             has_qualifier: hasQualifier,
             notes
           },
@@ -230,10 +234,11 @@ export default function FieldReport() {
         body: JSON.stringify({
           project_unique_url: uniqueUrl,
           supervisor_name: supervisorName,
+          writer_name: writerName,
           weather,
           guard_contents: guardContents,
-          guard_contents_other: guardContentsOther,
-          overtime_hours: overtimeHours,
+          guard_other_text: guardContentsOther,
+          guards,
           has_qualifier: hasQualifier,
           notes,
           signature_png_base64: base64Data
@@ -380,6 +385,18 @@ export default function FieldReport() {
           </div>
 
           <div style={styles.formGroup}>
+            <label style={styles.label}>記入者</label>
+            <input
+              type="text"
+              style={styles.input}
+              value={writerName}
+              onChange={(e) => setWriterName(e.target.value)}
+              onBlur={saveDraft}
+              placeholder="記入者のお名前（またはメール）"
+            />
+          </div>
+
+          <div style={styles.formGroup}>
             <label style={styles.label}>天気</label>
             <div style={styles.radioGroup}>
               {WEATHER_OPTIONS.map(option => (
@@ -426,18 +443,79 @@ export default function FieldReport() {
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.label}>残業時間</label>
-            <div style={styles.numberInputWrapper}>
-              <input
-                type="number"
-                style={styles.numberInput}
-                value={overtimeHours}
-                onChange={(e) => setOvertimeHours(Number(e.target.value))}
-                onBlur={saveDraft}
-                min={0}
-                max={24}
-              />
-              <span style={styles.numberUnit}>時間</span>
+            <label style={styles.label}>警備員（最大8名）</label>
+            <div>
+              {guards.map((g, idx) => (
+                <div key={g.index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '8px', marginBottom: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder={`氏名 #${g.index}`}
+                    value={g.name}
+                    onChange={(e) => {
+                      const v = [...guards];
+                      v[idx] = { ...v[idx], name: e.target.value };
+                      setGuards(v);
+                    }}
+                    onBlur={saveDraft}
+                    style={styles.input}
+                  />
+                  <input
+                    type="time"
+                    value={g.start_time}
+                    onChange={(e) => {
+                      const v = [...guards];
+                      v[idx] = { ...v[idx], start_time: e.target.value };
+                      setGuards(v);
+                    }}
+                    onBlur={saveDraft}
+                    style={styles.input}
+                  />
+                  <input
+                    type="time"
+                    value={g.end_time}
+                    onChange={(e) => {
+                      const v = [...guards];
+                      v[idx] = { ...v[idx], end_time: e.target.value };
+                      setGuards(v);
+                    }}
+                    onBlur={saveDraft}
+                    style={styles.input}
+                  />
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    placeholder="早出残業(h)"
+                    value={g.early_overtime_hours ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? null : Number(e.target.value);
+                      const v = [...guards];
+                      v[idx] = { ...v[idx], early_overtime_hours: val };
+                      setGuards(v);
+                    }}
+                    onBlur={saveDraft}
+                    style={styles.numberInput}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const v = guards.filter((_, i) => i !== idx);
+                      // 再採番
+                      setGuards(v.map((it, i) => ({ ...it, index: i + 1 })));
+                      saveDraft();
+                    }}
+                    style={{ padding: '8px 10px' }}
+                  >削除</button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  if (guards.length >= 8) return;
+                  setGuards([...guards, { index: guards.length + 1, name: '', start_time: '', end_time: '', early_overtime_hours: null }]);
+                }}
+                style={{ marginTop: '8px' }}
+              >+ 警備員を追加</button>
             </div>
           </div>
 

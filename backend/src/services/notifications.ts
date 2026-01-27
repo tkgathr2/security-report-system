@@ -132,8 +132,22 @@ export async function sendReportApprovalNotifications(params: {
   projectName: string;
   clientEmails: string[];
   pdfBytes: Buffer;
+  csvBytes?: Buffer;
 }): Promise<{ emailSent: boolean; slackSent: boolean; warnings: string[] }> {
   const warnings: string[] = [];
+
+  const attachments = [
+    {
+      filename: `report_${params.workDate}.pdf`,
+      content: params.pdfBytes,
+      contentType: 'application/pdf'
+    },
+    ...(params.csvBytes ? [{
+      filename: `report_${params.workDate}.csv`,
+      content: params.csvBytes,
+      contentType: 'text/csv'
+    }] : [])
+  ];
 
   const emailResult = await sendEmail({
     to: params.clientEmails,
@@ -142,19 +156,15 @@ export async function sendReportApprovalNotifications(params: {
       `ほうこちゃんより警備報告書をお送りいたします。\n\n` +
       `案件名: ${params.projectName}\n` +
       `実施日: ${params.workDate}\n\n` +
-      `添付のPDFファイルをご確認ください。`,
+      `添付のPDF/CSVファイルをご確認ください。`,
     html: `<p>${params.companyName} 様</p>` +
       `<p>ほうこちゃんより警備報告書をお送りいたします。</p>` +
       `<ul>` +
       `<li>案件名: ${params.projectName}</li>` +
       `<li>実施日: ${params.workDate}</li>` +
       `</ul>` +
-      `<p>添付のPDFファイルをご確認ください。</p>`,
-    attachments: [{
-      filename: `report_${params.workDate}.pdf`,
-      content: params.pdfBytes,
-      contentType: 'application/pdf'
-    }]
+      `<p>添付のPDF/CSVファイルをご確認ください。</p>`,
+    attachments
   });
 
   if (!emailResult.success) {

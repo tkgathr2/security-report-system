@@ -11,7 +11,7 @@ interface ReportData {
   writerName: string;
   guardContents: string[];
   guardOtherText?: string | null;
-  overtimeHours?: number | null;
+  guards?: { index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[];
   hasQualifier: boolean;
   qualifierName?: string | null;
   signaturePng?: Buffer | null;
@@ -90,14 +90,33 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
       }
       doc.moveDown(1);
 
-      if (data.overtimeHours !== null && data.overtimeHours !== undefined && data.overtimeHours > 0) {
-        addRow('早出残業:', `${data.overtimeHours}時間`);
-      }
-
       const qualifierText = data.hasQualifier 
         ? `有 (${data.qualifierName || '氏名未記入'})`
         : '無';
       addRow('資格者:', qualifierText);
+
+      // 警備員一覧（任意）
+      if (data.guards && data.guards.length > 0) {
+        doc.moveDown(1);
+        doc.text('警備員一覧:', startX);
+        doc.moveDown(0.3);
+        const colXs = [startX, startX + 60, startX + 220, startX + 320, startX + 420];
+        const headers = ['No', '氏名', '開始', '終了', '早出残業(h)'];
+        headers.forEach((h, i) => doc.text(h, colXs[i], doc.y, { continued: i < headers.length - 1 }));
+        doc.moveDown(0.5);
+        data.guards.forEach(g => {
+          const y = doc.y;
+          doc.text(String(g.index ?? ''), colXs[0], y);
+          doc.text(g.name || '', colXs[1], y);
+          doc.text(g.start_time || '', colXs[2], y);
+          doc.text(g.end_time || '', colXs[3], y);
+          doc.text(
+            g.early_overtime_hours !== undefined && g.early_overtime_hours !== null ? String(g.early_overtime_hours) : '',
+            colXs[4], y
+          );
+          doc.moveDown(0.3);
+        });
+      }
 
       doc.moveDown(2);
 
