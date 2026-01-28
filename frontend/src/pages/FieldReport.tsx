@@ -37,7 +37,13 @@ interface Draft {
   updated_at: string
 }
 
-type PageState = 'loading' | 'error' | 'expired' | 'completed' | 'email_registration' | 'form' | 'success'
+type PageState = 'loading' | 'error' | 'expired' | 'completed' | 'email_registration' | 'name_selection' | 'name_confirmation' | 'form' | 'success'
+
+interface StaffMember {
+  id: string
+  displayNameKanji: string
+  displayNameKana: string
+}
 
 const WEATHER_OPTIONS = [
   { value: 'sunny', label: '晴れ' },
@@ -68,9 +74,14 @@ export default function FieldReport() {
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [showTutorial, setShowTutorial] = useState(false)
   
-  const [emailInput, setEmailInput] = useState('')
-  const [emailError, setEmailError] = useState('')
-  const [registering, setRegistering] = useState(false)
+    const [emailInput, setEmailInput] = useState('')
+    const [emailError, setEmailError] = useState('')
+    const [registering, setRegistering] = useState(false)
+  
+    const [nameSearchQuery, setNameSearchQuery] = useState('')
+    const [nameSearchResults, setNameSearchResults] = useState<StaffMember[]>([])
+    const [nameSearching, setNameSearching] = useState(false)
+    const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null)
   
   const [supervisorName, setSupervisorName] = useState('')
   const [writerName, setWriterName] = useState('')
@@ -131,45 +142,57 @@ export default function FieldReport() {
     }
   }
 
-  const authenticateWithEmail = async (email: string, projectData: Project) => {
-    try {
-      const pin = '0000'
+    const authenticateWithEmail = async (email: string, projectData: Project) => {
+      try {
+        const pin = '0000'
       
-      let response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, pin })
-      })
-      
-      if (response.status === 401) {
-        response = await fetch('/api/auth/register', {
+        let response = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, pin })
         })
+      
+        if (response.status === 401) {
+          response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, pin })
+          })
+        }
+      
+        if (!response.ok) {
+          throw new Error('Authentication failed')
+        }
+      
+        const data = await response.json()
+        setToken(data.token)
+      
+        initializeFormFromProject(projectData)
+      
+        const savedStaffId = localStorage.getItem(`selected_staff_id_${uniqueUrl}`)
+        const savedStaffName = localStorage.getItem(`selected_staff_name_${uniqueUrl}`)
+      
+        if (savedStaffId && savedStaffName) {
+          setSelectedStaff({
+            id: savedStaffId,
+            displayNameKanji: savedStaffName,
+            displayNameKana: ''
+          })
+          await fetchDraft(data.token)
+          setPageState('form')
+        
+          if (!localStorage.getItem('tutorial_shown')) {
+            setShowTutorial(true)
+            localStorage.setItem('tutorial_shown', 'true')
+          }
+        } else {
+          setPageState('name_selection')
+        }
+      } catch {
+        setErrorMessage('認証に失敗しました')
+        setPageState('error')
       }
-      
-      if (!response.ok) {
-        throw new Error('Authentication failed')
-      }
-      
-      const data = await response.json()
-      setToken(data.token)
-      
-      initializeFormFromProject(projectData)
-      
-      await fetchDraft(data.token)
-      setPageState('form')
-      
-      if (!localStorage.getItem('tutorial_shown')) {
-        setShowTutorial(true)
-        localStorage.setItem('tutorial_shown', 'true')
-      }
-    } catch {
-      setErrorMessage('認証に失敗しました')
-      setPageState('error')
     }
-  }
 
   const initializeFormFromProject = (projectData: Project) => {
     if (projectData.has_qualifier) {
@@ -324,16 +347,89 @@ export default function FieldReport() {
     }
   }
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('ja-JP', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
+    const formatDate = (dateStr: string) => {
+      if (!dateStr) return '-'
+      return new Date(dateStr).toLocaleDateString('ja-JP', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    }
 
-  if (pageState === 'loading') {
+    const handleNameSearch = async (query: string) => {
+      setNameSearchQuery(query)
+    
+      if (!query.trim() || !token) {
+        setNameSearchResults([])
+        return
+      }
+    
+      setNameSearching(true)
+      try {
+        const response = await fetch(`/api/staff/search?q=${encodeURIComponent(query)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      
+        if (response.ok) {
+          const data = await response.json()
+          setNameSearchResults(data.staff || [])
+        }
+      } catch {
+        // Ignore search errors
+      } finally {
+        setNameSearching(false)
+      }
+    }
+
+    const handleStaffSelect = (staff: StaffMember) => {
+      setSelectedStaff(staff)
+      setPageState('name_confirmation')
+    }
+
+    const handleNameConfirm = async () => {
+      if (!selectedStaff || !token) return
+    
+      try {
+        const response = await fetch('/api/staff/select', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            staff_id: selectedStaff.id,
+            staff_name_kanji: selectedStaff.displayNameKanji
+          })
+        })
+      
+        if (!response.ok) {
+          throw new Error('Failed to save name selection')
+        }
+      
+        localStorage.setItem(`selected_staff_id_${uniqueUrl}`, selectedStaff.id)
+        localStorage.setItem(`selected_staff_name_${uniqueUrl}`, selectedStaff.displayNameKanji)
+      
+        await fetchDraft(token)
+        setPageState('form')
+      
+        if (!localStorage.getItem('tutorial_shown')) {
+          setShowTutorial(true)
+          localStorage.setItem('tutorial_shown', 'true')
+        }
+      } catch {
+        setErrorMessage('名前の保存に失敗しました')
+        setPageState('error')
+      }
+    }
+
+    const handleNameReject = () => {
+      setSelectedStaff(null)
+      setNameSearchQuery('')
+      setNameSearchResults([])
+      setPageState('name_selection')
+    }
+
+    if (pageState === 'loading') {
     return (
       <div style={styles.container}>
         <div style={styles.loadingBox}>
@@ -388,45 +484,118 @@ export default function FieldReport() {
     )
   }
 
-  if (pageState === 'email_registration') {
-    return (
-      <div style={styles.container}>
-        <div style={styles.emailRegistrationBox}>
-          <h2 style={styles.emailRegistrationTitle}>メールアドレス登録</h2>
-          <p style={styles.emailRegistrationDesc}>
-            報告書の記入者として登録するメールアドレスを入力してください。
-            このメールアドレスは報告書送信時の通知先にもなります。
-          </p>
-          {project && (
-            <div style={styles.emailProjectInfo}>
-              <p><strong>案件:</strong> {project.work_name}</p>
-              <p><strong>会社:</strong> {project.client_name_raw}</p>
+    if (pageState === 'email_registration') {
+      return (
+        <div style={styles.container}>
+          <div style={styles.emailRegistrationBox}>
+            <h2 style={styles.emailRegistrationTitle}>メールアドレス登録</h2>
+            <p style={styles.emailRegistrationDesc}>
+              報告書の記入者として登録するメールアドレスを入力してください。
+              このメールアドレスは報告書送信時の通知先にもなります。
+            </p>
+            {project && (
+              <div style={styles.emailProjectInfo}>
+                <p><strong>案件:</strong> {project.work_name}</p>
+                <p><strong>会社:</strong> {project.client_name_raw}</p>
+              </div>
+            )}
+            <div style={styles.emailInputGroup}>
+              <input
+                type="email"
+                style={styles.emailInput}
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="example@email.com"
+                disabled={registering}
+              />
+              {emailError && <p style={styles.emailErrorText}>{emailError}</p>}
             </div>
-          )}
-          <div style={styles.emailInputGroup}>
-            <input
-              type="email"
-              style={styles.emailInput}
-              value={emailInput}
-              onChange={(e) => setEmailInput(e.target.value)}
-              placeholder="example@email.com"
+            <button
+              style={registering ? styles.emailButtonDisabled : styles.emailButton}
+              onClick={handleEmailRegistration}
               disabled={registering}
-            />
-            {emailError && <p style={styles.emailErrorText}>{emailError}</p>}
+            >
+              {registering ? '登録中...' : '登録して報告書を作成'}
+            </button>
           </div>
-          <button
-            style={registering ? styles.emailButtonDisabled : styles.emailButton}
-            onClick={handleEmailRegistration}
-            disabled={registering}
-          >
-            {registering ? '登録中...' : '登録して報告書を作成'}
-          </button>
         </div>
-      </div>
-    )
-  }
+      )
+    }
 
-  const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null && guardContents.length > 0
+    if (pageState === 'name_selection') {
+      return (
+        <div style={styles.container}>
+          <div style={styles.nameSelectionBox}>
+            <h2 style={styles.nameSelectionTitle}>お名前を選択してください</h2>
+            <p style={styles.nameSelectionDesc}>
+              カタカナでお名前を検索し、候補から選択してください。
+            </p>
+            {project && (
+              <div style={styles.emailProjectInfo}>
+                <p><strong>案件:</strong> {project.work_name}</p>
+                <p><strong>会社:</strong> {project.client_name_raw}</p>
+              </div>
+            )}
+            <div style={styles.nameSearchInputGroup}>
+              <input
+                type="text"
+                style={styles.nameSearchInput}
+                value={nameSearchQuery}
+                onChange={(e) => handleNameSearch(e.target.value)}
+                placeholder="カタカナで名前を入力（例：ヤマダ タロウ）"
+              />
+              {nameSearching && <p style={styles.searchingText}>検索中...</p>}
+            </div>
+            {nameSearchResults.length > 0 && (
+              <div style={styles.nameSearchResults}>
+                {nameSearchResults.map((staff) => (
+                  <button
+                    key={staff.id}
+                    style={styles.nameResultItem}
+                    onClick={() => handleStaffSelect(staff)}
+                  >
+                    <span style={styles.nameKanji}>{staff.displayNameKanji}</span>
+                    <span style={styles.nameKana}>（{staff.displayNameKana}）</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {nameSearchQuery.trim() && !nameSearching && nameSearchResults.length === 0 && (
+              <p style={styles.noResultsText}>該当する名前が見つかりません</p>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    if (pageState === 'name_confirmation') {
+      return (
+        <div style={styles.container}>
+          <div style={styles.nameConfirmationBox}>
+            <h2 style={styles.nameConfirmationTitle}>確認</h2>
+            <p style={styles.nameConfirmationQuestion}>
+              あなたは『<strong>{selectedStaff?.displayNameKanji}</strong>』で間違いありませんか？
+            </p>
+            <div style={styles.confirmationButtons}>
+              <button
+                style={styles.confirmYesButton}
+                onClick={handleNameConfirm}
+              >
+                はい
+              </button>
+              <button
+                style={styles.confirmNoButton}
+                onClick={handleNameReject}
+              >
+                違います
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null && guardContents.length > 0
 
   const handleCloseTutorial = () => {
     setShowTutorial(false)
@@ -1183,5 +1352,123 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '16px',
     fontWeight: 'bold',
     cursor: 'not-allowed'
+  },
+  nameSelectionBox: {
+    backgroundColor: 'white',
+    padding: '40px',
+    borderRadius: '8px',
+    maxWidth: '450px',
+    width: '100%'
+  },
+  nameSelectionTitle: {
+    margin: '0 0 15px',
+    fontSize: '20px',
+    color: '#333',
+    textAlign: 'center'
+  },
+  nameSelectionDesc: {
+    fontSize: '14px',
+    color: '#666',
+    marginBottom: '20px',
+    lineHeight: 1.6,
+    textAlign: 'center'
+  },
+  nameSearchInputGroup: {
+    marginBottom: '20px'
+  },
+  nameSearchInput: {
+    width: '100%',
+    padding: '14px',
+    fontSize: '16px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    boxSizing: 'border-box'
+  },
+  searchingText: {
+    fontSize: '13px',
+    color: '#666',
+    marginTop: '8px',
+    textAlign: 'center'
+  },
+  nameSearchResults: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    maxHeight: '300px',
+    overflowY: 'auto'
+  },
+  nameResultItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    padding: '14px 16px',
+    backgroundColor: '#f9f9f9',
+    border: '1px solid #ddd',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    width: '100%'
+  },
+  nameKanji: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    color: '#333'
+  },
+  nameKana: {
+    fontSize: '14px',
+    color: '#666',
+    marginLeft: '8px'
+  },
+  noResultsText: {
+    fontSize: '14px',
+    color: '#999',
+    textAlign: 'center',
+    marginTop: '20px'
+  },
+  nameConfirmationBox: {
+    backgroundColor: 'white',
+    padding: '40px',
+    borderRadius: '8px',
+    maxWidth: '400px',
+    width: '100%',
+    textAlign: 'center'
+  },
+  nameConfirmationTitle: {
+    margin: '0 0 20px',
+    fontSize: '20px',
+    color: '#333'
+  },
+  nameConfirmationQuestion: {
+    fontSize: '16px',
+    color: '#333',
+    marginBottom: '30px',
+    lineHeight: 1.6
+  },
+  confirmationButtons: {
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'center'
+  },
+  confirmYesButton: {
+    flex: 1,
+    backgroundColor: '#4caf50',
+    color: 'white',
+    border: 'none',
+    padding: '14px 24px',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
+  },
+  confirmNoButton: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    color: '#333',
+    border: '1px solid #ddd',
+    padding: '14px 24px',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
   }
 }
