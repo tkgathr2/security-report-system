@@ -686,6 +686,11 @@ export default function FieldReport() {
               監督者名、警備内容（1つ以上）、署名を入力してください
             </p>
           )}
+          {errorMessage && (
+            <p style={styles.submitError}>
+              {errorMessage}
+            </p>
+          )}
         </section>
       </main>
 
@@ -1002,6 +1007,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     color: '#999',
     marginTop: '10px'
+  },
+  submitError: {
+    textAlign: 'center',
+    fontSize: '14px',
+    color: '#c00',
+    marginTop: '10px',
+    backgroundColor: '#fee',
+    padding: '10px',
+    borderRadius: '4px'
   },
   headerContent: {
     display: 'flex',
