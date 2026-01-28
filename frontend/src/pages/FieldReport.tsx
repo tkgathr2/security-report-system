@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import SignatureModal from '../components/SignatureModal'
 
+interface ProjectCast {
+  staff_no: string
+  name: string
+}
+
 interface Project {
   id: string
   project_key: string
@@ -9,9 +14,13 @@ interface Project {
   work_date: string
   work_name: string
   location: string
+  start_time: string | null
+  end_time: string | null
   status: string
   unique_url: string
   staff_name: string
+  has_qualifier: boolean
+  casts: ProjectCast[]
 }
 
 interface Draft {
@@ -28,7 +37,7 @@ interface Draft {
   updated_at: string
 }
 
-type PageState = 'loading' | 'error' | 'expired' | 'completed' | 'form' | 'success'
+type PageState = 'loading' | 'error' | 'expired' | 'completed' | 'email_registration' | 'form' | 'success'
 
 const WEATHER_OPTIONS = [
   { value: 'sunny', label: '晴れ' },
@@ -59,8 +68,13 @@ export default function FieldReport() {
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [showTutorial, setShowTutorial] = useState(false)
   
+  const [emailInput, setEmailInput] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [registering, setRegistering] = useState(false)
+  
   const [supervisorName, setSupervisorName] = useState('')
   const [writerName, setWriterName] = useState('')
+  const [writerEmail, setWriterEmail] = useState('')
   const [weather, setWeather] = useState('sunny')
   const [guardContents, setGuardContents] = useState<string[]>([])
   const [guardContentsOther, setGuardContentsOther] = useState('')
@@ -103,52 +117,105 @@ export default function FieldReport() {
       const data = await response.json()
       setProject(data.project)
       
-      await authenticateCast(data.project.staff_name)
+      const savedEmail = localStorage.getItem(`writer_email_${uniqueUrl}`)
+      if (savedEmail) {
+        setWriterEmail(savedEmail)
+        setWriterName(savedEmail)
+        await authenticateWithEmail(savedEmail, data.project)
+      } else {
+        setPageState('email_registration')
+      }
     } catch {
       setErrorMessage('案件の取得に失敗しました')
       setPageState('error')
     }
   }
 
-    const authenticateCast = async (_staffName: string) => {
-      try {
-        const email = `cast-${uniqueUrl}@field.local`
-        const pin = '0000'
+  const authenticateWithEmail = async (email: string, projectData: Project) => {
+    try {
+      const pin = '0000'
       
-        let response = await fetch('/api/auth/login', {
+      let response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, pin })
+      })
+      
+      if (response.status === 401) {
+        response = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, pin })
         })
-      
-        if (response.status === 401) {
-          response = await fetch('/api/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, pin })
-          })
-        }
-      
-        if (!response.ok) {
-          throw new Error('Authentication failed')
-        }
-      
-        const data = await response.json()
-        setToken(data.token)
-      
-        await fetchDraft(data.token)
-        setPageState('form')
-      
-        // Show tutorial on first visit
-        if (!localStorage.getItem('tutorial_shown')) {
-          setShowTutorial(true)
-          localStorage.setItem('tutorial_shown', 'true')
-        }
-      } catch {
-        setErrorMessage('認証に失敗しました')
-        setPageState('error')
       }
+      
+      if (!response.ok) {
+        throw new Error('Authentication failed')
+      }
+      
+      const data = await response.json()
+      setToken(data.token)
+      
+      initializeFormFromProject(projectData)
+      
+      await fetchDraft(data.token)
+      setPageState('form')
+      
+      if (!localStorage.getItem('tutorial_shown')) {
+        setShowTutorial(true)
+        localStorage.setItem('tutorial_shown', 'true')
+      }
+    } catch {
+      setErrorMessage('認証に失敗しました')
+      setPageState('error')
     }
+  }
+
+  const initializeFormFromProject = (projectData: Project) => {
+    if (projectData.has_qualifier) {
+      setHasQualifier(true)
+    }
+    
+    if (projectData.casts && projectData.casts.length > 0) {
+      const initialGuards = projectData.casts.map((cast, idx) => ({
+        index: idx + 1,
+        name: cast.name,
+        start_time: projectData.start_time || '',
+        end_time: projectData.end_time || '',
+        early_overtime_hours: null
+      }))
+      setGuards(initialGuards)
+    }
+  }
+
+  const handleEmailRegistration = async () => {
+    if (!emailInput.trim()) {
+      setEmailError('メールアドレスを入力してください')
+      return
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(emailInput)) {
+      setEmailError('有効なメールアドレスを入力してください')
+      return
+    }
+    
+    setRegistering(true)
+    setEmailError('')
+    
+    try {
+      localStorage.setItem(`writer_email_${uniqueUrl}`, emailInput)
+      setWriterEmail(emailInput)
+      setWriterName(emailInput)
+      
+      if (project) {
+        await authenticateWithEmail(emailInput, project)
+      }
+    } catch {
+      setEmailError('登録に失敗しました')
+      setRegistering(false)
+    }
+  }
 
   const fetchDraft = async (authToken: string) => {
     try {
@@ -321,6 +388,44 @@ export default function FieldReport() {
     )
   }
 
+  if (pageState === 'email_registration') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.emailRegistrationBox}>
+          <h2 style={styles.emailRegistrationTitle}>メールアドレス登録</h2>
+          <p style={styles.emailRegistrationDesc}>
+            報告書の記入者として登録するメールアドレスを入力してください。
+            このメールアドレスは報告書送信時の通知先にもなります。
+          </p>
+          {project && (
+            <div style={styles.emailProjectInfo}>
+              <p><strong>案件:</strong> {project.work_name}</p>
+              <p><strong>会社:</strong> {project.client_name_raw}</p>
+            </div>
+          )}
+          <div style={styles.emailInputGroup}>
+            <input
+              type="email"
+              style={styles.emailInput}
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="example@email.com"
+              disabled={registering}
+            />
+            {emailError && <p style={styles.emailErrorText}>{emailError}</p>}
+          </div>
+          <button
+            style={registering ? styles.emailButtonDisabled : styles.emailButton}
+            onClick={handleEmailRegistration}
+            disabled={registering}
+          >
+            {registering ? '登録中...' : '登録して報告書を作成'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null && guardContents.length > 0
 
   const handleCloseTutorial = () => {
@@ -385,14 +490,13 @@ export default function FieldReport() {
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.label}>記入者</label>
+            <label style={styles.label}>記入者（メールアドレス）</label>
             <input
               type="text"
-              style={styles.input}
-              value={writerName}
-              onChange={(e) => setWriterName(e.target.value)}
-              onBlur={saveDraft}
-              placeholder="記入者のお名前（またはメール）"
+              style={styles.inputReadonly}
+              value={writerEmail || writerName}
+              readOnly
+              disabled
             />
           </div>
 
@@ -991,5 +1095,79 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '4px',
     boxSizing: 'border-box',
     marginTop: '10px'
+  },
+  inputReadonly: {
+    width: '100%',
+    padding: '12px',
+    fontSize: '16px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    boxSizing: 'border-box',
+    backgroundColor: '#f5f5f5',
+    color: '#666'
+  },
+  emailRegistrationBox: {
+    backgroundColor: 'white',
+    padding: '40px',
+    borderRadius: '8px',
+    maxWidth: '400px',
+    width: '100%'
+  },
+  emailRegistrationTitle: {
+    margin: '0 0 15px',
+    fontSize: '20px',
+    color: '#333',
+    textAlign: 'center'
+  },
+  emailRegistrationDesc: {
+    fontSize: '14px',
+    color: '#666',
+    marginBottom: '20px',
+    lineHeight: 1.6
+  },
+  emailProjectInfo: {
+    backgroundColor: '#f5f5f5',
+    padding: '15px',
+    borderRadius: '4px',
+    marginBottom: '20px',
+    fontSize: '14px'
+  },
+  emailInputGroup: {
+    marginBottom: '20px'
+  },
+  emailInput: {
+    width: '100%',
+    padding: '14px',
+    fontSize: '16px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    boxSizing: 'border-box'
+  },
+  emailErrorText: {
+    color: '#c00',
+    fontSize: '13px',
+    marginTop: '8px'
+  },
+  emailButton: {
+    width: '100%',
+    backgroundColor: '#4caf50',
+    color: 'white',
+    border: 'none',
+    padding: '16px',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
+  },
+  emailButtonDisabled: {
+    width: '100%',
+    backgroundColor: '#ccc',
+    color: '#666',
+    border: 'none',
+    padding: '16px',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'not-allowed'
   }
 }
