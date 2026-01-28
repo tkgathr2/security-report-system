@@ -18,14 +18,14 @@ interface ReportData {
 }
 
 const GUARD_CONTENT_LABELS: Record<string, string> = {
-  'patrol': '巡回警備',
-  'access_control': '出入管理',
-  'traffic_control': '交通誘導',
-  'facility_guard': '施設警備',
-  'event_guard': 'イベント警備',
-  'parking_guard': '駐車場警備',
-  'construction_guard': '工事現場警備',
-  'other': 'その他'
+  'traffic': '①交通誘導',
+  'pedestrian': '②歩行者誘導',
+  'construction': '③工事関係者、車両の誘導',
+  'worker_safety': '④作業員の安全確保',
+  'property_safety': '⑤占有物の安全確保',
+  'detour': '⑥通行止・迂回案内',
+  'alternating': '⑦交互通行',
+  'other': '⑧その他'
 };
 
 export async function generateReportPdf(data: ReportData): Promise<Buffer> {

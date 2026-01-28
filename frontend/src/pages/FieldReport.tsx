@@ -32,6 +32,7 @@ interface Draft {
     guard_other_text?: string
     guards?: { index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[]
     has_qualifier?: boolean
+    qualifier_name?: string
     notes?: string
   }
   updated_at: string
@@ -91,6 +92,7 @@ export default function FieldReport() {
   const [guardContentsOther, setGuardContentsOther] = useState('')
   const [guards, setGuards] = useState<{ index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[]>([])
   const [hasQualifier, setHasQualifier] = useState(false)
+  const [qualifierName, setQualifierName] = useState('')
   const [notes, setNotes] = useState('')
   
   const [submitting, setSubmitting] = useState(false)
@@ -256,6 +258,7 @@ export default function FieldReport() {
           setGuardContentsOther(data.payload_json.guard_other_text || '')
           setGuards(data.payload_json.guards || [])
           setHasQualifier(data.payload_json.has_qualifier || false)
+          setQualifierName(data.payload_json.qualifier_name || '')
           setNotes(data.payload_json.notes || '')
         }
       }
@@ -283,6 +286,7 @@ export default function FieldReport() {
             guard_other_text: guardContentsOther,
             guards,
             has_qualifier: hasQualifier,
+            qualifier_name: qualifierName,
             notes
           },
           client_updated_at: new Date().toISOString()
@@ -330,6 +334,7 @@ export default function FieldReport() {
           guard_other_text: guardContentsOther,
           guards,
           has_qualifier: hasQualifier,
+          qualifier_name: hasQualifier ? qualifierName : null,
           notes,
           signature_png_base64: base64Data
         })
@@ -827,6 +832,16 @@ export default function FieldReport() {
               />
               有資格者による作業あり
             </label>
+            {hasQualifier && (
+              <input
+                type="text"
+                style={{ ...styles.input, marginTop: '8px' }}
+                value={qualifierName}
+                onChange={(e) => setQualifierName(e.target.value)}
+                onBlur={saveDraft}
+                placeholder="資格者氏名を入力してください"
+              />
+            )}
           </div>
 
           <div style={styles.formGroup}>
