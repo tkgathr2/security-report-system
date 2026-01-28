@@ -177,7 +177,9 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       : String(project.work_date).split('T')[0];
 
     // レポートを保存（PDF/通知は後で非同期処理）
+    // pdf_bytesカラムはNOT NULL制約があるため、初期値としてダミーPDFを使用
     console.log('[APPROVE] Inserting report into database');
+    const initialPdfBuffer = generateDummyPdf();
     const reportResult = await pool.query(
       `INSERT INTO reports (
         project_id, cast_user_id, supervisor_name, writer_name, weather,
@@ -197,7 +199,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         has_qualifier || false,
         qualifier_name || null,
         signaturePngBuffer,
-        null, // PDF is generated asynchronously
+        initialPdfBuffer, // ダミーPDF（後で実際のPDFに更新）
         'approved',
         now,
         'pending', // PDF generation pending
