@@ -315,10 +315,11 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
   } catch (error) {
     console.error('Approve error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     res.status(500).json({
       error: 'INTERNAL_ERROR',
-      message: '承認処理中にエラーが発生しました',
-      details: {}
+      message: `承認処理中にエラーが発生しました: ${errorMessage}`,
+      details: { error: errorMessage }
     });
   }
 });
