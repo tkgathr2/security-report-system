@@ -78,6 +78,7 @@ startxref
 
 router.post('/approve', authenticateCast, async (req: Request, res: Response) => {
   try {
+    console.log('[APPROVE] Starting approval process');
     const castUser = (req as Request & { castUser: CastJwtPayload }).castUser;
     const {
       project_unique_url,
@@ -91,6 +92,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       qualifier_name,
       signature_png_base64
     } = req.body;
+    console.log('[APPROVE] Request body parsed, project_unique_url:', project_unique_url);
 
     if (!signature_png_base64) {
       res.status(400).json({
@@ -175,6 +177,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       : String(project.work_date).split('T')[0];
 
     // レポートを保存（PDF/通知は後で非同期処理）
+    console.log('[APPROVE] Inserting report into database');
     const reportResult = await pool.query(
       `INSERT INTO reports (
         project_id, cast_user_id, supervisor_name, writer_name, weather,
@@ -204,6 +207,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     );
 
     const reportId = reportResult.rows[0].id;
+    console.log('[APPROVE] Report inserted successfully, id:', reportId);
 
     // 即座にレスポンスを返す（高速化）
     res.status(201).json({
