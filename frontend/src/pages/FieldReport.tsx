@@ -429,6 +429,15 @@ export default function FieldReport() {
       setPageState('name_selection')
     }
 
+    const handleChangeRegistration = () => {
+      localStorage.removeItem(`selected_staff_id_${uniqueUrl}`)
+      localStorage.removeItem(`selected_staff_name_${uniqueUrl}`)
+      setSelectedStaff(null)
+      setNameSearchQuery('')
+      setNameSearchResults([])
+      setPageState('name_selection')
+    }
+
     if (pageState === 'loading') {
     return (
       <div style={styles.container}>
@@ -668,6 +677,22 @@ export default function FieldReport() {
               disabled
             />
           </div>
+
+          {selectedStaff && (
+            <div style={styles.formGroup}>
+              <label style={styles.label}>登録名</label>
+              <div style={styles.registeredNameBox}>
+                <span style={styles.registeredName}>{selectedStaff.displayNameKanji}</span>
+                <button
+                  type="button"
+                  style={styles.changeRegistrationButton}
+                  onClick={handleChangeRegistration}
+                >
+                  登録情報を変更
+                </button>
+              </div>
+            </div>
+          )}
 
           <div style={styles.formGroup}>
             <label style={styles.label}>天気</label>
@@ -1469,6 +1494,29 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     fontSize: '16px',
     fontWeight: 'bold',
+    cursor: 'pointer'
+  },
+  registeredNameBox: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '4px',
+    border: '1px solid #ddd'
+  },
+  registeredName: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    color: '#333'
+  },
+  changeRegistrationButton: {
+    backgroundColor: 'transparent',
+    color: '#666',
+    border: '1px solid #999',
+    padding: '6px 12px',
+    borderRadius: '4px',
+    fontSize: '13px',
     cursor: 'pointer'
   }
 }
