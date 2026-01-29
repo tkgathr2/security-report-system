@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
 // Color palette (matching company HP kotsuyudo.com)
 const COLORS = {
@@ -652,33 +651,6 @@ function AdminApp() {
   )
 }
 
-function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/report/:uniqueUrl" element={<FieldReportWrapper />} />
-        <Route path="/*" element={<AdminApp />} />
-      </Routes>
-    </BrowserRouter>
-  )
-}
-
-function FieldReportWrapper() {
-  const [FieldReport, setFieldReport] = useState<React.ComponentType | null>(null)
-  
-  useEffect(() => {
-    import('./pages/FieldReport').then(module => {
-      setFieldReport(() => module.default)
-    })
-  }, [])
-  
-  if (!FieldReport) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>読み込み中...</div>
-  }
-  
-  return <FieldReport />
-}
-
 const styles: Record<string, React.CSSProperties> = {
   loadingContainer: {
     display: 'flex',
@@ -1107,4 +1079,4 @@ const styles: Record<string, React.CSSProperties> = {
   }
 }
 
-export default App
+export default AdminApp
