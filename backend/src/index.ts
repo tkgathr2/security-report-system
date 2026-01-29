@@ -43,7 +43,7 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-01-29-v65' });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-01-29-v66' });
 });
 
 app.use('/api/auth', authRouter);
@@ -89,7 +89,8 @@ app.get('/report/:uniqueUrl', (_req: Request, res: Response) => {
 });
 
 // Catch-all route for SPA - serve index.html for any unmatched routes
-app.get('*', (_req: Request, res: Response) => {
+// Express 5.x requires '{*path}' syntax instead of '*' for wildcard routes
+app.get('{*path}', (_req: Request, res: Response) => {
   if (frontendExists) {
     res.sendFile(frontendIndexPath);
   } else {
