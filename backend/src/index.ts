@@ -3,6 +3,7 @@ import session from 'express-session';
 import passport from 'passport';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import authRouter from './routes/auth';
 import adminAuthRouter from './routes/adminAuth';
 import adminRouter from './routes/admin';
@@ -42,7 +43,7 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan' });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-01-29-v64' });
 });
 
 app.use('/api/auth', authRouter);
@@ -67,16 +68,49 @@ async function ensureSchema() {
 // Serve frontend static files in production
 // __dirname is backend/dist after compilation, so ../frontend-dist points to backend/frontend-dist
 const frontendDistPath = path.join(__dirname, '../frontend-dist');
-app.use(express.static(frontendDistPath));
+const frontendIndexPath = path.join(frontendDistPath, 'index.html');
+
+// Check if frontend files exist
+const frontendExists = fs.existsSync(frontendIndexPath);
+console.log(`[Frontend] Path: ${frontendDistPath}`);
+console.log(`[Frontend] Index exists: ${frontendExists}`);
+
+if (frontendExists) {
+  app.use(express.static(frontendDistPath));
+}
 
 // SPA fallback - serve index.html for non-API routes (Express 5.x compatible syntax)
 app.get('/report/:uniqueUrl', (_req: Request, res: Response) => {
-  res.sendFile(path.join(frontendDistPath, 'index.html'));
+  if (frontendExists) {
+    res.sendFile(frontendIndexPath);
+  } else {
+    res.status(500).send('Frontend not found. Build may have failed.');
+  }
 });
 
 // Catch-all route for SPA - serve index.html for any unmatched routes
 app.get('*', (_req: Request, res: Response) => {
-  res.sendFile(path.join(frontendDistPath, 'index.html'));
+  if (frontendExists) {
+    res.sendFile(frontendIndexPath);
+  } else {
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html lang="ja">
+      <head>
+        <meta charset="UTF-8">
+        <title>Frontend Build Error</title>
+        <style>body { font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }</style>
+      </head>
+      <body>
+        <h1>Frontend Build Error</h1>
+        <p>Frontend files not found at: ${frontendDistPath}</p>
+        <p>Please check the Railway build logs.</p>
+        <p><a href="/health">/health</a> - API Health Check</p>
+        <p><a href="/version">/version</a> - Version Info</p>
+      </body>
+      </html>
+    `);
+  }
 });
 
 // Test-only endpointfor simulating admin login (development only)
