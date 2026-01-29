@@ -43,7 +43,7 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-01-29-v64' });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-01-29-v65' });
 });
 
 app.use('/api/auth', authRouter);
