@@ -37,35 +37,6 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.get('/', (_req: Request, res: Response) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="ja">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>デジタル警備報告書システム【ほうこちゃん】</title>
-      <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-        h1 { color: #333; }
-        .status { color: green; }
-        a { color: #0066cc; }
-      </style>
-    </head>
-    <body>
-      <h1>デジタル警備報告書システム【ほうこちゃん】</h1>
-      <p>API サーバー</p>
-      <p class="status">Status: Online</p>
-      <h2>エンドポイント</h2>
-      <ul>
-        <li><a href="/health">/health</a> - ヘルスチェック</li>
-        <li><a href="/version">/version</a> - バージョン情報</li>
-      </ul>
-    </body>
-    </html>
-  `);
-});
-
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
@@ -100,6 +71,11 @@ app.use(express.static(frontendDistPath));
 
 // SPA fallback - serve index.html for non-API routes (Express 5.x compatible syntax)
 app.get('/report/:uniqueUrl', (_req: Request, res: Response) => {
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
+
+// Catch-all route for SPA - serve index.html for any unmatched routes
+app.get('*', (_req: Request, res: Response) => {
   res.sendFile(path.join(frontendDistPath, 'index.html'));
 });
 
