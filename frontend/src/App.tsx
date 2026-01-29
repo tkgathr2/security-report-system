@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 
+// Company logo URL from kotsuyudo.com
+const COMPANY_LOGO_URL = 'https://storage.googleapis.com/studio-design-asset-files/projects/9YWy6mwXOM/s-916x174_v-fs_webp_c479912b-ce1f-4198-95fa-49599e599ced_small.webp'
+
 // Color palette (matching company HP kotsuyudo.com)
 const COLORS = {
   primary: '#E67E22',
@@ -294,10 +297,9 @@ function AdminApp() {
       <div style={styles.loginContainer}>
         <div style={styles.loginBox}>
           <div style={styles.loginLogo}>
-            <div style={styles.logoIcon}>N</div>
-            <h1 style={styles.loginTitle}>日本交通誘導</h1>
+            <img src={COMPANY_LOGO_URL} alt="日本交通誘導" style={styles.loginLogoImage} />
           </div>
-          <h2 style={styles.loginSubtitle}>デジタル警備報告書システム</h2>
+          <h2 style={styles.loginSubtitle}>デジタル警備報告書システム【ほうこちゃん】</h2>
           <p style={styles.loginDesc}>管理者としてログインしてください</p>
           <button style={styles.googleButton} onClick={handleGoogleLogin}>
             <svg style={styles.googleIcon} viewBox="0 0 24 24">
@@ -321,10 +323,9 @@ function AdminApp() {
           <button style={styles.menuButton} onClick={() => setSidebarOpen(!sidebarOpen)}>
             &#9776;
           </button>
-          <div style={styles.headerLogo}>
-            <div style={styles.headerLogoIcon}>N</div>
-            <span style={styles.headerLogoText}>日本交通誘導</span>
-          </div>
+                    <div style={styles.headerLogo}>
+                      <img src={COMPANY_LOGO_URL} alt="日本交通誘導" style={styles.headerLogoImage} />
+                    </div>
         </div>
         <div style={styles.headerRight}>
           <span style={styles.adminEmail}>{admin?.email}</span>
@@ -677,31 +678,16 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '400px',
     width: '90%'
   },
-  loginLogo: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '12px',
-    marginBottom: '10px'
-  },
-  logoIcon: {
-    width: '50px',
-    height: '50px',
-    backgroundColor: COLORS.primary,
-    color: COLORS.white,
-    borderRadius: '8px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '28px',
-    fontWeight: 'bold'
-  },
-  loginTitle: {
-    margin: 0,
-    fontSize: '24px',
-    color: COLORS.secondary,
-    fontWeight: 'bold'
-  },
+    loginLogo: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: '20px'
+    },
+    loginLogoImage: {
+      maxWidth: '280px',
+      height: 'auto'
+    },
   loginSubtitle: {
     margin: '0 0 10px 0',
     fontSize: '18px',
@@ -761,27 +747,14 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     padding: '5px 10px'
   },
-  headerLogo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px'
-  },
-  headerLogoIcon: {
-    width: '36px',
-    height: '36px',
-    backgroundColor: COLORS.primary,
-    color: COLORS.white,
-    borderRadius: '6px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '20px',
-    fontWeight: 'bold'
-  },
-  headerLogoText: {
-    fontSize: '18px',
-    fontWeight: 'bold'
-  },
+    headerLogo: {
+      display: 'flex',
+      alignItems: 'center'
+    },
+    headerLogoImage: {
+      height: '36px',
+      width: 'auto'
+    },
   headerRight: {
     display: 'flex',
     alignItems: 'center',
