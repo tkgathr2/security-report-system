@@ -263,16 +263,18 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
     const currentUser = currentResult.rows[0];
 
     await pool.query(
-      `INSERT INTO admin_audit_logs (admin_id, action, target_type, target_id, old_value, new_value, reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, target_id, payload_json)
+       VALUES ($1, $2, $3, $4, $5)`,
       [
-        adminUser.id,
+        adminUser.email,
         'UPDATE_USER_NAME',
         'cast_user',
         id,
-        JSON.stringify({ staff_id: currentUser.selected_staff_id, name: currentUser.selected_name_kanji }),
-        JSON.stringify({ staff_id: staff_id, name: staff_name_kanji }),
-        reason || null
+        JSON.stringify({
+          old_value: { staff_id: currentUser.selected_staff_id, name: currentUser.selected_name_kanji },
+          new_value: { staff_id: staff_id, name: staff_name_kanji },
+          reason: reason || null
+        })
       ]
     );
 

@@ -48,6 +48,21 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
 
     const project: Project = result.rows[0];
 
+    // Check if report already exists for this project
+    const existingReportResult = await pool.query(
+      'SELECT id FROM reports WHERE project_id = $1',
+      [project.id]
+    );
+
+    if (existingReportResult.rows.length > 0) {
+      res.status(303).json({
+        error: 'ALREADY_SUBMITTED',
+        message: 'この案件の報告書は既に提出されています',
+        details: {}
+      });
+      return;
+    }
+
     const castsResult = await pool.query(
       `SELECT staff_no, cast_name FROM project_casts WHERE project_id = $1 ORDER BY row_index`,
       [project.id]
