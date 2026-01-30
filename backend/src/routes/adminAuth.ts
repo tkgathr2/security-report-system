@@ -68,24 +68,36 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
       const email = profile.emails?.[0]?.value;
       const googleSub = profile.id;
       
+      console.log('[OAuth Debug] Google profile email:', email);
+      console.log('[OAuth Debug] Google profile id:', googleSub);
+      console.log('[OAuth Debug] All emails from profile:', JSON.stringify(profile.emails));
+      
       if (!email) {
+        console.log('[OAuth Debug] No email found in profile');
         return done(null, false);
       }
 
+      // Use case-insensitive email comparison
       const result = await pool.query(
-        'SELECT id, email, is_active FROM admin_allowlist WHERE email = $1',
+        'SELECT id, email, is_active FROM admin_allowlist WHERE LOWER(email) = LOWER($1)',
         [email]
       );
 
+      console.log('[OAuth Debug] Database query result rows:', result.rows.length);
+      console.log('[OAuth Debug] Database query result:', JSON.stringify(result.rows));
+
       if (result.rows.length === 0) {
+        console.log('[OAuth Debug] Email not found in admin_allowlist');
         return done(null, false);
       }
 
       const admin = result.rows[0];
       if (!admin.is_active) {
+        console.log('[OAuth Debug] Admin is not active');
         return done(null, false);
       }
 
+      console.log('[OAuth Debug] Login successful for:', admin.email);
       return done(null, {
         id: admin.id,
         email: admin.email,
@@ -93,6 +105,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
         is_active: admin.is_active
       });
     } catch (error) {
+      console.error('[OAuth Debug] Error:', error);
       return done(error as Error);
     }
   }));
