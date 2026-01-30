@@ -22,6 +22,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.AUTH_SECRET || 'dev-secret-key';
 
+// Trust proxy for Railway (required for secure cookies behind reverse proxy)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 app.use(express.json());
 
 app.use(session({
@@ -31,6 +36,7 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
+    sameSite: 'lax', // Required for OAuth redirects
     maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
@@ -43,7 +49,7 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-01-29-v66' });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-01-30-v67' });
 });
 
 app.use('/api/auth', authRouter);
