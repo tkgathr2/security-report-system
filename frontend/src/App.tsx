@@ -299,7 +299,7 @@ function AdminApp() {
           <div style={styles.loginLogo}>
             <img src={COMPANY_LOGO_URL} alt="日本交通誘導" style={styles.loginLogoImage} />
           </div>
-          <h2 style={styles.loginSubtitle}>デジタル警備報告書システム【ほうこちゃん】</h2>
+          <h2 style={styles.loginSubtitle}>デジタル警備報告書システム<br />【ほうこちゃん】</h2>
           <p style={styles.loginDesc}>管理者としてログインしてください</p>
           <button style={styles.googleButton} onClick={handleGoogleLogin}>
             <svg style={styles.googleIcon} viewBox="0 0 24 24">
