@@ -152,10 +152,21 @@ router.get('/google/start', (req: Request, res: Response, next: NextFunction) =>
 
 router.get('/google/callback',
   (req: Request, res: Response, next: NextFunction) => {
+    // #region agent log
+    console.log('[Callback Debug] Entered /google/callback endpoint');
+    console.log('[Callback Debug] Query params:', JSON.stringify(req.query));
+    console.log('[Callback Debug] Session exists:', !!req.session);
+    console.log('[Callback Debug] Session oauthState:', req.session?.oauthState);
+    // #endregion
     const stateFromQuery = req.query.state as string | undefined;
     const stateFromSession = req.session.oauthState;
     
     if (!stateFromQuery || !stateFromSession) {
+      // #region agent log
+      console.log('[Callback Debug] State validation FAILED - missing state');
+      console.log('[Callback Debug] stateFromQuery:', stateFromQuery);
+      console.log('[Callback Debug] stateFromSession:', stateFromSession);
+      // #endregion
       res.status(400).json({
         error: 'INVALID_STATE',
         message: 'OAuth stateパラメータが欠落しています',
@@ -165,6 +176,11 @@ router.get('/google/callback',
     }
     
     if (stateFromQuery !== stateFromSession) {
+      // #region agent log
+      console.log('[Callback Debug] State validation FAILED - mismatch');
+      console.log('[Callback Debug] stateFromQuery:', stateFromQuery);
+      console.log('[Callback Debug] stateFromSession:', stateFromSession);
+      // #endregion
       res.status(400).json({
         error: 'INVALID_STATE',
         message: 'OAuth stateパラメータが一致しません',
@@ -173,9 +189,19 @@ router.get('/google/callback',
       return;
     }
     
+    // #region agent log
+    console.log('[Callback Debug] State validation PASSED');
+    console.log('[Callback Debug] About to call passport.authenticate');
+    // #endregion
+    
     delete req.session.oauthState;
     
     passport.authenticate('google', { session: true }, (err: Error | null, user: AdminUser | false) => {
+      // #region agent log
+      console.log('[Callback Debug] passport.authenticate callback entered');
+      console.log('[Callback Debug] err:', err);
+      console.log('[Callback Debug] user:', user);
+      // #endregion
       if (err) {
         console.error('Google OAuth error:', err);
         res.status(500).json({
@@ -187,6 +213,9 @@ router.get('/google/callback',
       }
 
       if (!user) {
+        // #region agent log
+        console.log('[Callback Debug] Returning 403 - user is false/undefined');
+        // #endregion
         res.status(403).json({
           error: 'FORBIDDEN',
           message: '許可リストに登録されていないか、無効化されています',
