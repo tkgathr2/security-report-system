@@ -59,11 +59,10 @@ interface Report {
 
 interface StaffMember {
   id: string
-  staff_no: string
-  name_kanji: string
-  name_kana: string
-  is_active: boolean
+  display_name_kanji: string
+  display_name_kana: string
   created_at: string
+  updated_at: string
 }
 
 interface ImportResult {
@@ -97,6 +96,9 @@ function AdminApp() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [importing, setImporting] = useState(false)
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [showStaffModal, setShowStaffModal] = useState(false)
+  const [newStaff, setNewStaff] = useState({ display_name_kanji: '', display_name_kana: '' })
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     checkAuth()
@@ -207,6 +209,38 @@ function AdminApp() {
       setError('スタッフ一覧の取得に失敗しました')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCreateStaff = async () => {
+    if (!newStaff.display_name_kanji.trim() || !newStaff.display_name_kana.trim()) {
+      setError('氏名（漢字）と氏名（カナ）を入力してください')
+      return
+    }
+
+    setCreating(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/admin/staff', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newStaff)
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || '登録に失敗しました')
+      }
+
+      setShowStaffModal(false)
+      setNewStaff({ display_name_kanji: '', display_name_kana: '' })
+      fetchStaff()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '登録に失敗しました')
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -604,7 +638,12 @@ function AdminApp() {
           {/* Staff Management */}
           {screen === 'staff' && (
             <div>
-              <h2 style={styles.pageTitle}>スタッフ管理</h2>
+              <div style={styles.pageHeader}>
+                <h2 style={{...styles.pageTitle, margin: 0}}>スタッフ管理</h2>
+                <button style={styles.primaryButton} onClick={() => setShowStaffModal(true)}>
+                  + 新規登録
+                </button>
+              </div>
               <div style={styles.card}>
                 {loading ? (
                   <p>読み込み中...</p>
@@ -615,27 +654,16 @@ function AdminApp() {
                     <table style={styles.table}>
                       <thead>
                         <tr>
-                          <th style={styles.th}>スタッフNo.</th>
                           <th style={styles.th}>氏名（漢字）</th>
                           <th style={styles.th}>氏名（カナ）</th>
-                          <th style={styles.th}>状態</th>
                           <th style={styles.th}>登録日</th>
                         </tr>
                       </thead>
                       <tbody>
                         {staff.map(member => (
                           <tr key={member.id} style={styles.tr}>
-                            <td style={styles.td}>{member.staff_no}</td>
-                            <td style={styles.td}>{member.name_kanji}</td>
-                            <td style={styles.td}>{member.name_kana}</td>
-                            <td style={styles.td}>
-                              <span style={{
-                                ...styles.statusBadge, 
-                                backgroundColor: member.is_active ? COLORS.success : COLORS.darkGray
-                              }}>
-                                {member.is_active ? '有効' : '無効'}
-                              </span>
-                            </td>
+                            <td style={styles.td}>{member.display_name_kanji}</td>
+                            <td style={styles.td}>{member.display_name_kana}</td>
                             <td style={styles.td}>{formatDate(member.created_at)}</td>
                           </tr>
                         ))}
@@ -644,6 +672,51 @@ function AdminApp() {
                   </div>
                 )}
               </div>
+
+              {/* New Staff Modal */}
+              {showStaffModal && (
+                <div style={styles.modalOverlay} onClick={() => setShowStaffModal(false)}>
+                  <div style={styles.modal} onClick={e => e.stopPropagation()}>
+                    <h3 style={styles.modalTitle}>スタッフ新規登録</h3>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>氏名（漢字）</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={newStaff.display_name_kanji}
+                        onChange={e => setNewStaff({ ...newStaff, display_name_kanji: e.target.value })}
+                        placeholder="例：山田 太郎"
+                      />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>氏名（カナ）</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={newStaff.display_name_kana}
+                        onChange={e => setNewStaff({ ...newStaff, display_name_kana: e.target.value })}
+                        placeholder="例：ヤマダ タロウ"
+                      />
+                    </div>
+                    <div style={styles.modalActions}>
+                      <button
+                        style={styles.cancelButton}
+                        onClick={() => setShowStaffModal(false)}
+                        disabled={creating}
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        style={styles.primaryButton}
+                        onClick={handleCreateStaff}
+                        disabled={creating}
+                      >
+                        {creating ? '登録中...' : '登録'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </main>
@@ -1049,6 +1122,81 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center' as const,
     color: COLORS.darkGray,
     padding: '40px'
+  },
+  pageHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '24px'
+  },
+  primaryButton: {
+    backgroundColor: COLORS.primary,
+    color: COLORS.white,
+    border: 'none',
+    padding: '12px 24px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '15px',
+    fontWeight: 500
+  },
+  modalOverlay: {
+    position: 'fixed' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000
+  },
+  modal: {
+    backgroundColor: COLORS.white,
+    padding: '32px',
+    borderRadius: '12px',
+    width: '400px',
+    maxWidth: '90%',
+    boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+  },
+  modalTitle: {
+    margin: '0 0 24px 0',
+    fontSize: '20px',
+    color: COLORS.secondary,
+    fontWeight: 600
+  },
+  formGroup: {
+    marginBottom: '20px'
+  },
+  label: {
+    display: 'block',
+    marginBottom: '8px',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: COLORS.text
+  },
+  input: {
+    width: '100%',
+    padding: '12px',
+    fontSize: '15px',
+    border: `1px solid ${COLORS.gray}`,
+    borderRadius: '8px',
+    boxSizing: 'border-box' as const
+  },
+  modalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '12px',
+    marginTop: '24px'
+  },
+  cancelButton: {
+    backgroundColor: COLORS.white,
+    color: COLORS.text,
+    border: `1px solid ${COLORS.gray}`,
+    padding: '12px 24px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '15px'
   }
 }
 
