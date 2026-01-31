@@ -10,6 +10,12 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
 const GOOGLE_REDIRECT_URL = process.env.GOOGLE_OAUTH_REDIRECT_URL || 'http://localhost:3000/api/admin/auth/google/callback';
 
+// #region agent log
+console.log('[Startup Debug] GOOGLE_CLIENT_ID exists:', !!GOOGLE_CLIENT_ID);
+console.log('[Startup Debug] GOOGLE_CLIENT_SECRET exists:', !!GOOGLE_CLIENT_SECRET);
+console.log('[Startup Debug] GOOGLE_REDIRECT_URL:', GOOGLE_REDIRECT_URL);
+// #endregion
+
 interface AdminUser {
   id: string;
   email: string;
@@ -56,14 +62,24 @@ passport.deserializeUser(async (email: string, done) => {
 });
 
 if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
+  // #region agent log
+  console.log('[Startup Debug] Registering GoogleStrategy');
+  console.log('[Startup Debug] callbackURL:', GOOGLE_REDIRECT_URL);
+  // #endregion
   passport.use(new GoogleStrategy({
     clientID: GOOGLE_CLIENT_ID,
     clientSecret: GOOGLE_CLIENT_SECRET,
     callbackURL: GOOGLE_REDIRECT_URL,
     scope: ['email', 'profile'],
-    state: true,
+    state: false,  // Changed from true - avoid conflict with manual state management
     passReqToCallback: true
   }, async (req: Request, accessToken: string, refreshToken: string, profile: Profile, done: (error: Error | null, user?: AdminUser | false) => void) => {
+    // #region agent log
+    console.log('[OAuth Debug] ===== VERIFY FUNCTION ENTERED =====');
+    console.log('[OAuth Debug] accessToken exists:', !!accessToken);
+    console.log('[OAuth Debug] refreshToken exists:', !!refreshToken);
+    console.log('[OAuth Debug] profile:', JSON.stringify(profile));
+    // #endregion
     try {
       const email = profile.emails?.[0]?.value;
       const googleSub = profile.id;
