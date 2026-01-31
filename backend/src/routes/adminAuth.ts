@@ -193,13 +193,8 @@ router.get('/google/callback',
           return;
         }
 
-        res.json({
-          message: 'ログイン成功',
-          admin: {
-            id: user.id,
-            email: user.email
-          }
-        });
+        // ログイン成功後、フロントエンドのダッシュボードにリダイレクト
+        res.redirect('/');
       });
     })(req, res, next);
   }
