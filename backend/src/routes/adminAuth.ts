@@ -10,12 +10,6 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
 const GOOGLE_REDIRECT_URL = process.env.GOOGLE_OAUTH_REDIRECT_URL || 'http://localhost:3000/api/admin/auth/google/callback';
 
-// #region agent log
-console.log('[Startup Debug] GOOGLE_CLIENT_ID exists:', !!GOOGLE_CLIENT_ID);
-console.log('[Startup Debug] GOOGLE_CLIENT_SECRET exists:', !!GOOGLE_CLIENT_SECRET);
-console.log('[Startup Debug] GOOGLE_REDIRECT_URL:', GOOGLE_REDIRECT_URL);
-// #endregion
-
 interface AdminUser {
   id: string;
   email: string;
@@ -62,10 +56,6 @@ passport.deserializeUser(async (email: string, done) => {
 });
 
 if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
-  // #region agent log
-  console.log('[Startup Debug] Registering GoogleStrategy');
-  console.log('[Startup Debug] callbackURL:', GOOGLE_REDIRECT_URL);
-  // #endregion
   passport.use(new GoogleStrategy({
     clientID: GOOGLE_CLIENT_ID,
     clientSecret: GOOGLE_CLIENT_SECRET,
@@ -74,22 +64,11 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
     state: false,  // Changed from true - avoid conflict with manual state management
     passReqToCallback: true
   }, async (req: Request, accessToken: string, refreshToken: string, profile: Profile, done: (error: Error | null, user?: AdminUser | false) => void) => {
-    // #region agent log
-    console.log('[OAuth Debug] ===== VERIFY FUNCTION ENTERED =====');
-    console.log('[OAuth Debug] accessToken exists:', !!accessToken);
-    console.log('[OAuth Debug] refreshToken exists:', !!refreshToken);
-    console.log('[OAuth Debug] profile:', JSON.stringify(profile));
-    // #endregion
     try {
       const email = profile.emails?.[0]?.value;
       const googleSub = profile.id;
-      
-      console.log('[OAuth Debug] Google profile email:', email);
-      console.log('[OAuth Debug] Google profile id:', googleSub);
-      console.log('[OAuth Debug] All emails from profile:', JSON.stringify(profile.emails));
-      
+
       if (!email) {
-        console.log('[OAuth Debug] No email found in profile');
         return done(null, false);
       }
 
@@ -99,21 +78,14 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
         [email]
       );
 
-      console.log('[OAuth Debug] Database query result rows:', result.rows.length);
-      console.log('[OAuth Debug] Database query result:', JSON.stringify(result.rows));
-
       if (result.rows.length === 0) {
-        console.log('[OAuth Debug] Email not found in admin_allowlist');
         return done(null, false);
       }
 
       const admin = result.rows[0];
       if (!admin.is_active) {
-        console.log('[OAuth Debug] Admin is not active');
         return done(null, false);
       }
-
-      console.log('[OAuth Debug] Login successful for:', admin.email);
       return done(null, {
         id: admin.id,
         email: admin.email,
@@ -121,7 +93,6 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
         is_active: admin.is_active
       });
     } catch (error) {
-      console.error('[OAuth Debug] Error:', error);
       return done(error as Error);
     }
   }));
@@ -168,21 +139,10 @@ router.get('/google/start', (req: Request, res: Response, next: NextFunction) =>
 
 router.get('/google/callback',
   (req: Request, res: Response, next: NextFunction) => {
-    // #region agent log
-    console.log('[Callback Debug] Entered /google/callback endpoint');
-    console.log('[Callback Debug] Query params:', JSON.stringify(req.query));
-    console.log('[Callback Debug] Session exists:', !!req.session);
-    console.log('[Callback Debug] Session oauthState:', req.session?.oauthState);
-    // #endregion
     const stateFromQuery = req.query.state as string | undefined;
     const stateFromSession = req.session.oauthState;
     
     if (!stateFromQuery || !stateFromSession) {
-      // #region agent log
-      console.log('[Callback Debug] State validation FAILED - missing state');
-      console.log('[Callback Debug] stateFromQuery:', stateFromQuery);
-      console.log('[Callback Debug] stateFromSession:', stateFromSession);
-      // #endregion
       res.status(400).json({
         error: 'INVALID_STATE',
         message: 'OAuth stateパラメータが欠落しています',
@@ -192,11 +152,6 @@ router.get('/google/callback',
     }
     
     if (stateFromQuery !== stateFromSession) {
-      // #region agent log
-      console.log('[Callback Debug] State validation FAILED - mismatch');
-      console.log('[Callback Debug] stateFromQuery:', stateFromQuery);
-      console.log('[Callback Debug] stateFromSession:', stateFromSession);
-      // #endregion
       res.status(400).json({
         error: 'INVALID_STATE',
         message: 'OAuth stateパラメータが一致しません',
@@ -204,20 +159,10 @@ router.get('/google/callback',
       });
       return;
     }
-    
-    // #region agent log
-    console.log('[Callback Debug] State validation PASSED');
-    console.log('[Callback Debug] About to call passport.authenticate');
-    // #endregion
-    
+
     delete req.session.oauthState;
     
     passport.authenticate('google', { session: true }, (err: Error | null, user: AdminUser | false) => {
-      // #region agent log
-      console.log('[Callback Debug] passport.authenticate callback entered');
-      console.log('[Callback Debug] err:', err);
-      console.log('[Callback Debug] user:', user);
-      // #endregion
       if (err) {
         console.error('Google OAuth error:', err);
         res.status(500).json({
@@ -229,9 +174,6 @@ router.get('/google/callback',
       }
 
       if (!user) {
-        // #region agent log
-        console.log('[Callback Debug] Returning 403 - user is false/undefined');
-        // #endregion
         res.status(403).json({
           error: 'FORBIDDEN',
           message: '許可リストに登録されていないか、無効化されています',
