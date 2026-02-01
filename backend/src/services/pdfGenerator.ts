@@ -11,21 +11,21 @@ interface ReportData {
   writerName: string;
   guardContents: string[];
   guardOtherText?: string | null;
-  overtimeHours?: number | null;
+  guards?: { index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[];
   hasQualifier: boolean;
   qualifierName?: string | null;
   signaturePng?: Buffer | null;
 }
 
 const GUARD_CONTENT_LABELS: Record<string, string> = {
-  'patrol': '巡回警備',
-  'access_control': '出入管理',
-  'traffic_control': '交通誘導',
-  'facility_guard': '施設警備',
-  'event_guard': 'イベント警備',
-  'parking_guard': '駐車場警備',
-  'construction_guard': '工事現場警備',
-  'other': 'その他'
+  'traffic': '①交通誘導',
+  'pedestrian': '②歩行者誘導',
+  'construction': '③工事関係者、車両の誘導',
+  'worker_safety': '④作業員の安全確保',
+  'property_safety': '⑤占有物の安全確保',
+  'detour': '⑥通行止・迂回案内',
+  'alternating': '⑦交互通行',
+  'other': '⑧その他'
 };
 
 export async function generateReportPdf(data: ReportData): Promise<Buffer> {
@@ -35,8 +35,8 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
         size: 'A4',
         margin: 50,
         info: {
-          Title: 'デジタル警備報告書「ほうこちゃん」',
-          Author: 'ほうこちゃん',
+          Title: 'デジタル警備報告書システム【ほうこちゃん】',
+          Author: 'デジタル警備報告書システム【ほうこちゃん】',
           Subject: `警備報告書 - ${data.companyName} - ${data.workDate}`
         }
       });
@@ -49,7 +49,7 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
       doc.registerFont('IPAGothic', FONT_PATH);
       doc.font('IPAGothic');
 
-      doc.fontSize(20).text('デジタル警備報告書「ほうこちゃん」', { align: 'center' });
+      doc.fontSize(20).text('デジタル警備報告書システム【ほうこちゃん】', { align: 'center' });
       doc.moveDown(2);
 
       doc.fontSize(14).text(`${data.companyName} 御中`, { align: 'left' });
@@ -90,14 +90,33 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
       }
       doc.moveDown(1);
 
-      if (data.overtimeHours !== null && data.overtimeHours !== undefined && data.overtimeHours > 0) {
-        addRow('早出残業:', `${data.overtimeHours}時間`);
-      }
-
       const qualifierText = data.hasQualifier 
         ? `有 (${data.qualifierName || '氏名未記入'})`
         : '無';
       addRow('資格者:', qualifierText);
+
+      // 警備員一覧（任意）
+      if (data.guards && data.guards.length > 0) {
+        doc.moveDown(1);
+        doc.text('警備員一覧:', startX);
+        doc.moveDown(0.3);
+        const colXs = [startX, startX + 60, startX + 220, startX + 320, startX + 420];
+        const headers = ['No', '氏名', '開始', '終了', '早出残業(h)'];
+        headers.forEach((h, i) => doc.text(h, colXs[i], doc.y, { continued: i < headers.length - 1 }));
+        doc.moveDown(0.5);
+        data.guards.forEach(g => {
+          const y = doc.y;
+          doc.text(String(g.index ?? ''), colXs[0], y);
+          doc.text(g.name || '', colXs[1], y);
+          doc.text(g.start_time || '', colXs[2], y);
+          doc.text(g.end_time || '', colXs[3], y);
+          doc.text(
+            g.early_overtime_hours !== undefined && g.early_overtime_hours !== null ? String(g.early_overtime_hours) : '',
+            colXs[4], y
+          );
+          doc.moveDown(0.3);
+        });
+      }
 
       doc.moveDown(2);
 
@@ -121,7 +140,7 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
       const now = new Date();
       const generatedAt = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       doc.fontSize(9).text(`生成日時: ${generatedAt}`, { align: 'right' });
-      doc.text('Powered by ほうこちゃん', { align: 'right' });
+      doc.text('Powered by デジタル警備報告書システム【ほうこちゃん】', { align: 'right' });
 
       doc.end();
     } catch (error) {

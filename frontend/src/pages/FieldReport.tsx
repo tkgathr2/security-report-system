@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import SignatureModal from '../components/SignatureModal'
 
+interface ProjectCast {
+  staff_no: string
+  name: string
+}
+
 interface Project {
   id: string
   project_key: string
@@ -9,25 +14,37 @@ interface Project {
   work_date: string
   work_name: string
   location: string
+  start_time: string | null
+  end_time: string | null
   status: string
   unique_url: string
   staff_name: string
+  has_qualifier: boolean
+  casts: ProjectCast[]
 }
 
 interface Draft {
   payload_json: {
     supervisor_name?: string
+    writer_name?: string
     weather?: string
     guard_contents?: string[]
-    guard_contents_other?: string
-    overtime_hours?: number
+    guard_other_text?: string
+    guards?: { index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[]
     has_qualifier?: boolean
+    qualifier_name?: string
     notes?: string
   }
   updated_at: string
 }
 
-type PageState = 'loading' | 'error' | 'expired' | 'completed' | 'form' | 'success'
+type PageState = 'loading' | 'error' | 'expired' | 'completed' | 'email_registration' | 'name_selection' | 'name_confirmation' | 'form' | 'success'
+
+interface StaffMember {
+  id: string
+  displayNameKanji: string
+  displayNameKana: string
+}
 
 const WEATHER_OPTIONS = [
   { value: 'sunny', label: '晴れ' },
@@ -58,12 +75,24 @@ export default function FieldReport() {
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [showTutorial, setShowTutorial] = useState(false)
   
+    const [emailInput, setEmailInput] = useState('')
+    const [emailError, setEmailError] = useState('')
+    const [registering, setRegistering] = useState(false)
+  
+    const [nameSearchQuery, setNameSearchQuery] = useState('')
+    const [nameSearchResults, setNameSearchResults] = useState<StaffMember[]>([])
+    const [nameSearching, setNameSearching] = useState(false)
+    const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null)
+  
   const [supervisorName, setSupervisorName] = useState('')
+  const [writerName, setWriterName] = useState('')
+  const [writerEmail, setWriterEmail] = useState('')
   const [weather, setWeather] = useState('sunny')
   const [guardContents, setGuardContents] = useState<string[]>([])
   const [guardContentsOther, setGuardContentsOther] = useState('')
-  const [overtimeHours, setOvertimeHours] = useState(0)
+  const [guards, setGuards] = useState<{ index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[]>([])
   const [hasQualifier, setHasQualifier] = useState(false)
+  const [qualifierName, setQualifierName] = useState('')
   const [notes, setNotes] = useState('')
   
   const [submitting, setSubmitting] = useState(false)
@@ -101,16 +130,22 @@ export default function FieldReport() {
       const data = await response.json()
       setProject(data.project)
       
-      await authenticateCast(data.project.staff_name)
+      const savedEmail = localStorage.getItem(`writer_email_${uniqueUrl}`)
+      if (savedEmail) {
+        setWriterEmail(savedEmail)
+        setWriterName(savedEmail)
+        await authenticateWithEmail(savedEmail, data.project)
+      } else {
+        setPageState('email_registration')
+      }
     } catch {
       setErrorMessage('案件の取得に失敗しました')
       setPageState('error')
     }
   }
 
-    const authenticateCast = async (_staffName: string) => {
+    const authenticateWithEmail = async (email: string, projectData: Project) => {
       try {
-        const email = `cast-${uniqueUrl}@field.local`
         const pin = '0000'
       
         let response = await fetch('/api/auth/login', {
@@ -134,19 +169,78 @@ export default function FieldReport() {
         const data = await response.json()
         setToken(data.token)
       
-        await fetchDraft(data.token)
-        setPageState('form')
+        initializeFormFromProject(projectData)
       
-        // Show tutorial on first visit
-        if (!localStorage.getItem('tutorial_shown')) {
-          setShowTutorial(true)
-          localStorage.setItem('tutorial_shown', 'true')
+        const savedStaffId = localStorage.getItem(`selected_staff_id_${uniqueUrl}`)
+        const savedStaffName = localStorage.getItem(`selected_staff_name_${uniqueUrl}`)
+      
+        if (savedStaffId && savedStaffName) {
+          setSelectedStaff({
+            id: savedStaffId,
+            displayNameKanji: savedStaffName,
+            displayNameKana: ''
+          })
+          await fetchDraft(data.token)
+          setPageState('form')
+        
+          if (!localStorage.getItem('tutorial_shown')) {
+            setShowTutorial(true)
+            localStorage.setItem('tutorial_shown', 'true')
+          }
+        } else {
+          setPageState('name_selection')
         }
       } catch {
         setErrorMessage('認証に失敗しました')
         setPageState('error')
       }
     }
+
+  const initializeFormFromProject = (projectData: Project) => {
+    if (projectData.has_qualifier) {
+      setHasQualifier(true)
+    }
+    
+    if (projectData.casts && projectData.casts.length > 0) {
+      const initialGuards = projectData.casts.map((cast, idx) => ({
+        index: idx + 1,
+        name: cast.name,
+        start_time: projectData.start_time || '',
+        end_time: projectData.end_time || '',
+        early_overtime_hours: null
+      }))
+      setGuards(initialGuards)
+    }
+  }
+
+  const handleEmailRegistration = async () => {
+    if (!emailInput.trim()) {
+      setEmailError('メールアドレスを入力してください')
+      return
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(emailInput)) {
+      setEmailError('有効なメールアドレスを入力してください')
+      return
+    }
+    
+    setRegistering(true)
+    setEmailError('')
+    
+    try {
+      localStorage.setItem(`writer_email_${uniqueUrl}`, emailInput)
+      setWriterEmail(emailInput)
+      setWriterName(emailInput)
+      
+      if (project) {
+        await authenticateWithEmail(emailInput, project)
+      }
+    } catch {
+      setEmailError('登録に失敗しました')
+      setRegistering(false)
+    }
+  }
 
   const fetchDraft = async (authToken: string) => {
     try {
@@ -158,11 +252,13 @@ export default function FieldReport() {
         const data: Draft = await response.json()
         if (data.payload_json) {
           setSupervisorName(data.payload_json.supervisor_name || '')
+          setWriterName(data.payload_json.writer_name || '')
           setWeather(data.payload_json.weather || 'sunny')
           setGuardContents(data.payload_json.guard_contents || [])
-          setGuardContentsOther(data.payload_json.guard_contents_other || '')
-          setOvertimeHours(data.payload_json.overtime_hours || 0)
+          setGuardContentsOther(data.payload_json.guard_other_text || '')
+          setGuards(data.payload_json.guards || [])
           setHasQualifier(data.payload_json.has_qualifier || false)
+          setQualifierName(data.payload_json.qualifier_name || '')
           setNotes(data.payload_json.notes || '')
         }
       }
@@ -184,11 +280,13 @@ export default function FieldReport() {
         body: JSON.stringify({
           payload_json: {
             supervisor_name: supervisorName,
+            writer_name: writerName,
             weather,
             guard_contents: guardContents,
-            guard_contents_other: guardContentsOther,
-            overtime_hours: overtimeHours,
+            guard_other_text: guardContentsOther,
+            guards,
             has_qualifier: hasQualifier,
+            qualifier_name: qualifierName,
             notes
           },
           client_updated_at: new Date().toISOString()
@@ -230,11 +328,14 @@ export default function FieldReport() {
         body: JSON.stringify({
           project_unique_url: uniqueUrl,
           supervisor_name: supervisorName,
+          writer_name: writerName,
           weather,
           guard_contents: guardContents,
           guard_other_text: guardContentsOther,
           overtime_hours: overtimeHours,
+          guards,
           has_qualifier: hasQualifier,
+          qualifier_name: hasQualifier ? qualifierName : null,
           notes,
           signature_png_base64: base64Data
         })
@@ -252,16 +353,98 @@ export default function FieldReport() {
     }
   }
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('ja-JP', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
+    const formatDate = (dateStr: string) => {
+      if (!dateStr) return '-'
+      return new Date(dateStr).toLocaleDateString('ja-JP', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    }
 
-  if (pageState === 'loading') {
+    const handleNameSearch = async (query: string) => {
+      setNameSearchQuery(query)
+    
+      if (!query.trim() || !token) {
+        setNameSearchResults([])
+        return
+      }
+    
+      setNameSearching(true)
+      try {
+        const response = await fetch(`/api/staff/search?q=${encodeURIComponent(query)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      
+        if (response.ok) {
+          const data = await response.json()
+          setNameSearchResults(data.staff || [])
+        }
+      } catch {
+        // Ignore search errors
+      } finally {
+        setNameSearching(false)
+      }
+    }
+
+    const handleStaffSelect = (staff: StaffMember) => {
+      setSelectedStaff(staff)
+      setPageState('name_confirmation')
+    }
+
+    const handleNameConfirm = async () => {
+      if (!selectedStaff || !token) return
+    
+      try {
+        const response = await fetch('/api/staff/select', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            staff_id: selectedStaff.id,
+            staff_name_kanji: selectedStaff.displayNameKanji
+          })
+        })
+      
+        if (!response.ok) {
+          throw new Error('Failed to save name selection')
+        }
+      
+        localStorage.setItem(`selected_staff_id_${uniqueUrl}`, selectedStaff.id)
+        localStorage.setItem(`selected_staff_name_${uniqueUrl}`, selectedStaff.displayNameKanji)
+      
+        await fetchDraft(token)
+        setPageState('form')
+      
+        if (!localStorage.getItem('tutorial_shown')) {
+          setShowTutorial(true)
+          localStorage.setItem('tutorial_shown', 'true')
+        }
+      } catch {
+        setErrorMessage('名前の保存に失敗しました')
+        setPageState('error')
+      }
+    }
+
+    const handleNameReject = () => {
+      setSelectedStaff(null)
+      setNameSearchQuery('')
+      setNameSearchResults([])
+      setPageState('name_selection')
+    }
+
+    const handleChangeRegistration = () => {
+      localStorage.removeItem(`selected_staff_id_${uniqueUrl}`)
+      localStorage.removeItem(`selected_staff_name_${uniqueUrl}`)
+      setSelectedStaff(null)
+      setNameSearchQuery('')
+      setNameSearchResults([])
+      setPageState('name_selection')
+    }
+
+    if (pageState === 'loading') {
     return (
       <div style={styles.container}>
         <div style={styles.loadingBox}>
@@ -316,7 +499,118 @@ export default function FieldReport() {
     )
   }
 
-  const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null && guardContents.length > 0
+    if (pageState === 'email_registration') {
+      return (
+        <div style={styles.container}>
+          <div style={styles.emailRegistrationBox}>
+            <h2 style={styles.emailRegistrationTitle}>メールアドレス登録</h2>
+            <p style={styles.emailRegistrationDesc}>
+              報告書の記入者として登録するメールアドレスを入力してください。
+              このメールアドレスは報告書送信時の通知先にもなります。
+            </p>
+            {project && (
+              <div style={styles.emailProjectInfo}>
+                <p><strong>案件:</strong> {project.work_name}</p>
+                <p><strong>会社:</strong> {project.client_name_raw}</p>
+              </div>
+            )}
+            <div style={styles.emailInputGroup}>
+              <input
+                type="email"
+                style={styles.emailInput}
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="example@email.com"
+                disabled={registering}
+              />
+              {emailError && <p style={styles.emailErrorText}>{emailError}</p>}
+            </div>
+            <button
+              style={registering ? styles.emailButtonDisabled : styles.emailButton}
+              onClick={handleEmailRegistration}
+              disabled={registering}
+            >
+              {registering ? '登録中...' : '登録して報告書を作成'}
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    if (pageState === 'name_selection') {
+      return (
+        <div style={styles.container}>
+          <div style={styles.nameSelectionBox}>
+            <h2 style={styles.nameSelectionTitle}>お名前を選択してください</h2>
+            <p style={styles.nameSelectionDesc}>
+              カタカナでお名前を検索し、候補から選択してください。
+            </p>
+            {project && (
+              <div style={styles.emailProjectInfo}>
+                <p><strong>案件:</strong> {project.work_name}</p>
+                <p><strong>会社:</strong> {project.client_name_raw}</p>
+              </div>
+            )}
+            <div style={styles.nameSearchInputGroup}>
+              <input
+                type="text"
+                style={styles.nameSearchInput}
+                value={nameSearchQuery}
+                onChange={(e) => handleNameSearch(e.target.value)}
+                placeholder="カタカナで名前を入力（例：ヤマダ タロウ）"
+              />
+              {nameSearching && <p style={styles.searchingText}>検索中...</p>}
+            </div>
+            {nameSearchResults.length > 0 && (
+              <div style={styles.nameSearchResults}>
+                {nameSearchResults.map((staff) => (
+                  <button
+                    key={staff.id}
+                    style={styles.nameResultItem}
+                    onClick={() => handleStaffSelect(staff)}
+                  >
+                    <span style={styles.nameKanji}>{staff.displayNameKanji}</span>
+                    <span style={styles.nameKana}>（{staff.displayNameKana}）</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {nameSearchQuery.trim() && !nameSearching && nameSearchResults.length === 0 && (
+              <p style={styles.noResultsText}>該当する名前が見つかりません</p>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    if (pageState === 'name_confirmation') {
+      return (
+        <div style={styles.container}>
+          <div style={styles.nameConfirmationBox}>
+            <h2 style={styles.nameConfirmationTitle}>確認</h2>
+            <p style={styles.nameConfirmationQuestion}>
+              あなたは『<strong>{selectedStaff?.displayNameKanji}</strong>』で間違いありませんか？
+            </p>
+            <div style={styles.confirmationButtons}>
+              <button
+                style={styles.confirmYesButton}
+                onClick={handleNameConfirm}
+              >
+                はい
+              </button>
+              <button
+                style={styles.confirmNoButton}
+                onClick={handleNameReject}
+              >
+                違います
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null && guardContents.length > 0
 
   const handleCloseTutorial = () => {
     setShowTutorial(false)
@@ -327,7 +621,7 @@ export default function FieldReport() {
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div>
-            <h1 style={styles.headerTitle}>ほうこちゃん</h1>
+            <h1 style={styles.headerTitle}>デジタル警備報告書システム【ほうこちゃん】</h1>
             <p style={styles.headerSubtitle}>警備報告書</p>
           </div>
           <button 
@@ -380,6 +674,33 @@ export default function FieldReport() {
           </div>
 
           <div style={styles.formGroup}>
+            <label style={styles.label}>記入者（メールアドレス）</label>
+            <input
+              type="text"
+              style={styles.inputReadonly}
+              value={writerEmail || writerName}
+              readOnly
+              disabled
+            />
+          </div>
+
+          {selectedStaff && (
+            <div style={styles.formGroup}>
+              <label style={styles.label}>登録名</label>
+              <div style={styles.registeredNameBox}>
+                <span style={styles.registeredName}>{selectedStaff.displayNameKanji}</span>
+                <button
+                  type="button"
+                  style={styles.changeRegistrationButton}
+                  onClick={handleChangeRegistration}
+                >
+                  登録情報を変更
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div style={styles.formGroup}>
             <label style={styles.label}>天気</label>
             <div style={styles.radioGroup}>
               {WEATHER_OPTIONS.map(option => (
@@ -426,18 +747,79 @@ export default function FieldReport() {
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.label}>残業時間</label>
-            <div style={styles.numberInputWrapper}>
-              <input
-                type="number"
-                style={styles.numberInput}
-                value={overtimeHours}
-                onChange={(e) => setOvertimeHours(Number(e.target.value))}
-                onBlur={saveDraft}
-                min={0}
-                max={24}
-              />
-              <span style={styles.numberUnit}>時間</span>
+            <label style={styles.label}>警備員（最大8名）</label>
+            <div>
+              {guards.map((g, idx) => (
+                <div key={g.index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '8px', marginBottom: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder={`氏名 #${g.index}`}
+                    value={g.name}
+                    onChange={(e) => {
+                      const v = [...guards];
+                      v[idx] = { ...v[idx], name: e.target.value };
+                      setGuards(v);
+                    }}
+                    onBlur={saveDraft}
+                    style={styles.input}
+                  />
+                  <input
+                    type="time"
+                    value={g.start_time}
+                    onChange={(e) => {
+                      const v = [...guards];
+                      v[idx] = { ...v[idx], start_time: e.target.value };
+                      setGuards(v);
+                    }}
+                    onBlur={saveDraft}
+                    style={styles.input}
+                  />
+                  <input
+                    type="time"
+                    value={g.end_time}
+                    onChange={(e) => {
+                      const v = [...guards];
+                      v[idx] = { ...v[idx], end_time: e.target.value };
+                      setGuards(v);
+                    }}
+                    onBlur={saveDraft}
+                    style={styles.input}
+                  />
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    placeholder="早出残業(h)"
+                    value={g.early_overtime_hours ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? null : Number(e.target.value);
+                      const v = [...guards];
+                      v[idx] = { ...v[idx], early_overtime_hours: val };
+                      setGuards(v);
+                    }}
+                    onBlur={saveDraft}
+                    style={styles.numberInput}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const v = guards.filter((_, i) => i !== idx);
+                      // 再採番
+                      setGuards(v.map((it, i) => ({ ...it, index: i + 1 })));
+                      saveDraft();
+                    }}
+                    style={{ padding: '8px 10px' }}
+                  >削除</button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  if (guards.length >= 8) return;
+                  setGuards([...guards, { index: guards.length + 1, name: '', start_time: '', end_time: '', early_overtime_hours: null }]);
+                }}
+                style={{ marginTop: '8px' }}
+              >+ 警備員を追加</button>
             </div>
           </div>
 
@@ -451,6 +833,16 @@ export default function FieldReport() {
               />
               有資格者による作業あり
             </label>
+            {hasQualifier && (
+              <input
+                type="text"
+                style={{ ...styles.input, marginTop: '8px' }}
+                value={qualifierName}
+                onChange={(e) => setQualifierName(e.target.value)}
+                onBlur={saveDraft}
+                placeholder="資格者氏名を入力してください"
+              />
+            )}
           </div>
 
           <div style={styles.formGroup}>
@@ -502,6 +894,11 @@ export default function FieldReport() {
           {!isFormValid && (
             <p style={styles.submitHint}>
               監督者名、警備内容（1つ以上）、署名を入力してください
+            </p>
+          )}
+          {errorMessage && (
+            <p style={styles.submitError}>
+              {errorMessage}
             </p>
           )}
         </section>
@@ -821,6 +1218,15 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#999',
     marginTop: '10px'
   },
+  submitError: {
+    textAlign: 'center',
+    fontSize: '14px',
+    color: '#c00',
+    marginTop: '10px',
+    backgroundColor: '#fee',
+    padding: '10px',
+    borderRadius: '4px'
+  },
   headerContent: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -913,5 +1319,220 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '4px',
     boxSizing: 'border-box',
     marginTop: '10px'
+  },
+  inputReadonly: {
+    width: '100%',
+    padding: '12px',
+    fontSize: '16px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    boxSizing: 'border-box',
+    backgroundColor: '#f5f5f5',
+    color: '#666'
+  },
+  emailRegistrationBox: {
+    backgroundColor: 'white',
+    padding: '40px',
+    borderRadius: '8px',
+    maxWidth: '400px',
+    width: '100%'
+  },
+  emailRegistrationTitle: {
+    margin: '0 0 15px',
+    fontSize: '20px',
+    color: '#333',
+    textAlign: 'center'
+  },
+  emailRegistrationDesc: {
+    fontSize: '14px',
+    color: '#666',
+    marginBottom: '20px',
+    lineHeight: 1.6
+  },
+  emailProjectInfo: {
+    backgroundColor: '#f5f5f5',
+    padding: '15px',
+    borderRadius: '4px',
+    marginBottom: '20px',
+    fontSize: '14px'
+  },
+  emailInputGroup: {
+    marginBottom: '20px'
+  },
+  emailInput: {
+    width: '100%',
+    padding: '14px',
+    fontSize: '16px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    boxSizing: 'border-box'
+  },
+  emailErrorText: {
+    color: '#c00',
+    fontSize: '13px',
+    marginTop: '8px'
+  },
+  emailButton: {
+    width: '100%',
+    backgroundColor: '#4caf50',
+    color: 'white',
+    border: 'none',
+    padding: '16px',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
+  },
+  emailButtonDisabled: {
+    width: '100%',
+    backgroundColor: '#ccc',
+    color: '#666',
+    border: 'none',
+    padding: '16px',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'not-allowed'
+  },
+  nameSelectionBox: {
+    backgroundColor: 'white',
+    padding: '40px',
+    borderRadius: '8px',
+    maxWidth: '450px',
+    width: '100%'
+  },
+  nameSelectionTitle: {
+    margin: '0 0 15px',
+    fontSize: '20px',
+    color: '#333',
+    textAlign: 'center'
+  },
+  nameSelectionDesc: {
+    fontSize: '14px',
+    color: '#666',
+    marginBottom: '20px',
+    lineHeight: 1.6,
+    textAlign: 'center'
+  },
+  nameSearchInputGroup: {
+    marginBottom: '20px'
+  },
+  nameSearchInput: {
+    width: '100%',
+    padding: '14px',
+    fontSize: '16px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    boxSizing: 'border-box'
+  },
+  searchingText: {
+    fontSize: '13px',
+    color: '#666',
+    marginTop: '8px',
+    textAlign: 'center'
+  },
+  nameSearchResults: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    maxHeight: '300px',
+    overflowY: 'auto'
+  },
+  nameResultItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    padding: '14px 16px',
+    backgroundColor: '#f9f9f9',
+    border: '1px solid #ddd',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    width: '100%'
+  },
+  nameKanji: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    color: '#333'
+  },
+  nameKana: {
+    fontSize: '14px',
+    color: '#666',
+    marginLeft: '8px'
+  },
+  noResultsText: {
+    fontSize: '14px',
+    color: '#999',
+    textAlign: 'center',
+    marginTop: '20px'
+  },
+  nameConfirmationBox: {
+    backgroundColor: 'white',
+    padding: '40px',
+    borderRadius: '8px',
+    maxWidth: '400px',
+    width: '100%',
+    textAlign: 'center'
+  },
+  nameConfirmationTitle: {
+    margin: '0 0 20px',
+    fontSize: '20px',
+    color: '#333'
+  },
+  nameConfirmationQuestion: {
+    fontSize: '16px',
+    color: '#333',
+    marginBottom: '30px',
+    lineHeight: 1.6
+  },
+  confirmationButtons: {
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'center'
+  },
+  confirmYesButton: {
+    flex: 1,
+    backgroundColor: '#4caf50',
+    color: 'white',
+    border: 'none',
+    padding: '14px 24px',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
+  },
+  confirmNoButton: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    color: '#333',
+    border: '1px solid #ddd',
+    padding: '14px 24px',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
+  },
+  registeredNameBox: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '4px',
+    border: '1px solid #ddd'
+  },
+  registeredName: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    color: '#333'
+  },
+  changeRegistrationButton: {
+    backgroundColor: 'transparent',
+    color: '#666',
+    border: '1px solid #999',
+    padding: '6px 12px',
+    borderRadius: '4px',
+    fontSize: '13px',
+    cursor: 'pointer'
   }
 }

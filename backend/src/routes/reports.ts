@@ -78,18 +78,21 @@ startxref
 
 router.post('/approve', authenticateCast, async (req: Request, res: Response) => {
   try {
+    console.log('[APPROVE] Starting approval process');
     const castUser = (req as Request & { castUser: CastJwtPayload }).castUser;
     const {
       project_unique_url,
       supervisor_name,
+      writer_name,
       weather,
       guard_contents,
       guard_other_text,
-      overtime_hours,
+      guards,
       has_qualifier,
       qualifier_name,
       signature_png_base64
     } = req.body;
+    console.log('[APPROVE] Request body parsed, project_unique_url:', project_unique_url);
 
     if (!signature_png_base64) {
       res.status(400).json({
@@ -147,6 +150,21 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     const project = projectResult.rows[0];
 
+    // Check if report already exists for this project
+    const existingReportResult = await pool.query(
+      'SELECT id FROM reports WHERE project_id = $1',
+      [project.id]
+    );
+
+    if (existingReportResult.rows.length > 0) {
+      res.status(409).json({
+        error: 'DUPLICATE_REPORT',
+        message: 'この案件の報告書は既に提出されています',
+        details: {}
+      });
+      return;
+    }
+
     if (project.status === 'pending_client') {
       res.status(403).json({
         error: 'FORBIDDEN',
@@ -173,88 +191,152 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       ? project.work_date.toISOString().split('T')[0]
       : String(project.work_date).split('T')[0];
 
-    let pdfBuffer: Buffer;
-    let pdfGenerationStatus = 'success';
-    try {
-      pdfBuffer = await generateReportPdf({
-        companyName: project.client_name_raw,
-        workDate: workDateStr,
-        location: project.location,
-        workName: project.work_name || project.work_title_raw,
-        supervisorName: supervisor_name || '',
-        writerName: castUser.email,
-        guardContents: guard_contents,
-        guardOtherText: guard_other_text,
-        overtimeHours: overtime_hours,
-        hasQualifier: has_qualifier || false,
-        qualifierName: qualifier_name,
-        signaturePng: signaturePngBuffer
-      });
-      console.log(`[PDF] Generated PDF: ${pdfBuffer.length} bytes`);
-    } catch (pdfError) {
-      console.error('[PDF] Generation failed, using dummy PDF:', pdfError);
-      pdfBuffer = generateDummyPdf();
-      pdfGenerationStatus = 'failed';
-    }
-
+    // レポートを保存（PDF/通知は後で非同期処理）
+    // pdf_bytesカラムはNOT NULL制約があるため、初期値としてダミーPDFを使用
+    console.log('[APPROVE] Inserting report into database');
+    const initialPdfBuffer = generateDummyPdf();
     const reportResult = await pool.query(
       `INSERT INTO reports (
         project_id, cast_user_id, supervisor_name, writer_name, weather,
         guard_contents, guard_other_text, overtime_hours, has_qualifier, qualifier_name,
-        signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING id`,
       [
         project.id,
         castUser.userId,
         supervisor_name || '',
-        castUser.email,
+        writer_name || castUser.email,
         weather || 'sunny',
         guard_contents,
         guard_other_text || null,
-        overtime_hours || null,
+        null,
         has_qualifier || false,
         qualifier_name || null,
         signaturePngBuffer,
-        pdfBuffer,
+        initialPdfBuffer, // ダミーPDF（後で実際のPDFに更新）
         'approved',
         now,
-        pdfGenerationStatus,
-        now
+        'pending', // PDF generation pending
+        null,
+        Array.isArray(guards) ? JSON.stringify(guards) : null
       ]
     );
 
     const reportId = reportResult.rows[0].id;
+    console.log('[APPROVE] Report inserted successfully, id:', reportId);
 
-    const clientEmails = project.client_emails || [];
-
-    const notificationResult = await sendReportApprovalNotifications({
-      reportId,
-      companyName: project.client_name_raw,
-      workDate: workDateStr,
-      projectName: project.work_title_raw,
-      clientEmails,
-      pdfBytes: pdfBuffer
-    });
-
+    // 即座にレスポンスを返す（高速化）
     res.status(201).json({
       ok: true,
       report_id: reportId,
-      pdf_saved: true,
+      pdf_saved: false,
       signature_saved: true,
       notifications: {
-        email_sent: notificationResult.emailSent,
-        slack_sent: notificationResult.slackSent
+        email_sent: false,
+        slack_sent: false
       },
-      warnings: notificationResult.warnings.length > 0 ? notificationResult.warnings : undefined
+      async_processing: true
+    });
+
+    // 以下は非同期で実行（レスポンス後にバックグラウンドで処理）
+    setImmediate(async () => {
+      try {
+        console.log(`[ASYNC] Starting background processing for report ${reportId}`);
+        
+        // PDF生成
+        let pdfBuffer: Buffer;
+        let pdfGenerationStatus = 'success';
+        try {
+          pdfBuffer = await generateReportPdf({
+            companyName: project.client_name_raw,
+            workDate: workDateStr,
+            location: project.location,
+            workName: project.work_name || project.work_title_raw,
+            supervisorName: supervisor_name || '',
+            writerName: writer_name || castUser.email,
+            guardContents: guard_contents,
+            guardOtherText: guard_other_text,
+            guards: Array.isArray(guards) ? guards : [],
+            hasQualifier: has_qualifier || false,
+            qualifierName: qualifier_name,
+            signaturePng: signaturePngBuffer
+          });
+          console.log(`[ASYNC] Generated PDF: ${pdfBuffer.length} bytes`);
+        } catch (pdfError) {
+          console.error('[ASYNC] PDF generation failed, using dummy PDF:', pdfError);
+          pdfBuffer = generateDummyPdf();
+          pdfGenerationStatus = 'failed';
+        }
+
+        // PDFをDBに保存
+        await pool.query(
+          `UPDATE reports SET pdf_bytes = $1, pdf_generation_status = $2, pdf_generated_at = $3 WHERE id = $4`,
+          [pdfBuffer, pdfGenerationStatus, new Date(), reportId]
+        );
+        console.log(`[ASYNC] PDF saved to database for report ${reportId}`);
+
+        // 通知送信
+        const clientEmails = project.client_emails || [];
+        const writerEmail = writer_name || castUser.email;
+        const allRecipientEmails = [...clientEmails];
+        if (writerEmail && !allRecipientEmails.includes(writerEmail)) {
+          allRecipientEmails.push(writerEmail);
+        }
+
+        // CSV生成
+        const rows: string[] = [];
+        const headers = [
+          '記入者','報告日','天気','案件名','案件住所','作業内容','協力会社名',
+          '警備内容1','警備内容2','警備内容3','警備内容4','警備内容5','警備内容6','警備内容7','警備内容8',
+          '警備員番号','氏名','勤務開始','勤務終了','早出残業(h)','資格有無','資格者氏名','備考'
+        ];
+        const weatherMap: Record<string,string> = { sunny: '晴', cloudy: '曇', rainy: '雨', snowy: '雪' };
+        const guardFlags = (['traffic','pedestrian','construction','worker_safety','property_safety','detour','alternating','other'] as const)
+          .map(code => (guard_contents || []).includes(code as string) ? '1' : '0');
+        const guardsArr = Array.isArray(guards) ? guards : [];
+        if (guardsArr.length === 0) {
+          rows.push([
+            (writer_name || castUser.email), workDateStr, weatherMap[weather] || weather,
+            (project.work_name || project.work_title_raw || ''), project.location || '', project.work_name || project.work_title_raw || '', project.client_name_raw || '',
+            ...guardFlags,
+            '', '', '', '', '', (has_qualifier ? '有' : '無'), (qualifier_name || ''), ''
+          ].map(v => typeof v === 'string' ? `"${v.replace(/"/g,'""')}"` : String(v)).join(','));
+        } else {
+          for (const g of guardsArr) {
+            rows.push([
+              (writer_name || castUser.email), workDateStr, weatherMap[weather] || weather,
+              (project.work_name || project.work_title_raw || ''), project.location || '', project.work_name || project.work_title_raw || '', project.client_name_raw || '',
+              ...guardFlags,
+              g.index ?? '', g.name || '', g.start_time || '', g.end_time || '', (g.early_overtime_hours ?? ''), (has_qualifier ? '有' : '無'), (qualifier_name || ''), ''
+            ].map(v => typeof v === 'string' ? `"${v.replace(/"/g,'""')}"` : String(v)).join(','));
+          }
+        }
+        const csvContent = [headers.join(','), ...rows].join('\n');
+
+        const notificationResult = await sendReportApprovalNotifications({
+          reportId,
+          companyName: project.client_name_raw,
+          workDate: workDateStr,
+          projectName: project.work_title_raw,
+          clientEmails: allRecipientEmails,
+          pdfBytes: pdfBuffer,
+          csvBytes: Buffer.from(csvContent, 'utf-8')
+        });
+
+        console.log(`[ASYNC] Notifications sent for report ${reportId}:`, notificationResult);
+      } catch (asyncError) {
+        console.error(`[ASYNC] Background processing failed for report ${reportId}:`, asyncError);
+      }
     });
 
   } catch (error) {
     console.error('Approve error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     res.status(500).json({
       error: 'INTERNAL_ERROR',
-      message: '承認処理中にエラーが発生しました',
-      details: {}
+      message: `承認処理中にエラーが発生しました: ${errorMessage}`,
+      details: { error: errorMessage }
     });
   }
 });

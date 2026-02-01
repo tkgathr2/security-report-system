@@ -89,13 +89,13 @@ export async function sendSlackNotification(notification: SlackNotification): Pr
 
   try {
     const message = {
-      text: `【ほうこちゃん】報告書が承認されました`,
+      text: `【デジタル警備報告書システム ほうこちゃん】報告書が承認されました`,
       blocks: [
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `*【ほうこちゃん】報告書承認通知*\n\n` +
+            text: `*【デジタル警備報告書システム ほうこちゃん】報告書承認通知*\n\n` +
               `*会社名:* ${notification.companyName}\n` +
               `*実施日:* ${notification.workDate}\n` +
               `*案件名:* ${notification.projectName}\n` +
@@ -132,29 +132,39 @@ export async function sendReportApprovalNotifications(params: {
   projectName: string;
   clientEmails: string[];
   pdfBytes: Buffer;
+  csvBytes?: Buffer;
 }): Promise<{ emailSent: boolean; slackSent: boolean; warnings: string[] }> {
   const warnings: string[] = [];
 
+  const attachments = [
+    {
+      filename: `report_${params.workDate}.pdf`,
+      content: params.pdfBytes,
+      contentType: 'application/pdf'
+    },
+    ...(params.csvBytes ? [{
+      filename: `report_${params.workDate}.csv`,
+      content: params.csvBytes,
+      contentType: 'text/csv'
+    }] : [])
+  ];
+
   const emailResult = await sendEmail({
     to: params.clientEmails,
-    subject: `【ほうこちゃん】警備報告書 ${params.projectName} (${params.workDate})`,
+    subject: `【デジタル警備報告書システム ほうこちゃん】警備報告書 ${params.projectName} (${params.workDate})`,
     text: `${params.companyName} 様\n\n` +
-      `ほうこちゃんより警備報告書をお送りいたします。\n\n` +
+      `デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。\n\n` +
       `案件名: ${params.projectName}\n` +
       `実施日: ${params.workDate}\n\n` +
-      `添付のPDFファイルをご確認ください。`,
+      `添付のPDF/CSVファイルをご確認ください。`,
     html: `<p>${params.companyName} 様</p>` +
-      `<p>ほうこちゃんより警備報告書をお送りいたします。</p>` +
+      `<p>デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。</p>` +
       `<ul>` +
       `<li>案件名: ${params.projectName}</li>` +
       `<li>実施日: ${params.workDate}</li>` +
       `</ul>` +
-      `<p>添付のPDFファイルをご確認ください。</p>`,
-    attachments: [{
-      filename: `report_${params.workDate}.pdf`,
-      content: params.pdfBytes,
-      contentType: 'application/pdf'
-    }]
+      `<p>添付のPDF/CSVファイルをご確認ください。</p>`,
+    attachments
   });
 
   if (!emailResult.success) {

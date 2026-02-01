@@ -61,19 +61,20 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
     clientSecret: GOOGLE_CLIENT_SECRET,
     callbackURL: GOOGLE_REDIRECT_URL,
     scope: ['email', 'profile'],
-    state: true,
+    state: false,  // Changed from true - avoid conflict with manual state management
     passReqToCallback: true
   }, async (req: Request, accessToken: string, refreshToken: string, profile: Profile, done: (error: Error | null, user?: AdminUser | false) => void) => {
     try {
       const email = profile.emails?.[0]?.value;
       const googleSub = profile.id;
-      
+
       if (!email) {
         return done(null, false);
       }
 
+      // Use case-insensitive email comparison
       const result = await pool.query(
-        'SELECT id, email, is_active FROM admin_allowlist WHERE email = $1',
+        'SELECT id, email, is_active FROM admin_allowlist WHERE LOWER(email) = LOWER($1)',
         [email]
       );
 
@@ -85,7 +86,6 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
       if (!admin.is_active) {
         return done(null, false);
       }
-
       return done(null, {
         id: admin.id,
         email: admin.email,
@@ -159,7 +159,7 @@ router.get('/google/callback',
       });
       return;
     }
-    
+
     delete req.session.oauthState;
     
     passport.authenticate('google', { session: true }, (err: Error | null, user: AdminUser | false) => {
@@ -193,13 +193,8 @@ router.get('/google/callback',
           return;
         }
 
-        res.json({
-          message: 'ログイン成功',
-          admin: {
-            id: user.id,
-            email: user.email
-          }
-        });
+        // ログイン成功後、フロントエンドのダッシュボードにリダイレクト
+        res.redirect('/');
       });
     })(req, res, next);
   }
