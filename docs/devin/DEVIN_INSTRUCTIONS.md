@@ -126,3 +126,51 @@
 ## 詳細ドキュメント
 
 完全な要件定義: `docs/devin/ASK_Devin_Migration.md`
+
+---
+
+## GitHub同期（初回セットアップ）
+
+### 事前アラート（SEC-01）
+
+この工程ではシークレット情報が必要になる可能性があります。**自動入力は行いません**。SEC-01 で停止します。
+
+### 手順（決め打ち禁止・UIを目視で確認）
+
+```
+【手順1】Devinを開く
+- DevinのWebアプリを開く
+- ログインが必要ならログインする
+
+【手順2】「GitHub同期/連携/インポート」の入口を探す（決め打ち禁止）
+- 画面内で以下のいずれかの導線を探して開く（表記揺れOK）
+  - Settings / 設定
+  - Integrations / 連携
+  - GitHub
+  - Connect GitHub / GitHubを接続
+  - Add repo / Import repo / Add project / New project
+  - Sync / 同期
+
+【手順3】GitHub接続（必要な場合）
+- GitHubの認可画面が出たら、画面の指示に従って進める
+- もしトークン/シークレットが表示されたら、値はコピー/共有せずに操作を停止する
+  - 停止後、このチャットに「SEC-01」とだけ報告する（値は書かない）
+
+【手順4】対象リポジトリを追加
+- `tkgathr2/security-report-system` を選ぶ
+- branch指定がある場合は `main` を選ぶ
+
+【手順5】同期完了の確認
+- 「Connected」「Synced」「Imported」「Ready」等の表示を確認
+
+【手順6】報告（必須：4点）
+1) 実際に辿ったメニュー経路（例：Settings → Integrations → GitHub → Add repo）
+2) 実際に押したボタン名（上から順）
+3) 完了表示の文言（例：Connected / Synced / Imported / Ready）
+4) branch指定の有無（指定できるなら main を選んだか）
+```
+
+### 完了条件
+
+- Devin側で `tkgathr2/security-report-system` が同期済み（Connected/Synced等）と確認できる
+- 上記「報告4点」が揃う
