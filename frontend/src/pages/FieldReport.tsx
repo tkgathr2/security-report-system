@@ -332,7 +332,6 @@ export default function FieldReport() {
           weather,
           guard_contents: guardContents,
           guard_other_text: guardContentsOther,
-          overtime_hours: overtimeHours,
           guards,
           has_qualifier: hasQualifier,
           qualifier_name: hasQualifier ? qualifierName : null,
