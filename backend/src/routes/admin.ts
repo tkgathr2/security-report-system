@@ -1,22 +1,11 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import pool from '../db/pool';
+import { requireAdmin } from '../middleware/auth';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
-
-function requireAdmin(req: Request, res: Response, next: () => void): void {
-  if (!req.isAuthenticated || !req.isAuthenticated() || !req.user) {
-    res.status(401).json({
-      error: 'ADMIN_UNAUTHORIZED',
-      message: '管理者セッションがありません',
-      details: {}
-    });
-    return;
-  }
-  next();
-}
 
 router.get('/me', (req: Request, res: Response) => {
   if (!req.isAuthenticated || !req.isAuthenticated() || !req.user) {
