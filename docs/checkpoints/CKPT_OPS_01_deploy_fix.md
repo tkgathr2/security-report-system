@@ -112,8 +112,8 @@ app.listen(PORT, () => {
 | `DATABASE_URL` | 必須 | PostgreSQL接続（Railwayアドオンで自動設定） |
 | `JWT_SECRET` | 必須 | キャストJWT署名キー |
 | `AUTH_SECRET` | 必須 | セッション暗号化キー |
-| `GOOGLE_CLIENT_ID` | 任意 | Google OAuth |
-| `GOOGLE_CLIENT_SECRET` | 任意 | Google OAuth |
-| `GOOGLE_REDIRECT_URI` | 任意 | OAuth callback URL |
+| `GOOGLE_OAUTH_CLIENT_ID` | 任意 | Google OAuth |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | 任意 | Google OAuth |
+| `GOOGLE_OAUTH_REDIRECT_URL` | 任意 | OAuth callback URL |
 | `SMTP_*` | 任意 | メール通知 |
 | `SLACK_WEBHOOK_URL` | 任意 | Slack通知 |

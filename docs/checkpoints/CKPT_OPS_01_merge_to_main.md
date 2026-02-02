@@ -53,9 +53,9 @@
 
 | 変数名 | 用途 |
 |--------|------|
-| `GOOGLE_CLIENT_ID` | Google OAuth クライアントID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth クライアントシークレット |
-| `GOOGLE_REDIRECT_URI` | OAuthコールバックURL（例: `https://{domain}/api/admin/auth/google/callback`） |
+| `GOOGLE_OAUTH_CLIENT_ID` | Google OAuth クライアントID |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth クライアントシークレット |
+| `GOOGLE_OAUTH_REDIRECT_URL` | OAuthコールバックURL（例: `https://{domain}/api/admin/auth/google/callback`） |
 
 ### 通知（任意）
 

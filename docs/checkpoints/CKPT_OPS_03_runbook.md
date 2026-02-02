@@ -211,9 +211,9 @@ psql $DATABASE_URL < backup_YYYYMMDD.sql
 | DATABASE_URL | 必須 | PostgreSQL接続 |
 | JWT_SECRET | 必須 | キャストJWT署名 |
 | AUTH_SECRET | 必須 | セッション暗号化 |
-| GOOGLE_CLIENT_ID | 任意 | OAuth |
-| GOOGLE_CLIENT_SECRET | 任意 | OAuth |
-| GOOGLE_REDIRECT_URI | 任意 | OAuth callback |
+| GOOGLE_OAUTH_CLIENT_ID | 任意 | OAuth |
+| GOOGLE_OAUTH_CLIENT_SECRET | 任意 | OAuth |
+| GOOGLE_OAUTH_REDIRECT_URL | 任意 | OAuth callback |
 | SMTP_HOST | 任意 | メール通知 |
 | SMTP_PORT | 任意 | メール通知 |
 | SMTP_USER | 任意 | メール通知 |
