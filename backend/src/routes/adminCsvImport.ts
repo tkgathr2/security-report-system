@@ -184,8 +184,10 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   let createdProjectsCount = 0;
   let skippedRowsCount = 0;
   let pendingClientRowsCount = 0;
+  let staffAutoAddedCount = 0;
 
   const projectMap = new Map<string, { projectId: string; casts: Set<string> }>();
+  const processedStaffKana = new Set<string>(); // 重複処理を避けるため
 
   for (let i = 0; i < records.length; i++) {
     const row = records[i];
@@ -277,7 +279,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
       }
 
       const projectInfo = projectMap.get(projectKey)!;
-      
+
       if (!projectInfo.casts.has(staffNo)) {
         await pool.query(
           `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index)
@@ -286,6 +288,34 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
           [projectInfo.projectId, staffNo, castName, i]
         );
         projectInfo.casts.add(staffNo);
+      }
+
+      // スタッフマスタへの自動追加（カナがある場合）
+      const castNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
+      const staffKanaKey = castNameKana || castName; // カナ列がなければ漢字氏名をキーとして使用
+
+      if (staffKanaKey && !processedStaffKana.has(staffKanaKey)) {
+        processedStaffKana.add(staffKanaKey);
+        try {
+          // スタッフマスタに存在するか確認
+          const existingStaff = await pool.query(
+            'SELECT id FROM staff_master WHERE display_name_kana = $1',
+            [staffKanaKey]
+          );
+
+          if (existingStaff.rows.length === 0) {
+            // 存在しない場合のみ追加
+            await pool.query(
+              `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
+               VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)`,
+              [castName, staffKanaKey, adminUser.email]
+            );
+            staffAutoAddedCount++;
+          }
+        } catch (staffError) {
+          // スタッフ追加エラーはログに記録するが、インポート処理は継続
+          console.error('Staff auto-add error:', staffError);
+        }
       }
 
     } catch (error) {
@@ -315,12 +345,27 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     ]
   );
 
+  // スタッフ自動追加の監査ログ
+  if (staffAutoAddedCount > 0) {
+    await pool.query(
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, payload_json)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        adminUser.email,
+        'staff_auto_add',
+        'staff_master',
+        JSON.stringify({ source: 'project_csv', file_name: originalFileName, inserted: staffAutoAddedCount })
+      ]
+    );
+  }
+
   res.status(200).json({
     ok: true,
     status: importStatus,
     created_projects_count: createdProjectsCount,
     skipped_rows_count: skippedRowsCount,
     pending_client_rows_count: pendingClientRowsCount,
+    staff_auto_added_count: staffAutoAddedCount,
     errors: errors.slice(0, 10)
   });
 });
