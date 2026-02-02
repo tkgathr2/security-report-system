@@ -2,7 +2,10 @@
   "name": "security-report-system-backend",
   "version": "1.0.0",
   "main": "dist/index.js",
-"scripts": {
+  "overrides": {
+    "fast-xml-parser": "5.3.4"
+  },
+  "scripts": {
     "build:backend": "tsc",
     "build": "tsc",
     "build:backend": "tsc",
