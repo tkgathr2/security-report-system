@@ -34,9 +34,9 @@
 
 | 変数名 | 用途 | 備考 |
 |--------|------|------|
-| `GOOGLE_CLIENT_ID` | OAuth クライアントID | Google Cloud Consoleで取得 |
-| `GOOGLE_CLIENT_SECRET` | OAuth クライアントシークレット | Google Cloud Consoleで取得 |
-| `GOOGLE_REDIRECT_URI` | コールバックURL | `https://{domain}/api/admin/auth/google/callback` |
+| `GOOGLE_OAUTH_CLIENT_ID` | OAuth クライアントID | Google Cloud Consoleで取得 |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth クライアントシークレット | Google Cloud Consoleで取得 |
+| `GOOGLE_OAUTH_REDIRECT_URL` | コールバックURL | `https://{domain}/api/admin/auth/google/callback` |
 
 ### 通知（任意）
 
@@ -116,4 +116,4 @@ curl -s $PROD_URL/version
 ## 次のアクション
 
 1. 本番URLが判明したら、OPS-2（本番スモークテスト）を実施
-2. Google OAuthを設定する場合は、GOOGLE_REDIRECT_URIを本番URLに合わせて設定
+2. Google OAuthを設定する場合は、GOOGLE_OAUTH_REDIRECT_URLを本番URLに合わせて設定
