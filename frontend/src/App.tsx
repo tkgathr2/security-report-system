@@ -99,6 +99,8 @@ function AdminApp() {
   const [showStaffModal, setShowStaffModal] = useState(false)
   const [newStaff, setNewStaff] = useState({ display_name_kanji: '', display_name_kana: '' })
   const [creating, setCreating] = useState(false)
+  const [staffImporting, setStaffImporting] = useState(false)
+  const [staffImportResult, setStaffImportResult] = useState<{ inserted: number; updated: number; skipped: number } | null>(null)
 
   useEffect(() => {
     checkAuth()
@@ -241,6 +243,38 @@ function AdminApp() {
       setError(err instanceof Error ? err.message : '登録に失敗しました')
     } finally {
       setCreating(false)
+    }
+  }
+
+  const handleStaffCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setStaffImporting(true)
+    setError(null)
+    setStaffImportResult(null)
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const response = await fetch('/api/admin/staff/import', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.message || 'インポートに失敗しました')
+      }
+      setStaffImportResult(data)
+      fetchStaff()
+      fetchDashboardStats()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'インポートに失敗しました')
+    } finally {
+      setStaffImporting(false)
+      e.target.value = ''
     }
   }
 
@@ -640,10 +674,38 @@ function AdminApp() {
             <div>
               <div style={styles.pageHeader}>
                 <h2 style={{...styles.pageTitle, margin: 0}}>スタッフ管理</h2>
-                <button style={styles.primaryButton} onClick={() => setShowStaffModal(true)}>
-                  + 新規登録
-                </button>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <label style={styles.secondaryButton}>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleStaffCsvImport}
+                      disabled={staffImporting}
+                      style={{ display: 'none' }}
+                    />
+                    {staffImporting ? 'インポート中...' : 'CSVインポート'}
+                  </label>
+                  <button style={styles.primaryButton} onClick={() => setShowStaffModal(true)}>
+                    + 新規登録
+                  </button>
+                </div>
               </div>
+
+              {/* Staff Import Result */}
+              {staffImportResult && (
+                <div style={styles.staffImportResult}>
+                  <span style={styles.staffImportResultText}>
+                    インポート完了: 追加 {staffImportResult.inserted}件、更新 {staffImportResult.updated}件、スキップ {staffImportResult.skipped}件
+                  </span>
+                  <button
+                    style={styles.staffImportResultClose}
+                    onClick={() => setStaffImportResult(null)}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
               <div style={styles.card}>
                 {loading ? (
                   <p>読み込み中...</p>
@@ -1197,6 +1259,42 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     cursor: 'pointer',
     fontSize: '15px'
+  },
+  secondaryButton: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    color: COLORS.secondary,
+    border: `1px solid ${COLORS.secondary}`,
+    padding: '12px 24px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '15px',
+    fontWeight: 500
+  },
+  staffImportResult: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#E8F5E9',
+    border: `1px solid ${COLORS.success}`,
+    borderRadius: '8px',
+    padding: '12px 16px',
+    marginBottom: '16px'
+  },
+  staffImportResultText: {
+    color: COLORS.success,
+    fontWeight: 500,
+    fontSize: '14px'
+  },
+  staffImportResultClose: {
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: COLORS.success,
+    fontSize: '20px',
+    cursor: 'pointer',
+    padding: '0 4px'
   }
 }
 
