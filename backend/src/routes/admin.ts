@@ -1,5 +1,8 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import pool from '../db/pool';
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
 
@@ -295,6 +298,110 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
     res.status(500).json({
       error: 'INTERNAL_ERROR',
       message: 'データベースエラーが発生しました',
+      details: {}
+    });
+  }
+});
+
+// POST /api/admin/staff/import - スタッフCSVインポート
+router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Request, res: Response) => {
+  try {
+    const adminUser = req.user as { id: string; email: string };
+    const file = req.file;
+
+    if (!file) {
+      res.status(400).json({
+        error: 'NO_FILE',
+        message: 'ファイルが選択されていません',
+        details: {}
+      });
+      return;
+    }
+
+    // CSVパース（UTF-8 BOM対応）
+    const csvContent = file.buffer.toString('utf-8').replace(/^\uFEFF/, '');
+    const lines = csvContent.split('\n').filter(line => line.trim());
+
+    if (lines.length < 2) {
+      res.status(400).json({
+        error: 'CSV_EMPTY',
+        message: 'CSVにデータ行がありません',
+        details: {}
+      });
+      return;
+    }
+
+    // ヘッダー検証（1行目）
+    const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    const nameKanjiIdx = header.findIndex(h => h.includes('氏名') || h.includes('漢字'));
+    const nameKanaIdx = header.findIndex(h => h.includes('フリガナ') || h.includes('カナ'));
+
+    if (nameKanjiIdx === -1 || nameKanaIdx === -1) {
+      res.status(400).json({
+        error: 'CSV_HEADER_MISMATCH',
+        message: '氏名とフリガナの列が見つかりません。ヘッダー行に「氏名」と「フリガナ」を含めてください。',
+        details: { found_headers: header }
+      });
+      return;
+    }
+
+    let inserted = 0, updated = 0, skipped = 0;
+
+    // データ行を処理
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      const nameKanji = cols[nameKanjiIdx] || '';
+      const nameKana = cols[nameKanaIdx] || '';
+
+      if (!nameKana) {
+        skipped++;
+        continue;
+      }
+
+      // カナで既存検索
+      const existing = await pool.query(
+        'SELECT id, display_name_kanji FROM staff_master WHERE display_name_kana = $1',
+        [nameKana]
+      );
+
+      if (existing.rows.length === 0) {
+        // 新規追加
+        await pool.query(
+          `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
+           VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)`,
+          [nameKanji, nameKana, adminUser.email]
+        );
+        inserted++;
+      } else if (existing.rows[0].display_name_kanji !== nameKanji && nameKanji) {
+        // 漢字更新
+        await pool.query(
+          'UPDATE staff_master SET display_name_kanji = $1, updated_at = CURRENT_TIMESTAMP WHERE display_name_kana = $2',
+          [nameKanji, nameKana]
+        );
+        updated++;
+      } else {
+        skipped++;
+      }
+    }
+
+    // 監査ログ
+    await pool.query(
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, payload_json)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        adminUser.email,
+        'staff_import',
+        'staff_master',
+        JSON.stringify({ file_name: file.originalname, inserted, updated, skipped })
+      ]
+    );
+
+    res.json({ inserted, updated, skipped });
+  } catch (error) {
+    console.error('Staff import error:', error);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'インポートに失敗しました',
       details: {}
     });
   }

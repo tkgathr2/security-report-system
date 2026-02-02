@@ -257,3 +257,59 @@
 ### 9-13. 補助文書（仕様ではない）
 - `docs/devin/DEVIN_INSTRUCTIONS.md`（Devinに渡す運用手順）
 - `docs/devin/ASK_Devin_Migration.md`（要件定義の元資料）
+
+---
+
+## 10. スタッフ名マスタ（CSV取込・自動追加）
+
+### 10-1. 目的
+- スタッフ名を事前にCSVで登録し、報告書入力時に名前候補から選べるようにする
+- 日次の案件CSVに新しい名前が含まれていたら、スタッフマスタへ自動追加する
+
+### 10-2. データ定義
+#### staff_master テーブル（既存拡張）
+- id uuid PK
+- name_kanji text NOT NULL（漢字氏名）
+- name_kana text NOT NULL UNIQUE（カナ氏名：同一人物判定キー）
+- created_at timestamp NOT NULL
+- updated_at timestamp NOT NULL
+- created_by text NULL（監査用：追加した管理者メール）
+
+#### CSV列定義
+- 氏名（漢字）：必須
+- フリガナ（カナ）：必須
+
+### 10-3. API仕様
+#### POST /api/admin/staff/import
+- 認証：管理者セッション必須
+- リクエスト：multipart/form-data（CSVファイル）
+- 処理：
+  1. CSVをパース（UTF-8前提、BOMあり対応）
+  2. 各行について：
+     - カナ氏名で既存検索
+     - 存在しない → INSERT
+     - 存在する → 漢字が異なれば UPDATE
+  3. 監査ログ記録（action: staff_import）
+- レスポンス：{ inserted: number, updated: number, skipped: number }
+
+### 10-4. 日次データ連携
+- 案件CSVインポート（POST /api/admin/csv/import）時に、スタッフ名（キャスト名）を自動でスタッフマスタへ追加
+- 同一人物判定はカナ氏名で行う
+- 新規のみ追加（既存は更新しない：案件CSV由来の場合）
+
+### 10-5. 監査ログ
+- action: staff_import（一括インポート）
+- action: staff_auto_add（日次データからの自動追加）
+- payload_json: { file_name, inserted, updated, skipped }
+
+### 10-6. 受け入れ条件
+- AC-40: スタッフCSV（氏名・フリガナ）をインポートできる
+- AC-41: カナ一致で既存スタッフの漢字が更新される
+- AC-42: 新規スタッフが即時追加される
+- AC-43: インポート操作が監査ログに記録される
+- AC-44: 案件CSVインポート時に新しい名前が自動追加される
+
+### 10-7. NG例
+- カナ氏名が空欄のまま登録する
+- 同一カナで複数レコードを作成する
+- 監査ログなしでインポートを実行する
