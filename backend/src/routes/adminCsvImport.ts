@@ -442,4 +442,74 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   });
 });
 
+router.get('/imports', requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, imported_by_admin_email, original_file_name, detected_encoding, status,
+              created_projects_count, skipped_rows_count, pending_client_rows_count, 
+              errors_json, created_at
+       FROM csv_imports
+       ORDER BY created_at DESC
+       LIMIT 50`
+    );
+
+    res.json({
+      imports: result.rows
+    });
+  } catch (error) {
+    console.error('CSV imports list error:', error);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'インポート履歴の取得に失敗しました',
+      details: {}
+    });
+  }
+});
+
+router.get('/imports/:id/projects', requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const importResult = await pool.query(
+      `SELECT id, original_file_name, created_at FROM csv_imports WHERE id = $1`,
+      [id]
+    );
+
+    if (importResult.rows.length === 0) {
+      res.status(404).json({
+        error: 'NOT_FOUND',
+        message: 'インポート履歴が見つかりません',
+        details: {}
+      });
+      return;
+    }
+
+    const importInfo = importResult.rows[0];
+    const importTime = new Date(importInfo.created_at);
+    const startTime = new Date(importTime.getTime() - 60000);
+    const endTime = new Date(importTime.getTime() + 60000);
+
+    const projectsResult = await pool.query(
+      `SELECT id, project_key, client_name_raw, work_date, work_name, location, 
+              status, unique_url, url_expires_at, created_at
+       FROM projects
+       WHERE created_at >= $1 AND created_at <= $2
+       ORDER BY work_date DESC, created_at DESC`,
+      [startTime, endTime]
+    );
+
+    res.json({
+      import: importInfo,
+      projects: projectsResult.rows
+    });
+  } catch (error) {
+    console.error('Import projects error:', error);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'インポート案件の取得に失敗しました',
+      details: {}
+    });
+  }
+});
+
 export default router;
