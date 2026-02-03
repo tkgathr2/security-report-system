@@ -66,13 +66,13 @@ interface StaffMember {
 }
 
 interface ImportResult {
+  ok: boolean
   status: string
-  message: string
-  projects_created: number
-  projects_updated: number
-  casts_assigned: number
-  rows_skipped: number
-  pending_client_count: number
+  created_projects_count: number
+  skipped_rows_count: number
+  pending_client_rows_count: number
+  staff_auto_added_count: number
+  errors: Array<{ row: number; reason: string }>
 }
 
 interface DashboardStats {
@@ -559,7 +559,7 @@ function AdminApp() {
                     id="csv-upload"
                   />
                   <label htmlFor="csv-upload" style={styles.uploadLabel}>
-                    <span style={styles.uploadIcon}>{isDragging ? '&#128229;' : '&#128193;'}</span>
+                    <span style={styles.uploadIcon}>{isDragging ? '📥' : '📁'}</span>
                     <span>{importing ? 'インポート中...' : (isDragging ? 'ここにドロップ' : 'CSVファイルを選択またはドラッグ＆ドロップ')}</span>
                   </label>
                 </div>
@@ -569,24 +569,24 @@ function AdminApp() {
                     <div style={styles.resultGrid}>
                       <div style={styles.resultItem}>
                         <span style={styles.resultLabel}>作成された案件</span>
-                        <span style={styles.resultValue}>{importResult.projects_created}件</span>
-                      </div>
-                      <div style={styles.resultItem}>
-                        <span style={styles.resultLabel}>更新された案件</span>
-                        <span style={styles.resultValue}>{importResult.projects_updated}件</span>
-                      </div>
-                      <div style={styles.resultItem}>
-                        <span style={styles.resultLabel}>割り当てられたキャスト</span>
-                        <span style={styles.resultValue}>{importResult.casts_assigned}件</span>
+                        <span style={styles.resultValue}>{importResult.created_projects_count ?? 0}件</span>
                       </div>
                       <div style={styles.resultItem}>
                         <span style={styles.resultLabel}>スキップされた行</span>
-                        <span style={styles.resultValue}>{importResult.rows_skipped}件</span>
+                        <span style={styles.resultValue}>{importResult.skipped_rows_count ?? 0}件</span>
+                      </div>
+                      <div style={styles.resultItem}>
+                        <span style={styles.resultLabel}>自動追加スタッフ</span>
+                        <span style={styles.resultValue}>{importResult.staff_auto_added_count ?? 0}件</span>
+                      </div>
+                      <div style={styles.resultItem}>
+                        <span style={styles.resultLabel}>未登録会社</span>
+                        <span style={styles.resultValue}>{importResult.pending_client_rows_count ?? 0}件</span>
                       </div>
                     </div>
-                    {importResult.pending_client_count > 0 && (
+                    {importResult.errors && importResult.errors.length > 0 && (
                       <div style={styles.warningBox}>
-                        未登録会社: {importResult.pending_client_count}件（pending_client状態）
+                        エラー: {importResult.errors.map((e: { row: number; reason: string }) => `行${e.row}: ${e.reason}`).join(', ')}
                       </div>
                     )}
                   </div>
