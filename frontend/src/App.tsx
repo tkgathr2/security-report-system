@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import './App.css'
 
 // Company logo URL from kotsuyudo.com
 const COMPANY_LOGO_URL = 'https://storage.googleapis.com/studio-design-asset-files/projects/9YWy6mwXOM/s-916x174_v-fs_webp_c479912b-ce1f-4198-95fa-49599e599ced_small.webp'
@@ -1179,11 +1180,13 @@ const styles: Record<string, React.CSSProperties> = {
     width: '240px',
     backgroundColor: COLORS.white,
     borderRight: `1px solid ${COLORS.gray}`,
-    transition: 'width 0.3s',
-    overflow: 'hidden'
+    transition: 'width 0.3s, transform 0.3s',
+    overflow: 'hidden',
+    flexShrink: 0
   },
   sidebarClosed: {
-    width: '0px'
+    width: '0px',
+    borderRight: 'none'
   },
   sidebarNav: {
     padding: '20px 0'
@@ -1408,7 +1411,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500
   },
   tableContainer: {
-    overflowX: 'auto' as const
+    overflowX: 'auto' as const,
+    WebkitOverflowScrolling: 'touch' as const,
+    marginLeft: '-12px',
+    marginRight: '-12px',
+    paddingLeft: '12px',
+    paddingRight: '12px'
   },
   table: {
     width: '100%',
@@ -1451,22 +1459,24 @@ const styles: Record<string, React.CSSProperties> = {
     color: COLORS.white
   },
   smallButton: {
-    padding: '6px 12px',
+    padding: '8px 14px',
     backgroundColor: COLORS.secondary,
     color: COLORS.white,
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '12px'
+    fontSize: '13px',
+    minHeight: '36px'
   },
   linkButton: {
-    padding: '6px 12px',
+    padding: '8px 14px',
     backgroundColor: COLORS.primary,
     color: COLORS.white,
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '12px'
+    fontSize: '13px',
+    minHeight: '36px'
   },
   downloadButton: {
     backgroundColor: COLORS.primary,
@@ -1651,10 +1661,11 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: COLORS.primary,
     color: COLORS.white,
     border: 'none',
-    padding: '6px 12px',
-    borderRadius: '4px',
+    padding: '8px 14px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '12px'
+    fontSize: '13px',
+    minHeight: '36px'
   }
 }
 
