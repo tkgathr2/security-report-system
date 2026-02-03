@@ -14,6 +14,7 @@ import draftsRouter from './routes/drafts';
 import reportsRouter from './routes/reports';
 import adminCsvImportRouter from './routes/adminCsvImport';
 import staffRouter from './routes/staff';
+import castAuthRouter from './routes/castAuth';
 import pool from './db/pool';
 
 dotenv.config();
@@ -62,8 +63,9 @@ app.use('/api/drafts', draftsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/admin/csv', adminCsvImportRouter);
 app.use('/api/staff', staffRouter);
+app.use('/api/cast', castAuthRouter);
 
-async function ensureSchema() {
+async function ensureSchema(){
   try {
     await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
   } catch (e) {
