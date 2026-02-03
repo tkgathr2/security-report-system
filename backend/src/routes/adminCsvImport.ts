@@ -233,6 +233,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   const { format, mapping } = formatInfo;
   const errors: Array<{ row: number; reason: string }> = [];
   let createdProjectsCount = 0;
+  let existingProjectsCount = 0;
   let skippedRowsCount = 0;
   let pendingClientRowsCount = 0;
   let staffAutoAddedCount = 0;
@@ -305,6 +306,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
             );
             const castSet = new Set(existingCasts.rows.map((c: { staff_no: string }) => c.staff_no));
             projectMap.set(projectKey, { projectId: existingProject.rows[0].id, casts: castSet });
+            existingProjectsCount++;
           } else {
             const clientNameNormalized = normalizeClientName(clientNameRaw);
             const clientResult = await pool.query(
@@ -432,6 +434,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     ok: true,
     status: importStatus,
     created_projects_count: createdProjectsCount,
+    existing_projects_count: existingProjectsCount,
     skipped_rows_count: skippedRowsCount,
     pending_client_rows_count: pendingClientRowsCount,
     staff_auto_added_count: staffAutoAddedCount,

@@ -69,6 +69,7 @@ interface ImportResult {
   ok: boolean
   status: string
   created_projects_count: number
+  existing_projects_count: number
   skipped_rows_count: number
   pending_client_rows_count: number
   staff_auto_added_count: number
@@ -102,6 +103,8 @@ function AdminApp() {
   const [staffImporting, setStaffImporting] = useState(false)
   const [staffImportResult, setStaffImportResult] = useState<{ inserted: number; updated: number; skipped: number } | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [sortColumn, setSortColumn] = useState<keyof Project | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   useEffect(() => {
     checkAuth()
@@ -384,6 +387,28 @@ function AdminApp() {
     return colors[status] || COLORS.darkGray
   }
 
+  const handleSort = (column: keyof Project) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortedProjects = [...projects].sort((a, b) => {
+    if (!sortColumn) return 0
+    const aVal = a[sortColumn] ?? ''
+    const bVal = b[sortColumn] ?? ''
+    const comparison = String(aVal).localeCompare(String(bVal), 'ja')
+    return sortDirection === 'asc' ? comparison : -comparison
+  })
+
+  const getSortIndicator = (column: keyof Project) => {
+    if (sortColumn !== column) return ' ↕'
+    return sortDirection === 'asc' ? ' ↑' : ' ↓'
+  }
+
   if (loading && !admin) {
     return (
       <div style={styles.loadingContainer}>
@@ -566,14 +591,19 @@ function AdminApp() {
                 {importResult && (
                   <div style={styles.resultBox}>
                     <h4 style={styles.resultTitle}>インポート結果</h4>
+                    {(importResult.existing_projects_count ?? 0) > 0 && (importResult.created_projects_count ?? 0) === 0 && (
+                      <div style={styles.infoBox}>
+                        このCSVの案件は既に登録されています（{importResult.existing_projects_count}件）
+                      </div>
+                    )}
                     <div style={styles.resultGrid}>
                       <div style={styles.resultItem}>
-                        <span style={styles.resultLabel}>作成された案件</span>
+                        <span style={styles.resultLabel}>新規作成</span>
                         <span style={styles.resultValue}>{importResult.created_projects_count ?? 0}件</span>
                       </div>
                       <div style={styles.resultItem}>
-                        <span style={styles.resultLabel}>スキップされた行</span>
-                        <span style={styles.resultValue}>{importResult.skipped_rows_count ?? 0}件</span>
+                        <span style={styles.resultLabel}>既存（スキップ）</span>
+                        <span style={styles.resultValue}>{importResult.existing_projects_count ?? 0}件</span>
                       </div>
                       <div style={styles.resultItem}>
                         <span style={styles.resultLabel}>自動追加スタッフ</span>
@@ -609,17 +639,17 @@ function AdminApp() {
                     <table style={styles.table}>
                       <thead>
                         <tr>
-                          <th style={styles.th}>実施日</th>
-                          <th style={styles.th}>会社名</th>
-                          <th style={styles.th}>作業名</th>
-                          <th style={styles.th}>場所</th>
-                          <th style={styles.th}>状態</th>
-                          <th style={styles.th}>URL有効期限</th>
+                          <th style={styles.sortableTh} onClick={() => handleSort('work_date')}>実施日{getSortIndicator('work_date')}</th>
+                          <th style={styles.sortableTh} onClick={() => handleSort('client_name_raw')}>会社名{getSortIndicator('client_name_raw')}</th>
+                          <th style={styles.sortableTh} onClick={() => handleSort('work_name')}>作業名{getSortIndicator('work_name')}</th>
+                          <th style={styles.sortableTh} onClick={() => handleSort('location')}>場所{getSortIndicator('location')}</th>
+                          <th style={styles.sortableTh} onClick={() => handleSort('status')}>状態{getSortIndicator('status')}</th>
+                          <th style={styles.sortableTh} onClick={() => handleSort('url_expires_at')}>URL有効期限{getSortIndicator('url_expires_at')}</th>
                           <th style={styles.th}>操作</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {projects.map(project => (
+                        {sortedProjects.map(project => (
                           <tr key={project.id} style={styles.tr}>
                             <td style={styles.td}>{formatDate(project.work_date)}</td>
                             <td style={styles.td}>{project.client_name || project.client_name_raw}</td>
@@ -1184,6 +1214,14 @@ const styles: Record<string, React.CSSProperties> = {
     color: COLORS.warning,
     fontWeight: 500
   },
+  infoBox: {
+    marginBottom: '16px',
+    padding: '12px',
+    backgroundColor: '#E3F2FD',
+    borderRadius: '6px',
+    color: '#1565C0',
+    fontWeight: 500
+  },
   tableContainer: {
     overflowX: 'auto' as const
   },
@@ -1199,6 +1237,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     fontWeight: 600,
     whiteSpace: 'nowrap' as const
+  },
+  sortableTh: {
+    backgroundColor: COLORS.secondary,
+    color: COLORS.white,
+    padding: '14px 12px',
+    textAlign: 'left' as const,
+    fontSize: '14px',
+    fontWeight: 600,
+    whiteSpace: 'nowrap' as const,
+    cursor: 'pointer',
+    userSelect: 'none' as const
   },
   tr: {
     borderBottom: `1px solid ${COLORS.gray}`

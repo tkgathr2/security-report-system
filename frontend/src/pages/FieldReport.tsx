@@ -123,6 +123,12 @@ export default function FieldReport() {
         return
       }
       
+      if (response.status === 403) {
+        setErrorMessage('この案件は会社が未登録のため、報告書を作成できません。管理者にお問い合わせください。')
+        setPageState('error')
+        return
+      }
+      
       if (!response.ok) {
         throw new Error('Failed to fetch project')
       }
