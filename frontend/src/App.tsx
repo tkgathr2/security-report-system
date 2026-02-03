@@ -108,7 +108,8 @@ function AdminApp() {
   const [admin, setAdmin] = useState<AdminUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
   
   const [projects, setProjects] = useState<Project[]>([])
   const [reports, setReports] = useState<Report[]>([])
@@ -131,9 +132,21 @@ function AdminApp() {
     const [pendingClients, setPendingClients] = useState<PendingClient[]>([])
     const [registeringClient, setRegisteringClient] = useState<string | null>(null)
 
+      useEffect(() => {
+      checkAuth()
+    }, [])
+
     useEffect(() => {
-    checkAuth()
-  }, [])
+      const handleResize = () => {
+        const mobile = window.innerWidth <= 768
+        setIsMobile(mobile)
+        if (!mobile && !sidebarOpen) {
+          setSidebarOpen(true)
+        }
+      }
+      window.addEventListener('resize', handleResize)
+      return () => window.removeEventListener('resize', handleResize)
+    }, [sidebarOpen])
 
   const checkAuth = async () => {
     try {
@@ -453,18 +466,19 @@ function AdminApp() {
     window.open(`/api/admin/reports/${reportId}/pdf`, '_blank')
   }
 
-    const navigateTo = (newScreen: Screen) => {
-      setScreen(newScreen)
-      setError(null)
-      setSelectedImport(null)
-      setImportedProjects([])
-      if (newScreen === 'dashboard') fetchDashboardStats()
-      if (newScreen === 'projects') fetchProjects()
-      if (newScreen === 'reports') fetchReports()
-      if (newScreen === 'staff') fetchStaff()
-      if (newScreen === 'import_history') fetchImportHistory()
-      if (newScreen === 'pending_clients') fetchPendingClients()
-    }
+        const navigateTo = (newScreen: Screen) => {
+          setScreen(newScreen)
+          setError(null)
+          setSelectedImport(null)
+          setImportedProjects([])
+          if (isMobile) setSidebarOpen(false)
+          if (newScreen === 'dashboard') fetchDashboardStats()
+          if (newScreen === 'projects') fetchProjects()
+          if (newScreen === 'reports') fetchReports()
+          if (newScreen === 'staff') fetchStaff()
+          if (newScreen === 'import_history') fetchImportHistory()
+          if (newScreen === 'pending_clients') fetchPendingClients()
+        }
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-'
@@ -567,10 +581,21 @@ function AdminApp() {
         </div>
       </header>
 
-      <div style={styles.body}>
-        {/* Sidebar */}
-        <aside style={{...styles.sidebar, ...(sidebarOpen ? {} : styles.sidebarClosed)}}>
-          <nav style={styles.sidebarNav}>
+            <div style={styles.body}>
+              {/* Mobile Overlay */}
+              {isMobile && sidebarOpen && (
+                <div 
+                  style={styles.sidebarOverlay} 
+                  onClick={() => setSidebarOpen(false)}
+                />
+              )}
+              {/* Sidebar */}
+              <aside style={{
+                ...styles.sidebar, 
+                ...(isMobile ? styles.sidebarMobile : {}),
+                ...(sidebarOpen ? {} : (isMobile ? styles.sidebarMobileClosed : styles.sidebarClosed))
+              }}>
+                <nav style={styles.sidebarNav}>
             <button 
               style={screen === 'dashboard' ? styles.sidebarItemActive : styles.sidebarItem}
               onClick={() => navigateTo('dashboard')}
@@ -1285,11 +1310,32 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     flexShrink: 0
   },
-  sidebarClosed: {
-    width: '0px',
-    borderRight: 'none'
-  },
-  sidebarNav: {
+    sidebarClosed: {
+      width: '0px',
+      borderRight: 'none'
+    },
+    sidebarMobile: {
+      position: 'fixed' as const,
+      top: '60px',
+      left: 0,
+      bottom: 0,
+      zIndex: 100,
+      boxShadow: '2px 0 8px rgba(0, 0, 0, 0.1)'
+    },
+    sidebarMobileClosed: {
+      transform: 'translateX(-100%)',
+      width: '240px'
+    },
+    sidebarOverlay: {
+      position: 'fixed' as const,
+      top: '60px',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      zIndex: 99
+    },
+    sidebarNav: {
     padding: '20px 0'
   },
   sidebarItem: {
