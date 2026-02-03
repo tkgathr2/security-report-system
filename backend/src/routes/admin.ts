@@ -233,7 +233,9 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
 router.get('/clients', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT id, name, name_normalized, emails, is_active, created_at, updated_at
+      `SELECT id, name, name_normalized, emails, is_active, 
+              contact_name, contact_title, contact_email,
+              created_at, updated_at
        FROM clients
        ORDER BY name
        LIMIT 500`
@@ -245,6 +247,46 @@ router.get('/clients', requireAdmin, async (req: Request, res: Response) => {
     });
   } catch (error) {
     handleDbError(res, error, 'Clients list');
+  }
+});
+
+// PUT /api/admin/clients/:id - クライアント更新
+router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, contact_name, contact_title, contact_email, emails } = req.body;
+
+    if (!name || !name.trim()) {
+      sendBadRequest(res, '会社名は必須です');
+      return;
+    }
+
+    const nameNormalized = name
+      .replace(/[（）\(\)]/g, '')
+      .replace(/[\s　]+/g, '')
+      .replace(/株式会社|有限会社|合同会社/g, '')
+      .toLowerCase()
+      .trim();
+
+    const result = await pool.query(
+      `UPDATE clients 
+       SET name = $1, name_normalized = $2, contact_name = $3, contact_title = $4, 
+           contact_email = $5, emails = $6, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $7
+       RETURNING id, name, name_normalized, contact_name, contact_title, contact_email, emails, is_active, updated_at`,
+      [name.trim(), nameNormalized, contact_name || null, contact_title || null, contact_email || null, emails || [], id]
+    );
+
+    if (result.rows.length === 0) {
+      sendNotFound(res, 'クライアントが見つかりません');
+      return;
+    }
+
+    res.json({
+      client: result.rows[0]
+    });
+  } catch (error) {
+    handleDbError(res, error, 'Client update');
   }
 });
 
