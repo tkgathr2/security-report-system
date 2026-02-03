@@ -773,127 +773,222 @@ function AdminApp() {
             </div>
           )}
 
-          {/* Projects List */}
-          {screen === 'projects' && (
-            <div>
-              <h2 style={styles.pageTitle}>案件一覧</h2>
-              <div style={styles.card}>
-                {loading ? (
-                  <p>読み込み中...</p>
-                ) : projects.length === 0 ? (
-                  <p style={styles.emptyMessage}>案件がありません</p>
-                ) : (
-                  <div style={styles.tableContainer}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.sortableTh} onClick={() => handleSort('work_date')}>実施日{getSortIndicator('work_date')}</th>
-                          <th style={styles.sortableTh} onClick={() => handleSort('client_name_raw')}>会社名{getSortIndicator('client_name_raw')}</th>
-                          <th style={styles.sortableTh} onClick={() => handleSort('work_name')}>作業名{getSortIndicator('work_name')}</th>
-                          <th style={styles.sortableTh} onClick={() => handleSort('location')}>場所{getSortIndicator('location')}</th>
-                          <th style={styles.sortableTh} onClick={() => handleSort('status')}>状態{getSortIndicator('status')}</th>
-                          <th style={styles.sortableTh} onClick={() => handleSort('url_expires_at')}>URL有効期限{getSortIndicator('url_expires_at')}</th>
-                          <th style={styles.th}>操作</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedProjects.map(project => (
-                          <tr key={project.id} style={styles.tr}>
-                            <td style={styles.td}>{formatDate(project.work_date)}</td>
-                            <td style={styles.td}>{project.client_name || project.client_name_raw}</td>
-                            <td style={styles.td}>{project.work_name}</td>
-                            <td style={styles.td}>{project.location}</td>
-                            <td style={styles.td}>
-                              <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
-                                {getStatusLabel(project.status)}
-                              </span>
-                            </td>
-                            <td style={styles.td}>{formatDate(project.url_expires_at)}</td>
-                            <td style={styles.td}>
-                              <div style={{ display: 'flex', gap: '8px' }}>
-                                <button 
-                                  style={styles.smallButton}
-                                  onClick={() => {
-                                    const url = `${window.location.origin}/report/${project.unique_url}`
-                                    navigator.clipboard.writeText(url)
-                                    alert('URLをコピーしました')
-                                  }}
-                                >
-                                  URLコピー
-                                </button>
-                                <button 
-                                  style={styles.linkButton}
-                                  onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
-                                >
-                                  報告画面
-                                </button>
+                    {/* Projects List */}
+                    {screen === 'projects' && (
+                      <div>
+                        <h2 style={styles.pageTitle}>案件一覧</h2>
+                        {loading ? (
+                          <p>読み込み中...</p>
+                        ) : projects.length === 0 ? (
+                          <p style={styles.emptyMessage}>案件がありません</p>
+                        ) : isMobile ? (
+                          <div style={styles.mobileCardList}>
+                            {sortedProjects.map(project => (
+                              <div key={project.id} style={styles.mobileCard}>
+                                <div style={styles.mobileCardHeader}>
+                                  <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
+                                    {getStatusLabel(project.status)}
+                                  </span>
+                                  <span style={styles.mobileCardDate}>{formatDate(project.work_date)}</span>
+                                </div>
+                                <div style={styles.mobileCardBody}>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>会社名</span>
+                                    <span style={styles.mobileCardValue}>{project.client_name || project.client_name_raw}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>作業名</span>
+                                    <span style={styles.mobileCardValue}>{project.work_name}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>場所</span>
+                                    <span style={styles.mobileCardValue}>{project.location}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>URL有効期限</span>
+                                    <span style={styles.mobileCardValue}>{formatDate(project.url_expires_at)}</span>
+                                  </div>
+                                </div>
+                                <div style={styles.mobileCardActions}>
+                                  <button 
+                                    style={styles.mobileActionButton}
+                                    onClick={() => {
+                                      const url = `${window.location.origin}/report/${project.unique_url}`
+                                      navigator.clipboard.writeText(url)
+                                      alert('URLをコピーしました')
+                                    }}
+                                  >
+                                    URLコピー
+                                  </button>
+                                  <button 
+                                    style={styles.mobileActionButtonPrimary}
+                                    onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
+                                  >
+                                    報告画面
+                                  </button>
+                                </div>
                               </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={styles.card}>
+                            <div style={styles.tableContainer}>
+                              <table style={styles.table}>
+                                <thead>
+                                  <tr>
+                                    <th style={styles.sortableTh} onClick={() => handleSort('work_date')}>実施日{getSortIndicator('work_date')}</th>
+                                    <th style={styles.sortableTh} onClick={() => handleSort('client_name_raw')}>会社名{getSortIndicator('client_name_raw')}</th>
+                                    <th style={styles.sortableTh} onClick={() => handleSort('work_name')}>作業名{getSortIndicator('work_name')}</th>
+                                    <th style={styles.sortableTh} onClick={() => handleSort('location')}>場所{getSortIndicator('location')}</th>
+                                    <th style={styles.sortableTh} onClick={() => handleSort('status')}>状態{getSortIndicator('status')}</th>
+                                    <th style={styles.sortableTh} onClick={() => handleSort('url_expires_at')}>URL有効期限{getSortIndicator('url_expires_at')}</th>
+                                    <th style={styles.th}>操作</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sortedProjects.map(project => (
+                                    <tr key={project.id} style={styles.tr}>
+                                      <td style={styles.td}>{formatDate(project.work_date)}</td>
+                                      <td style={styles.td}>{project.client_name || project.client_name_raw}</td>
+                                      <td style={styles.td}>{project.work_name}</td>
+                                      <td style={styles.td}>{project.location}</td>
+                                      <td style={styles.td}>
+                                        <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
+                                          {getStatusLabel(project.status)}
+                                        </span>
+                                      </td>
+                                      <td style={styles.td}>{formatDate(project.url_expires_at)}</td>
+                                      <td style={styles.td}>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                          <button 
+                                            style={styles.smallButton}
+                                            onClick={() => {
+                                              const url = `${window.location.origin}/report/${project.unique_url}`
+                                              navigator.clipboard.writeText(url)
+                                              alert('URLをコピーしました')
+                                            }}
+                                          >
+                                            URLコピー
+                                          </button>
+                                          <button 
+                                            style={styles.linkButton}
+                                            onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
+                                          >
+                                            報告画面
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-          {/* Reports List */}
-          {screen === 'reports' && (
-            <div>
-              <h2 style={styles.pageTitle}>報告書一覧</h2>
-              <div style={styles.card}>
-                {loading ? (
-                  <p>読み込み中...</p>
-                ) : reports.length === 0 ? (
-                  <p style={styles.emptyMessage}>報告書がありません</p>
-                ) : (
-                  <div style={styles.tableContainer}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>承認日時</th>
-                          <th style={styles.th}>会社名</th>
-                          <th style={styles.th}>実施日</th>
-                          <th style={styles.th}>作業名</th>
-                          <th style={styles.th}>監督者</th>
-                          <th style={styles.th}>記入者</th>
-                          <th style={styles.th}>PDF</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {reports.map(report => (
-                          <tr key={report.id} style={styles.tr}>
-                            <td style={styles.td}>{formatDateTime(report.approved_at)}</td>
-                            <td style={styles.td}>{report.client_name_raw}</td>
-                            <td style={styles.td}>{formatDate(report.work_date)}</td>
-                            <td style={styles.td}>{report.work_name}</td>
-                            <td style={styles.td}>{report.supervisor_name}</td>
-                            <td style={styles.td}>{report.writer_name}</td>
-                            <td style={styles.td}>
-                              {report.pdf_generation_status === 'success' ? (
-                                <button 
-                                  style={styles.downloadButton}
-                                  onClick={() => handleDownloadPdf(report.id)}
-                                >
-                                  ダウンロード ({Math.round(report.pdf_size / 1024)}KB)
-                                </button>
-                              ) : (
-                                <span style={styles.pdfPending}>
-                                  {report.pdf_generation_status === 'pending' ? '生成中' : '未生成'}
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+                    {/* Reports List */}
+                    {screen === 'reports' && (
+                      <div>
+                        <h2 style={styles.pageTitle}>報告書一覧</h2>
+                        {loading ? (
+                          <p>読み込み中...</p>
+                        ) : reports.length === 0 ? (
+                          <p style={styles.emptyMessage}>報告書がありません</p>
+                        ) : isMobile ? (
+                          <div style={styles.mobileCardList}>
+                            {reports.map(report => (
+                              <div key={report.id} style={styles.mobileCard}>
+                                <div style={styles.mobileCardHeader}>
+                                  <span style={styles.mobileCardDate}>{formatDateTime(report.approved_at)}</span>
+                                </div>
+                                <div style={styles.mobileCardBody}>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>会社名</span>
+                                    <span style={styles.mobileCardValue}>{report.client_name_raw}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>実施日</span>
+                                    <span style={styles.mobileCardValue}>{formatDate(report.work_date)}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>作業名</span>
+                                    <span style={styles.mobileCardValue}>{report.work_name}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>監督者</span>
+                                    <span style={styles.mobileCardValue}>{report.supervisor_name}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>記入者</span>
+                                    <span style={styles.mobileCardValue}>{report.writer_name}</span>
+                                  </div>
+                                </div>
+                                <div style={styles.mobileCardActions}>
+                                  {report.pdf_generation_status === 'success' ? (
+                                    <button 
+                                      style={styles.mobileActionButtonPrimary}
+                                      onClick={() => handleDownloadPdf(report.id)}
+                                    >
+                                      PDFダウンロード ({Math.round(report.pdf_size / 1024)}KB)
+                                    </button>
+                                  ) : (
+                                    <span style={styles.pdfPending}>
+                                      {report.pdf_generation_status === 'pending' ? '生成中' : '未生成'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={styles.card}>
+                            <div style={styles.tableContainer}>
+                              <table style={styles.table}>
+                                <thead>
+                                  <tr>
+                                    <th style={styles.th}>承認日時</th>
+                                    <th style={styles.th}>会社名</th>
+                                    <th style={styles.th}>実施日</th>
+                                    <th style={styles.th}>作業名</th>
+                                    <th style={styles.th}>監督者</th>
+                                    <th style={styles.th}>記入者</th>
+                                    <th style={styles.th}>PDF</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {reports.map(report => (
+                                    <tr key={report.id} style={styles.tr}>
+                                      <td style={styles.td}>{formatDateTime(report.approved_at)}</td>
+                                      <td style={styles.td}>{report.client_name_raw}</td>
+                                      <td style={styles.td}>{formatDate(report.work_date)}</td>
+                                      <td style={styles.td}>{report.work_name}</td>
+                                      <td style={styles.td}>{report.supervisor_name}</td>
+                                      <td style={styles.td}>{report.writer_name}</td>
+                                      <td style={styles.td}>
+                                        {report.pdf_generation_status === 'success' ? (
+                                          <button 
+                                            style={styles.downloadButton}
+                                            onClick={() => handleDownloadPdf(report.id)}
+                                          >
+                                            ダウンロード ({Math.round(report.pdf_size / 1024)}KB)
+                                          </button>
+                                        ) : (
+                                          <span style={styles.pdfPending}>
+                                            {report.pdf_generation_status === 'pending' ? '生成中' : '未生成'}
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
           {/* Staff Management */}
           {screen === 'staff' && (
@@ -932,36 +1027,57 @@ function AdminApp() {
                 </div>
               )}
 
-              <div style={styles.card}>
-                {loading ? (
-                  <p>読み込み中...</p>
-                ) : staff.length === 0 ? (
-                  <p style={styles.emptyMessage}>スタッフが登録されていません</p>
-                ) : (
-                  <div style={styles.tableContainer}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>氏名（漢字）</th>
-                          <th style={styles.th}>氏名（カナ）</th>
-                          <th style={styles.th}>登録日</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {staff.map(member => (
-                          <tr key={member.id} style={styles.tr}>
-                            <td style={styles.td}>{member.display_name_kanji}</td>
-                            <td style={styles.td}>{member.display_name_kana}</td>
-                            <td style={styles.td}>{formatDate(member.created_at)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+                            {loading ? (
+                              <p>読み込み中...</p>
+                            ) : staff.length === 0 ? (
+                              <p style={styles.emptyMessage}>スタッフが登録されていません</p>
+                            ) : isMobile ? (
+                              <div style={styles.mobileCardList}>
+                                {staff.map(member => (
+                                  <div key={member.id} style={styles.mobileCard}>
+                                    <div style={styles.mobileCardBody}>
+                                      <div style={styles.mobileCardRow}>
+                                        <span style={styles.mobileCardLabel}>氏名（漢字）</span>
+                                        <span style={styles.mobileCardValue}>{member.display_name_kanji}</span>
+                                      </div>
+                                      <div style={styles.mobileCardRow}>
+                                        <span style={styles.mobileCardLabel}>氏名（カナ）</span>
+                                        <span style={styles.mobileCardValue}>{member.display_name_kana}</span>
+                                      </div>
+                                      <div style={styles.mobileCardRow}>
+                                        <span style={styles.mobileCardLabel}>登録日</span>
+                                        <span style={styles.mobileCardValue}>{formatDate(member.created_at)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={styles.card}>
+                                <div style={styles.tableContainer}>
+                                  <table style={styles.table}>
+                                    <thead>
+                                      <tr>
+                                        <th style={styles.th}>氏名（漢字）</th>
+                                        <th style={styles.th}>氏名（カナ）</th>
+                                        <th style={styles.th}>登録日</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {staff.map(member => (
+                                        <tr key={member.id} style={styles.tr}>
+                                          <td style={styles.td}>{member.display_name_kanji}</td>
+                                          <td style={styles.td}>{member.display_name_kana}</td>
+                                          <td style={styles.td}>{formatDate(member.created_at)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
 
-              {/* New Staff Modal */}
+                            {/* New Staff Modal */}
               {showStaffModal && (
                 <div style={styles.modalOverlay} onClick={() => setShowStaffModal(false)}>
                   <div style={styles.modal} onClick={e => e.stopPropagation()}>
@@ -1044,133 +1160,226 @@ function AdminApp() {
                     </div>
                   </div>
                   
-                  <h3 style={styles.sectionTitle}>このインポートで作成された案件</h3>
-                  {loadingImportProjects ? (
-                    <p>読み込み中...</p>
-                  ) : importedProjects.length === 0 ? (
-                    <p style={styles.emptyMessage}>このインポートで作成された案件はありません</p>
-                  ) : (
-                    <div style={styles.tableContainer}>
-                      <table style={styles.table}>
-                        <thead>
-                          <tr>
-                            <th style={styles.th}>実施日</th>
-                            <th style={styles.th}>会社名</th>
-                            <th style={styles.th}>作業名</th>
-                            <th style={styles.th}>場所</th>
-                            <th style={styles.th}>状態</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {importedProjects.map(project => (
-                            <tr key={project.id} style={styles.tr}>
-                              <td style={styles.td}>{formatDate(project.work_date)}</td>
-                              <td style={styles.td}>{project.client_name_raw}</td>
-                              <td style={styles.td}>{project.work_name}</td>
-                              <td style={styles.td}>{project.location}</td>
-                              <td style={styles.td}>
-                                <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
-                                  {getStatusLabel(project.status)}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  {loading ? (
-                    <p>読み込み中...</p>
-                  ) : importHistory.length === 0 ? (
-                    <p style={styles.emptyMessage}>インポート履歴がありません</p>
-                  ) : (
-                    <div style={styles.tableContainer}>
-                      <table style={styles.table}>
-                        <thead>
-                          <tr>
-                            <th style={styles.th}>インポート日時</th>
-                            <th style={styles.th}>ファイル名</th>
-                            <th style={styles.th}>実行者</th>
-                            <th style={styles.th}>新規作成</th>
-                            <th style={styles.th}>スキップ</th>
-                            <th style={styles.th}>会社未登録</th>
-                            <th style={styles.th}>操作</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {importHistory.map(item => (
-                            <tr key={item.id} style={styles.tr}>
-                              <td style={styles.td}>{formatDateTime(item.created_at)}</td>
-                              <td style={styles.td}>{item.original_file_name}</td>
-                              <td style={styles.td}>{item.imported_by_admin_email}</td>
-                              <td style={styles.td}>{item.created_projects_count}</td>
-                              <td style={styles.td}>{item.skipped_rows_count}</td>
-                              <td style={styles.td}>{item.pending_client_rows_count}</td>
-                              <td style={styles.td}>
-                                <button 
-                                  style={styles.viewButton}
-                                  onClick={() => handleSelectImport(item)}
-                                >
-                                  詳細
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
+                                <h3 style={styles.sectionTitle}>このインポートで作成された案件</h3>
+                                {loadingImportProjects ? (
+                                  <p>読み込み中...</p>
+                                ) : importedProjects.length === 0 ? (
+                                  <p style={styles.emptyMessage}>このインポートで作成された案件はありません</p>
+                                ) : isMobile ? (
+                                  <div style={styles.mobileCardList}>
+                                    {importedProjects.map(project => (
+                                      <div key={project.id} style={styles.mobileCard}>
+                                        <div style={styles.mobileCardHeader}>
+                                          <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
+                                            {getStatusLabel(project.status)}
+                                          </span>
+                                          <span style={styles.mobileCardDate}>{formatDate(project.work_date)}</span>
+                                        </div>
+                                        <div style={styles.mobileCardBody}>
+                                          <div style={styles.mobileCardRow}>
+                                            <span style={styles.mobileCardLabel}>会社名</span>
+                                            <span style={styles.mobileCardValue}>{project.client_name_raw}</span>
+                                          </div>
+                                          <div style={styles.mobileCardRow}>
+                                            <span style={styles.mobileCardLabel}>作業名</span>
+                                            <span style={styles.mobileCardValue}>{project.work_name}</span>
+                                          </div>
+                                          <div style={styles.mobileCardRow}>
+                                            <span style={styles.mobileCardLabel}>場所</span>
+                                            <span style={styles.mobileCardValue}>{project.location}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div style={styles.tableContainer}>
+                                    <table style={styles.table}>
+                                      <thead>
+                                        <tr>
+                                          <th style={styles.th}>実施日</th>
+                                          <th style={styles.th}>会社名</th>
+                                          <th style={styles.th}>作業名</th>
+                                          <th style={styles.th}>場所</th>
+                                          <th style={styles.th}>状態</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {importedProjects.map(project => (
+                                          <tr key={project.id} style={styles.tr}>
+                                            <td style={styles.td}>{formatDate(project.work_date)}</td>
+                                            <td style={styles.td}>{project.client_name_raw}</td>
+                                            <td style={styles.td}>{project.work_name}</td>
+                                            <td style={styles.td}>{project.location}</td>
+                                            <td style={styles.td}>
+                                              <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
+                                                {getStatusLabel(project.status)}
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div>
+                                {loading ? (
+                                  <p>読み込み中...</p>
+                                ) : importHistory.length === 0 ? (
+                                  <p style={styles.emptyMessage}>インポート履歴がありません</p>
+                                ) : isMobile ? (
+                                  <div style={styles.mobileCardList}>
+                                    {importHistory.map(item => (
+                                      <div key={item.id} style={styles.mobileCard}>
+                                        <div style={styles.mobileCardHeader}>
+                                          <span style={styles.mobileCardDate}>{formatDateTime(item.created_at)}</span>
+                                        </div>
+                                        <div style={styles.mobileCardBody}>
+                                          <div style={styles.mobileCardRow}>
+                                            <span style={styles.mobileCardLabel}>ファイル名</span>
+                                            <span style={styles.mobileCardValue}>{item.original_file_name}</span>
+                                          </div>
+                                          <div style={styles.mobileCardRow}>
+                                            <span style={styles.mobileCardLabel}>実行者</span>
+                                            <span style={styles.mobileCardValue}>{item.imported_by_admin_email}</span>
+                                          </div>
+                                          <div style={styles.mobileCardRow}>
+                                            <span style={styles.mobileCardLabel}>新規作成</span>
+                                            <span style={styles.mobileCardValue}>{item.created_projects_count}件</span>
+                                          </div>
+                                          <div style={styles.mobileCardRow}>
+                                            <span style={styles.mobileCardLabel}>スキップ</span>
+                                            <span style={styles.mobileCardValue}>{item.skipped_rows_count}件</span>
+                                          </div>
+                                          <div style={styles.mobileCardRow}>
+                                            <span style={styles.mobileCardLabel}>会社未登録</span>
+                                            <span style={styles.mobileCardValue}>{item.pending_client_rows_count}件</span>
+                                          </div>
+                                        </div>
+                                        <div style={styles.mobileCardActions}>
+                                          <button 
+                                            style={styles.mobileActionButtonPrimary}
+                                            onClick={() => handleSelectImport(item)}
+                                          >
+                                            詳細を見る
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div style={styles.tableContainer}>
+                                    <table style={styles.table}>
+                                      <thead>
+                                        <tr>
+                                          <th style={styles.th}>インポート日時</th>
+                                          <th style={styles.th}>ファイル名</th>
+                                          <th style={styles.th}>実行者</th>
+                                          <th style={styles.th}>新規作成</th>
+                                          <th style={styles.th}>スキップ</th>
+                                          <th style={styles.th}>会社未登録</th>
+                                          <th style={styles.th}>操作</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {importHistory.map(item => (
+                                          <tr key={item.id} style={styles.tr}>
+                                            <td style={styles.td}>{formatDateTime(item.created_at)}</td>
+                                            <td style={styles.td}>{item.original_file_name}</td>
+                                            <td style={styles.td}>{item.imported_by_admin_email}</td>
+                                            <td style={styles.td}>{item.created_projects_count}</td>
+                                            <td style={styles.td}>{item.skipped_rows_count}</td>
+                                            <td style={styles.td}>{item.pending_client_rows_count}</td>
+                                            <td style={styles.td}>
+                                              <button 
+                                                style={styles.viewButton}
+                                                onClick={() => handleSelectImport(item)}
+                                              >
+                                                詳細
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            )}
             </div>
           )}
 
-          {/* Pending Clients */}
-          {screen === 'pending_clients' && (
-            <div>
-              <h2 style={styles.pageTitle}>未登録会社</h2>
-              <p style={styles.description}>
-                CSVインポート時に会社が登録されていなかった案件の一覧です。会社を登録すると、該当する案件が有効化されます。
-              </p>
-              {loading ? (
-                <p>読み込み中...</p>
-              ) : pendingClients.length === 0 ? (
-                <p style={styles.emptyMessage}>未登録会社はありません</p>
-              ) : (
-                <div style={styles.tableContainer}>
-                  <table style={styles.table}>
-                    <thead>
-                      <tr>
-                        <th style={styles.th}>会社名</th>
-                        <th style={styles.th}>案件数</th>
-                        <th style={styles.th}>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pendingClients.map(client => (
-                        <tr key={client.client_name_raw} style={styles.tr}>
-                          <td style={styles.td}>{client.client_name_raw}</td>
-                          <td style={styles.td}>{client.project_count}件</td>
-                          <td style={styles.td}>
-                            <button 
-                              style={styles.primaryButton}
-                              onClick={() => handleRegisterClient(client.client_name_raw)}
-                              disabled={registeringClient === client.client_name_raw}
-                            >
-                              {registeringClient === client.client_name_raw ? '登録中...' : '登録して有効化'}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+                    {/* Pending Clients */}
+                    {screen === 'pending_clients' && (
+                      <div>
+                        <h2 style={styles.pageTitle}>未登録会社</h2>
+                        <p style={styles.description}>
+                          CSVインポート時に会社が登録されていなかった案件の一覧です。会社を登録すると、該当する案件が有効化されます。
+                        </p>
+                        {loading ? (
+                          <p>読み込み中...</p>
+                        ) : pendingClients.length === 0 ? (
+                          <p style={styles.emptyMessage}>未登録会社はありません</p>
+                        ) : isMobile ? (
+                          <div style={styles.mobileCardList}>
+                            {pendingClients.map(client => (
+                              <div key={client.client_name_raw} style={styles.mobileCard}>
+                                <div style={styles.mobileCardBody}>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>会社名</span>
+                                    <span style={styles.mobileCardValue}>{client.client_name_raw}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>案件数</span>
+                                    <span style={styles.mobileCardValue}>{client.project_count}件</span>
+                                  </div>
+                                </div>
+                                <div style={styles.mobileCardActions}>
+                                  <button 
+                                    style={styles.mobileActionButtonPrimary}
+                                    onClick={() => handleRegisterClient(client.client_name_raw)}
+                                    disabled={registeringClient === client.client_name_raw}
+                                  >
+                                    {registeringClient === client.client_name_raw ? '登録中...' : '登録して有効化'}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={styles.tableContainer}>
+                            <table style={styles.table}>
+                              <thead>
+                                <tr>
+                                  <th style={styles.th}>会社名</th>
+                                  <th style={styles.th}>案件数</th>
+                                  <th style={styles.th}>操作</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {pendingClients.map(client => (
+                                  <tr key={client.client_name_raw} style={styles.tr}>
+                                    <td style={styles.td}>{client.client_name_raw}</td>
+                                    <td style={styles.td}>{client.project_count}件</td>
+                                    <td style={styles.td}>
+                                      <button 
+                                        style={styles.primaryButton}
+                                        onClick={() => handleRegisterClient(client.client_name_raw)}
+                                        disabled={registeringClient === client.client_name_raw}
+                                      >
+                                        {registeringClient === client.client_name_raw ? '登録中...' : '登録して有効化'}
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
         </main>
       </div>
     </div>
@@ -1816,6 +2025,80 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontSize: '13px',
     minHeight: '36px'
+  },
+  mobileCardList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '12px'
+  },
+  mobileCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    overflow: 'hidden'
+  },
+  mobileCardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 16px',
+    backgroundColor: COLORS.lightGray,
+    borderBottom: `1px solid ${COLORS.gray}`
+  },
+  mobileCardDate: {
+    fontSize: '14px',
+    color: COLORS.darkGray,
+    fontWeight: 500
+  },
+  mobileCardBody: {
+    padding: '12px 16px'
+  },
+  mobileCardRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: '8px 0',
+    borderBottom: `1px solid ${COLORS.lightGray}`
+  },
+  mobileCardLabel: {
+    fontSize: '13px',
+    color: COLORS.darkGray,
+    flexShrink: 0,
+    marginRight: '12px'
+  },
+  mobileCardValue: {
+    fontSize: '14px',
+    color: COLORS.text,
+    textAlign: 'right' as const,
+    wordBreak: 'break-word' as const
+  },
+  mobileCardActions: {
+    display: 'flex',
+    gap: '8px',
+    padding: '12px 16px',
+    borderTop: `1px solid ${COLORS.gray}`
+  },
+  mobileActionButton: {
+    flex: 1,
+    backgroundColor: COLORS.secondary,
+    color: COLORS.white,
+    border: 'none',
+    padding: '12px 16px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500
+  },
+  mobileActionButtonPrimary: {
+    flex: 1,
+    backgroundColor: COLORS.primary,
+    color: COLORS.white,
+    border: 'none',
+    padding: '12px 16px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500
   }
 }
 
