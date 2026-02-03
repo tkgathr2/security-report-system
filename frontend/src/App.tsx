@@ -20,7 +20,7 @@ const COLORS = {
   danger: '#E74C3C',
 }
 
-type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'pending_clients'
+type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'pending_clients' | 'clients'
 
 interface AdminUser {
   id: string
@@ -103,6 +103,19 @@ interface PendingClient {
   project_count: number
 }
 
+interface Client {
+  id: string
+  name: string
+  name_normalized: string
+  emails: string[]
+  is_active: boolean
+  contact_name: string | null
+  contact_title: string | null
+  contact_email: string | null
+  created_at: string
+  updated_at: string
+}
+
 function AdminApp() {
   const [screen, setScreen] = useState<Screen>('dashboard')
   const [admin, setAdmin] = useState<AdminUser | null>(null)
@@ -131,6 +144,9 @@ function AdminApp() {
     const [loadingImportProjects, setLoadingImportProjects] = useState(false)
     const [pendingClients, setPendingClients] = useState<PendingClient[]>([])
     const [registeringClient, setRegisteringClient] = useState<string | null>(null)
+    const [clients, setClients] = useState<Client[]>([])
+    const [editingClient, setEditingClient] = useState<Client | null>(null)
+    const [savingClient, setSavingClient] = useState(false)
 
       useEffect(() => {
       checkAuth()
@@ -336,6 +352,53 @@ function AdminApp() {
       }
     }
 
+    const fetchClients = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const response = await fetch('/api/admin/clients', {
+          credentials: 'include'
+        })
+        if (!response.ok) throw new Error('Failed to fetch clients')
+        const data = await response.json()
+        setClients(data.clients || [])
+      } catch {
+        setError('会社一覧の取得に失敗しました')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    const handleUpdateClient = async () => {
+      if (!editingClient) return
+      setSavingClient(true)
+      setError(null)
+      try {
+        const response = await fetch(`/api/admin/clients/${editingClient.id}`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: editingClient.name,
+            contact_name: editingClient.contact_name,
+            contact_title: editingClient.contact_title,
+            contact_email: editingClient.contact_email,
+            emails: editingClient.emails
+          })
+        })
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.message || '更新に失敗しました')
+        }
+        setEditingClient(null)
+        fetchClients()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '更新に失敗しました')
+      } finally {
+        setSavingClient(false)
+      }
+    }
+
     const handleCreateStaff = async () => {
     if (!newStaff.display_name_kanji.trim() || !newStaff.display_name_kana.trim()) {
       setError('氏名（漢字）と氏名（カナ）を入力してください')
@@ -478,6 +541,7 @@ function AdminApp() {
           if (newScreen === 'staff') fetchStaff()
           if (newScreen === 'import_history') fetchImportHistory()
           if (newScreen === 'pending_clients') fetchPendingClients()
+          if (newScreen === 'clients') fetchClients()
         }
 
   const formatDate = (dateStr: string) => {
@@ -644,6 +708,13 @@ function AdminApp() {
                     >
                       <span style={styles.sidebarIcon}>&#9888;</span>
                       <span style={styles.sidebarText}>未登録会社</span>
+                    </button>
+                    <button 
+                      style={screen === 'clients' ? styles.sidebarItemActive : styles.sidebarItem}
+                      onClick={() => navigateTo('clients')}
+                    >
+                      <span style={styles.sidebarIcon}>&#127970;</span>
+                      <span style={styles.sidebarText}>会社管理</span>
                     </button>
                   </nav>
                 </aside>
@@ -1376,6 +1447,150 @@ function AdminApp() {
                                 ))}
                               </tbody>
                             </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Clients Management */}
+                    {screen === 'clients' && (
+                      <div>
+                        <h2 style={styles.pageTitle}>会社管理</h2>
+                        <p style={styles.description}>
+                          登録済みの会社一覧です。担当者情報を編集できます。
+                        </p>
+                        {loading ? (
+                          <p>読み込み中...</p>
+                        ) : clients.length === 0 ? (
+                          <p style={styles.emptyMessage}>登録済みの会社はありません</p>
+                        ) : isMobile ? (
+                          <div style={styles.mobileCardList}>
+                            {clients.map(client => (
+                              <div key={client.id} style={styles.mobileCard}>
+                                <div style={styles.mobileCardBody}>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>会社名</span>
+                                    <span style={styles.mobileCardValue}>{client.name}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>担当者名</span>
+                                    <span style={styles.mobileCardValue}>{client.contact_name || '-'}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>役職</span>
+                                    <span style={styles.mobileCardValue}>{client.contact_title || '-'}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>メールアドレス</span>
+                                    <span style={styles.mobileCardValue}>{client.contact_email || '-'}</span>
+                                  </div>
+                                </div>
+                                <div style={styles.mobileCardActions}>
+                                  <button 
+                                    style={styles.mobileActionButtonPrimary}
+                                    onClick={() => setEditingClient(client)}
+                                  >
+                                    編集
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={styles.tableContainer}>
+                            <table style={styles.table}>
+                              <thead>
+                                <tr>
+                                  <th style={styles.th}>会社名</th>
+                                  <th style={styles.th}>担当者名</th>
+                                  <th style={styles.th}>役職</th>
+                                  <th style={styles.th}>メールアドレス</th>
+                                  <th style={styles.th}>操作</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {clients.map(client => (
+                                  <tr key={client.id} style={styles.tr}>
+                                    <td style={styles.td}>{client.name}</td>
+                                    <td style={styles.td}>{client.contact_name || '-'}</td>
+                                    <td style={styles.td}>{client.contact_title || '-'}</td>
+                                    <td style={styles.td}>{client.contact_email || '-'}</td>
+                                    <td style={styles.td}>
+                                      <button 
+                                        style={styles.primaryButton}
+                                        onClick={() => setEditingClient(client)}
+                                      >
+                                        編集
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Edit Client Modal */}
+                        {editingClient && (
+                          <div style={styles.modalOverlay}>
+                            <div style={styles.modal}>
+                              <h3 style={styles.modalTitle}>会社情報編集</h3>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>会社名</label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={editingClient.name}
+                                  onChange={(e) => setEditingClient({...editingClient, name: e.target.value})}
+                                />
+                              </div>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>担当者名</label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={editingClient.contact_name || ''}
+                                  onChange={(e) => setEditingClient({...editingClient, contact_name: e.target.value || null})}
+                                  placeholder="例: 山田太郎"
+                                />
+                              </div>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>役職</label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={editingClient.contact_title || ''}
+                                  onChange={(e) => setEditingClient({...editingClient, contact_title: e.target.value || null})}
+                                  placeholder="例: 部長"
+                                />
+                              </div>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>メールアドレス</label>
+                                <input
+                                  type="email"
+                                  style={styles.input}
+                                  value={editingClient.contact_email || ''}
+                                  onChange={(e) => setEditingClient({...editingClient, contact_email: e.target.value || null})}
+                                  placeholder="例: yamada@example.com"
+                                />
+                              </div>
+                              <div style={styles.modalActions}>
+                                <button 
+                                  style={styles.secondaryButton}
+                                  onClick={() => setEditingClient(null)}
+                                  disabled={savingClient}
+                                >
+                                  キャンセル
+                                </button>
+                                <button 
+                                  style={styles.primaryButton}
+                                  onClick={handleUpdateClient}
+                                  disabled={savingClient}
+                                >
+                                  {savingClient ? '保存中...' : '保存'}
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
