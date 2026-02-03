@@ -4,6 +4,7 @@ import { sendReportApprovalNotifications } from '../services/notifications';
 import { generateReportPdf } from '../services/pdfGenerator';
 import { authenticateCast } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
+import { sendBadRequest, sendNotFound, sendConflict, sendForbidden, sendExpired, sendInternalError } from '../utils/errorHandler';
 
 const router = Router();
 
@@ -62,38 +63,22 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     console.log('[APPROVE] Request body parsed, project_unique_url:', project_unique_url);
 
     if (!signature_png_base64) {
-      res.status(400).json({
-        error: 'INVALID_PAYLOAD',
-        message: '署名は必須です',
-        details: {}
-      });
+      sendBadRequest(res, '署名は必須です');
       return;
     }
 
     if (!guard_contents || !Array.isArray(guard_contents) || guard_contents.length === 0) {
-      res.status(400).json({
-        error: 'INVALID_PAYLOAD',
-        message: '警備内容は1件以上必須です',
-        details: {}
-      });
+      sendBadRequest(res, '警備内容は1件以上必須です');
       return;
     }
 
     if (has_qualifier === true && (!qualifier_name || qualifier_name.trim() === '')) {
-      res.status(400).json({
-        error: 'INVALID_PAYLOAD',
-        message: '資格者有の場合、資格者氏名は必須です',
-        details: {}
-      });
+      sendBadRequest(res, '資格者有の場合、資格者氏名は必須です');
       return;
     }
 
     if (!project_unique_url) {
-      res.status(400).json({
-        error: 'INVALID_PAYLOAD',
-        message: 'project_unique_urlは必須です',
-        details: {}
-      });
+      sendBadRequest(res, 'project_unique_urlは必須です');
       return;
     }
 
@@ -107,11 +92,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     );
 
     if (projectResult.rows.length === 0) {
-      res.status(404).json({
-        error: 'NOT_FOUND',
-        message: '案件が見つかりません',
-        details: {}
-      });
+      sendNotFound(res, '案件が見つかりません');
       return;
     }
 
@@ -124,31 +105,19 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     );
 
     if (existingReportResult.rows.length > 0) {
-      res.status(409).json({
-        error: 'DUPLICATE_REPORT',
-        message: 'この案件の報告書は既に提出されています',
-        details: {}
-      });
+      sendConflict(res, 'この案件の報告書は既に提出されています');
       return;
     }
 
     if (project.status === 'pending_client') {
-      res.status(403).json({
-        error: 'FORBIDDEN',
-        message: '未登録会社のため保留',
-        details: {}
-      });
+      sendForbidden(res, '未登録会社のため保留');
       return;
     }
 
     const now = new Date();
     const expiresAt = new Date(project.url_expires_at);
     if (expiresAt < now) {
-      res.status(410).json({
-        error: 'EXPIRED_URL',
-        message: '期限切れ',
-        details: {}
-      });
+      sendExpired(res, '期限切れ');
       return;
     }
 
@@ -300,11 +269,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
   } catch (error) {
     console.error('Approve error:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: `承認処理中にエラーが発生しました: ${errorMessage}`,
-      details: { error: errorMessage }
-    });
+    sendInternalError(res, `承認処理中にエラーが発生しました: ${errorMessage}`);
   }
 });
 
