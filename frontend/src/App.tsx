@@ -101,6 +101,7 @@ function AdminApp() {
   const [creating, setCreating] = useState(false)
   const [staffImporting, setStaffImporting] = useState(false)
   const [staffImportResult, setStaffImportResult] = useState<{ inserted: number; updated: number; skipped: number } | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   useEffect(() => {
     checkAuth()
@@ -278,10 +279,7 @@ function AdminApp() {
     }
   }
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  const uploadCsvFile = async (file: File) => {
     setImporting(true)
     setError(null)
     setImportResult(null)
@@ -305,7 +303,41 @@ function AdminApp() {
       setError(err instanceof Error ? err.message : 'インポートに失敗しました')
     } finally {
       setImporting(false)
-      e.target.value = ''
+    }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    await uploadCsvFile(file)
+    e.target.value = ''
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      const file = files[0]
+      if (file.name.endsWith('.csv')) {
+        await uploadCsvFile(file)
+      } else {
+        setError('CSVファイルのみアップロードできます')
+      }
     }
   }
 
@@ -508,8 +540,16 @@ function AdminApp() {
               <h2 style={styles.pageTitle}>CSV取込</h2>
               <div style={styles.card}>
                 <h3 style={styles.cardTitle}>案件データのインポート</h3>
-                <p style={styles.cardDesc}>案件データのCSVファイルを選択してインポートします。</p>
-                <div style={styles.uploadArea}>
+                <p style={styles.cardDesc}>案件データのCSVファイルを選択またはドラッグ＆ドロップしてインポートします。</p>
+                <div 
+                  style={{
+                    ...styles.uploadArea,
+                    ...(isDragging ? styles.uploadAreaDragging : {})
+                  }}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
                   <input
                     type="file"
                     accept=".csv"
@@ -519,8 +559,8 @@ function AdminApp() {
                     id="csv-upload"
                   />
                   <label htmlFor="csv-upload" style={styles.uploadLabel}>
-                    <span style={styles.uploadIcon}>&#128193;</span>
-                    <span>{importing ? 'インポート中...' : 'CSVファイルを選択'}</span>
+                    <span style={styles.uploadIcon}>{isDragging ? '&#128229;' : '&#128193;'}</span>
+                    <span>{importing ? 'インポート中...' : (isDragging ? 'ここにドロップ' : 'CSVファイルを選択またはドラッグ＆ドロップ')}</span>
                   </label>
                 </div>
                 {importResult && (
@@ -1069,7 +1109,18 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '18px'
   },
   uploadArea: {
-    position: 'relative' as const
+    position: 'relative' as const,
+    border: `2px dashed ${COLORS.gray}`,
+    borderRadius: '12px',
+    padding: '40px 20px',
+    textAlign: 'center' as const,
+    transition: 'all 0.3s ease',
+    backgroundColor: COLORS.white
+  },
+  uploadAreaDragging: {
+    borderColor: COLORS.primary,
+    backgroundColor: `${COLORS.primary}10`,
+    transform: 'scale(1.02)'
   },
   fileInput: {
     position: 'absolute' as const,

@@ -16,21 +16,66 @@ interface AdminUser {
 }
 
 interface CsvRow {
-  'No.': string;
-  'スタッフNo.': string;
-  '氏名': string;
-  '実施日': string;
-  'クライアント名': string;
-  '案件名': string;
-  '実施場所': string;
-  '業務内容(2)'?: string;
-  '開始時間'?: string;
-  '終了時間'?: string;
-  '休憩時間'?: string;
   [key: string]: string | undefined;
 }
 
-const REQUIRED_HEADERS = ['No.', 'スタッフNo.', '氏名', '実施日', 'クライアント名', '案件名', '実施場所'];
+type CsvFormat = 'staff_assignment' | 'job_export';
+
+interface HeaderMapping {
+  projectName: string;
+  clientName: string;
+  location: string;
+  workDate: string;
+  workContent?: string;
+  startTime?: string;
+  endTime?: string;
+  breakTime?: string;
+  staffNo?: string;
+  staffName?: string;
+}
+
+const STAFF_ASSIGNMENT_HEADERS = ['No.', 'スタッフNo.', '氏名', '実施日', 'クライアント名', '案件名', '実施場所'];
+const JOB_EXPORT_HEADERS = ['案件名', 'クライアント名', '実施場所', '実施日'];
+
+function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: HeaderMapping } | null {
+  const headerSet = new Set(headers);
+  
+  if (STAFF_ASSIGNMENT_HEADERS.every(h => headerSet.has(h))) {
+    return {
+      format: 'staff_assignment',
+      mapping: {
+        projectName: '案件名',
+        clientName: 'クライアント名',
+        location: '実施場所',
+        workDate: '実施日',
+        workContent: '業務内容(2)',
+        startTime: '開始時間',
+        endTime: '終了時間',
+        breakTime: '休憩時間',
+        staffNo: 'スタッフNo.',
+        staffName: '氏名'
+      }
+    };
+  }
+  
+  if (JOB_EXPORT_HEADERS.every(h => headerSet.has(h))) {
+    return {
+      format: 'job_export',
+      mapping: {
+        projectName: '案件名',
+        clientName: 'クライアント名',
+        location: '実施場所',
+        workDate: '実施日',
+        workContent: '業務内容(2)',
+        startTime: '開始時間',
+        endTime: '終了時間',
+        breakTime: '休憩時間'
+      }
+    };
+  }
+  
+  return null;
+}
 
 function detectEncoding(buffer: Buffer): string {
   if (buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
@@ -170,16 +215,22 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   }
 
   const firstRow = records[0];
-  const missingHeaders = REQUIRED_HEADERS.filter(h => !(h in firstRow));
-  if (missingHeaders.length > 0) {
+  const headers = Object.keys(firstRow);
+  const formatInfo = detectCsvFormat(headers);
+  
+  if (!formatInfo) {
     res.status(400).json({
       error: 'CSV_HEADER_MISMATCH',
-      message: '必須ヘッダーが不足しています',
-      details: { missing: missingHeaders }
+      message: '必須ヘッダーが不足しています。案件名、クライアント名、実施場所、実施日が必要です。',
+      details: { 
+        found_headers: headers.slice(0, 20),
+        required: JOB_EXPORT_HEADERS
+      }
     });
     return;
   }
 
+  const { format, mapping } = formatInfo;
   const errors: Array<{ row: number; reason: string }> = [];
   let createdProjectsCount = 0;
   let skippedRowsCount = 0;
@@ -187,141 +238,159 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   let staffAutoAddedCount = 0;
 
   const projectMap = new Map<string, { projectId: string; casts: Set<string> }>();
-  const processedStaffKana = new Set<string>(); // 重複処理を避けるため
+  const processedStaffKana = new Set<string>();
+  const processedWorkDates = new Map<string, Set<string>>();
 
   for (let i = 0; i < records.length; i++) {
     const row = records[i];
     const rowNum = i + 2;
 
-    const staffNo = row['スタッフNo.']?.trim();
-    const castName = row['氏名']?.trim();
-    const workDateStr = row['実施日']?.trim();
-    const clientNameRaw = row['クライアント名']?.trim();
-    const projectName = row['案件名']?.trim();
-    const location = row['実施場所']?.trim();
+    const projectName = row[mapping.projectName]?.trim();
+    const clientNameRaw = row[mapping.clientName]?.trim();
+    const location = row[mapping.location]?.trim();
+    const workDateStr = row[mapping.workDate]?.trim();
 
-    if (!staffNo || !castName || !workDateStr || !clientNameRaw || !projectName || !location) {
-      errors.push({ row: rowNum, reason: '必須列が空です' });
+    if (!projectName || !clientNameRaw || !location || !workDateStr) {
+      errors.push({ row: rowNum, reason: '必須列（案件名、クライアント名、実施場所、実施日）が空です' });
       skippedRowsCount++;
       continue;
     }
 
-    const workDate = parseDate(workDateStr);
-    if (!workDate) {
-      errors.push({ row: rowNum, reason: '実施日の形式が不正です' });
-      skippedRowsCount++;
-      continue;
-    }
+    const workDates = workDateStr.includes('・') ? workDateStr.split('・') : [workDateStr];
+    
+    for (const singleDateStr of workDates) {
+      const trimmedDate = singleDateStr.trim();
+      if (!trimmedDate) continue;
 
-    const projectKey = generateProjectKey(
-      workDate.toISOString().split('T')[0],
-      projectName,
-      location,
-      clientNameRaw
-    );
-
-    const workName = row['業務内容(2)']?.trim() || projectName;
-    const startTime = row['開始時間']?.trim() || null;
-    const endTime = row['終了時間']?.trim() || null;
-    const breakTime = row['休憩時間']?.trim() || null;
-    const qualifierHint = extractQualifierHint(projectName);
-
-    try {
-      if (!projectMap.has(projectKey)) {
-        const existingProject = await pool.query(
-          'SELECT id FROM projects WHERE project_key = $1',
-          [projectKey]
-        );
-
-        if (existingProject.rows.length > 0) {
-          const existingCasts = await pool.query(
-            'SELECT staff_no FROM project_casts WHERE project_id = $1',
-            [existingProject.rows[0].id]
-          );
-          const castSet = new Set(existingCasts.rows.map(c => c.staff_no));
-          projectMap.set(projectKey, { projectId: existingProject.rows[0].id, casts: castSet });
-        } else {
-          const clientNameNormalized = normalizeClientName(clientNameRaw);
-          const clientResult = await pool.query(
-            'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true',
-            [clientNameNormalized]
-          );
-
-          const clientId = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
-          const status = clientId ? 'active' : 'pending_client';
-
-          if (!clientId) {
-            pendingClientRowsCount++;
-          }
-
-          const uniqueUrl = generateUniqueUrl();
-          const urlExpiresAt = new Date(workDate);
-          urlExpiresAt.setDate(urlExpiresAt.getDate() + 3);
-          urlExpiresAt.setHours(23, 59, 59, 999);
-
-          const insertResult = await pool.query(
-            `INSERT INTO projects (
-              project_key, client_id, client_name_raw, work_date, work_name, location,
-              start_time, end_time, break_time, work_title_raw, qualifier_hint,
-              unique_url, url_expires_at, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-            RETURNING id`,
-            [
-              projectKey, clientId, clientNameRaw, workDate, workName, location,
-              startTime, endTime, breakTime, projectName, qualifierHint,
-              uniqueUrl, urlExpiresAt, status
-            ]
-          );
-
-          projectMap.set(projectKey, { projectId: insertResult.rows[0].id, casts: new Set() });
-          createdProjectsCount++;
-        }
+      const workDate = parseDate(trimmedDate);
+      if (!workDate) {
+        errors.push({ row: rowNum, reason: `実施日の形式が不正です: ${trimmedDate}` });
+        skippedRowsCount++;
+        continue;
       }
 
-      const projectInfo = projectMap.get(projectKey)!;
+      const projectKey = generateProjectKey(
+        workDate.toISOString().split('T')[0],
+        projectName,
+        location,
+        clientNameRaw
+      );
 
-      if (!projectInfo.casts.has(staffNo)) {
-        await pool.query(
-          `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT (project_id, staff_no) DO NOTHING`,
-          [projectInfo.projectId, staffNo, castName, i]
-        );
-        projectInfo.casts.add(staffNo);
+      if (!processedWorkDates.has(projectName)) {
+        processedWorkDates.set(projectName, new Set());
       }
+      const dateKey = workDate.toISOString().split('T')[0];
+      if (processedWorkDates.get(projectName)!.has(dateKey)) {
+        continue;
+      }
+      processedWorkDates.get(projectName)!.add(dateKey);
 
-      // スタッフマスタへの自動追加（カナがある場合）
-      const castNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
-      const staffKanaKey = castNameKana || castName; // カナ列がなければ漢字氏名をキーとして使用
+      const workName = (mapping.workContent && row[mapping.workContent]?.trim()) || projectName;
+      const startTime = (mapping.startTime && row[mapping.startTime]?.trim()) || null;
+      const endTime = (mapping.endTime && row[mapping.endTime]?.trim()) || null;
+      const breakTime = (mapping.breakTime && row[mapping.breakTime]?.trim()) || null;
+      const qualifierHint = extractQualifierHint(projectName);
 
-      if (staffKanaKey && !processedStaffKana.has(staffKanaKey)) {
-        processedStaffKana.add(staffKanaKey);
-        try {
-          // スタッフマスタに存在するか確認
-          const existingStaff = await pool.query(
-            'SELECT id FROM staff_master WHERE display_name_kana = $1',
-            [staffKanaKey]
+      try {
+        if (!projectMap.has(projectKey)) {
+          const existingProject = await pool.query(
+            'SELECT id FROM projects WHERE project_key = $1',
+            [projectKey]
           );
 
-          if (existingStaff.rows.length === 0) {
-            // 存在しない場合のみ追加
-            await pool.query(
-              `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
-               VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)`,
-              [castName, staffKanaKey, adminUser.email]
+          if (existingProject.rows.length > 0) {
+            const existingCasts = await pool.query(
+              'SELECT staff_no FROM project_casts WHERE project_id = $1',
+              [existingProject.rows[0].id]
             );
-            staffAutoAddedCount++;
-          }
-        } catch (staffError) {
-          // スタッフ追加エラーはログに記録するが、インポート処理は継続
-          console.error('Staff auto-add error:', staffError);
-        }
-      }
+            const castSet = new Set(existingCasts.rows.map((c: { staff_no: string }) => c.staff_no));
+            projectMap.set(projectKey, { projectId: existingProject.rows[0].id, casts: castSet });
+          } else {
+            const clientNameNormalized = normalizeClientName(clientNameRaw);
+            const clientResult = await pool.query(
+              'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true',
+              [clientNameNormalized]
+            );
 
-    } catch (error) {
-      console.error('Row processing error:', error);
-      errors.push({ row: rowNum, reason: `処理エラー: ${String(error)}` });
-      skippedRowsCount++;
+            const clientId = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
+            const status = clientId ? 'active' : 'pending_client';
+
+            if (!clientId) {
+              pendingClientRowsCount++;
+            }
+
+            const uniqueUrl = generateUniqueUrl();
+            const urlExpiresAt = new Date(workDate);
+            urlExpiresAt.setDate(urlExpiresAt.getDate() + 3);
+            urlExpiresAt.setHours(23, 59, 59, 999);
+
+            const insertResult = await pool.query(
+              `INSERT INTO projects (
+                project_key, client_id, client_name_raw, work_date, work_name, location,
+                start_time, end_time, break_time, work_title_raw, qualifier_hint,
+                unique_url, url_expires_at, status
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+              RETURNING id`,
+              [
+                projectKey, clientId, clientNameRaw, workDate, workName, location,
+                startTime, endTime, breakTime, projectName, qualifierHint,
+                uniqueUrl, urlExpiresAt, status
+              ]
+            );
+
+            projectMap.set(projectKey, { projectId: insertResult.rows[0].id, casts: new Set() });
+            createdProjectsCount++;
+          }
+        }
+
+        if (format === 'staff_assignment' && mapping.staffNo && mapping.staffName) {
+          const staffNo = row[mapping.staffNo]?.trim();
+          const castName = row[mapping.staffName]?.trim();
+          
+          if (staffNo && castName) {
+            const projectInfo = projectMap.get(projectKey)!;
+
+            if (!projectInfo.casts.has(staffNo)) {
+              await pool.query(
+                `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (project_id, staff_no) DO NOTHING`,
+                [projectInfo.projectId, staffNo, castName, i]
+              );
+              projectInfo.casts.add(staffNo);
+            }
+
+            const castNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
+            const staffKanaKey = castNameKana || castName;
+
+            if (staffKanaKey && !processedStaffKana.has(staffKanaKey)) {
+              processedStaffKana.add(staffKanaKey);
+              try {
+                const existingStaff = await pool.query(
+                  'SELECT id FROM staff_master WHERE display_name_kana = $1',
+                  [staffKanaKey]
+                );
+
+                if (existingStaff.rows.length === 0) {
+                  await pool.query(
+                    `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
+                     VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)`,
+                    [castName, staffKanaKey, adminUser.email]
+                  );
+                  staffAutoAddedCount++;
+                }
+              } catch (staffError) {
+                console.error('Staff auto-add error:', staffError);
+              }
+            }
+          }
+        }
+
+      } catch (error) {
+        console.error('Row processing error:', error);
+        errors.push({ row: rowNum, reason: `処理エラー: ${String(error)}` });
+        skippedRowsCount++;
+      }
     }
   }
 
