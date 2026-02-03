@@ -19,7 +19,7 @@ const COLORS = {
   danger: '#E74C3C',
 }
 
-type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff'
+type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history'
 
 interface AdminUser {
   id: string
@@ -84,6 +84,19 @@ interface DashboardStats {
   total_staff: number
 }
 
+interface CsvImportHistory {
+  id: string
+  imported_by_admin_email: string
+  original_file_name: string
+  detected_encoding: string
+  status: string
+  created_projects_count: number
+  skipped_rows_count: number
+  pending_client_rows_count: number
+  errors_json: string
+  created_at: string
+}
+
 function AdminApp() {
   const [screen, setScreen] = useState<Screen>('dashboard')
   const [admin, setAdmin] = useState<AdminUser | null>(null)
@@ -105,6 +118,10 @@ function AdminApp() {
   const [isDragging, setIsDragging] = useState(false)
   const [sortColumn, setSortColumn] = useState<keyof Project | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [importHistory, setImportHistory] = useState<CsvImportHistory[]>([])
+  const [selectedImport, setSelectedImport] = useState<CsvImportHistory | null>(null)
+  const [importedProjects, setImportedProjects] = useState<Project[]>([])
+  const [loadingImportProjects, setLoadingImportProjects] = useState(false)
 
   useEffect(() => {
     checkAuth()
@@ -216,6 +233,44 @@ function AdminApp() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const fetchImportHistory = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/admin/csv/imports', {
+        credentials: 'include'
+      })
+      if (!response.ok) throw new Error('Failed to fetch import history')
+      const data = await response.json()
+      setImportHistory(data.imports || [])
+    } catch {
+      setError('インポート履歴の取得に失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchImportedProjects = async (importId: string) => {
+    setLoadingImportProjects(true)
+    try {
+      const response = await fetch(`/api/admin/csv/imports/${importId}/projects`, {
+        credentials: 'include'
+      })
+      if (!response.ok) throw new Error('Failed to fetch imported projects')
+      const data = await response.json()
+      setImportedProjects(data.projects || [])
+    } catch {
+      setError('インポート案件の取得に失敗しました')
+    } finally {
+      setLoadingImportProjects(false)
+    }
+  }
+
+  const handleSelectImport = (importItem: CsvImportHistory) => {
+    setSelectedImport(importItem)
+    fetchImportedProjects(importItem.id)
   }
 
   const handleCreateStaff = async () => {
@@ -351,10 +406,13 @@ function AdminApp() {
   const navigateTo = (newScreen: Screen) => {
     setScreen(newScreen)
     setError(null)
+    setSelectedImport(null)
+    setImportedProjects([])
     if (newScreen === 'dashboard') fetchDashboardStats()
     if (newScreen === 'projects') fetchProjects()
     if (newScreen === 'reports') fetchReports()
     if (newScreen === 'staff') fetchStaff()
+    if (newScreen === 'import_history') fetchImportHistory()
   }
 
   const formatDate = (dateStr: string) => {
@@ -496,6 +554,13 @@ function AdminApp() {
             >
               <span style={styles.sidebarIcon}>&#128101;</span>
               <span style={styles.sidebarText}>スタッフ管理</span>
+            </button>
+            <button 
+              style={screen === 'import_history' ? styles.sidebarItemActive : styles.sidebarItem}
+              onClick={() => navigateTo('import_history')}
+            >
+              <span style={styles.sidebarIcon}>&#128197;</span>
+              <span style={styles.sidebarText}>インポート履歴</span>
             </button>
           </nav>
         </aside>
@@ -855,6 +920,126 @@ function AdminApp() {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Import History */}
+          {screen === 'import_history' && (
+            <div>
+              <h2 style={styles.pageTitle}>インポート履歴</h2>
+              
+              {selectedImport ? (
+                <div>
+                  <button 
+                    style={styles.backButton} 
+                    onClick={() => { setSelectedImport(null); setImportedProjects([]); }}
+                  >
+                    ← 履歴一覧に戻る
+                  </button>
+                  <div style={styles.importDetailCard}>
+                    <h3 style={styles.importDetailTitle}>{selectedImport.original_file_name}</h3>
+                    <div style={styles.importDetailInfo}>
+                      <span>インポート日時: {formatDateTime(selectedImport.created_at)}</span>
+                      <span>実行者: {selectedImport.imported_by_admin_email}</span>
+                      <span>エンコーディング: {selectedImport.detected_encoding}</span>
+                    </div>
+                    <div style={styles.importDetailStats}>
+                      <div style={styles.importStatItem}>
+                        <span style={styles.importStatValue}>{selectedImport.created_projects_count}</span>
+                        <span style={styles.importStatLabel}>新規作成</span>
+                      </div>
+                      <div style={styles.importStatItem}>
+                        <span style={styles.importStatValue}>{selectedImport.skipped_rows_count}</span>
+                        <span style={styles.importStatLabel}>スキップ</span>
+                      </div>
+                      <div style={styles.importStatItem}>
+                        <span style={styles.importStatValue}>{selectedImport.pending_client_rows_count}</span>
+                        <span style={styles.importStatLabel}>会社未登録</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <h3 style={styles.sectionTitle}>このインポートで作成された案件</h3>
+                  {loadingImportProjects ? (
+                    <p>読み込み中...</p>
+                  ) : importedProjects.length === 0 ? (
+                    <p style={styles.emptyMessage}>このインポートで作成された案件はありません</p>
+                  ) : (
+                    <div style={styles.tableContainer}>
+                      <table style={styles.table}>
+                        <thead>
+                          <tr>
+                            <th style={styles.th}>実施日</th>
+                            <th style={styles.th}>会社名</th>
+                            <th style={styles.th}>作業名</th>
+                            <th style={styles.th}>場所</th>
+                            <th style={styles.th}>状態</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importedProjects.map(project => (
+                            <tr key={project.id} style={styles.tr}>
+                              <td style={styles.td}>{formatDate(project.work_date)}</td>
+                              <td style={styles.td}>{project.client_name_raw}</td>
+                              <td style={styles.td}>{project.work_name}</td>
+                              <td style={styles.td}>{project.location}</td>
+                              <td style={styles.td}>
+                                <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
+                                  {getStatusLabel(project.status)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  {loading ? (
+                    <p>読み込み中...</p>
+                  ) : importHistory.length === 0 ? (
+                    <p style={styles.emptyMessage}>インポート履歴がありません</p>
+                  ) : (
+                    <div style={styles.tableContainer}>
+                      <table style={styles.table}>
+                        <thead>
+                          <tr>
+                            <th style={styles.th}>インポート日時</th>
+                            <th style={styles.th}>ファイル名</th>
+                            <th style={styles.th}>実行者</th>
+                            <th style={styles.th}>新規作成</th>
+                            <th style={styles.th}>スキップ</th>
+                            <th style={styles.th}>会社未登録</th>
+                            <th style={styles.th}>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importHistory.map(item => (
+                            <tr key={item.id} style={styles.tr}>
+                              <td style={styles.td}>{formatDateTime(item.created_at)}</td>
+                              <td style={styles.td}>{item.original_file_name}</td>
+                              <td style={styles.td}>{item.imported_by_admin_email}</td>
+                              <td style={styles.td}>{item.created_projects_count}</td>
+                              <td style={styles.td}>{item.skipped_rows_count}</td>
+                              <td style={styles.td}>{item.pending_client_rows_count}</td>
+                              <td style={styles.td}>
+                                <button 
+                                  style={styles.viewButton}
+                                  onClick={() => handleSelectImport(item)}
+                                >
+                                  詳細
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1412,6 +1597,64 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '20px',
     cursor: 'pointer',
     padding: '0 4px'
+  },
+  backButton: {
+    backgroundColor: 'transparent',
+    border: `1px solid ${COLORS.darkGray}`,
+    color: COLORS.text,
+    padding: '8px 16px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    marginBottom: '20px'
+  },
+  importDetailCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: '8px',
+    padding: '24px',
+    marginBottom: '24px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+  },
+  importDetailTitle: {
+    margin: '0 0 16px 0',
+    fontSize: '18px',
+    color: COLORS.text
+  },
+  importDetailInfo: {
+    display: 'flex',
+    gap: '24px',
+    flexWrap: 'wrap' as const,
+    marginBottom: '20px',
+    fontSize: '14px',
+    color: COLORS.darkGray
+  },
+  importDetailStats: {
+    display: 'flex',
+    gap: '32px'
+  },
+  importStatItem: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center'
+  },
+  importStatValue: {
+    fontSize: '28px',
+    fontWeight: 'bold',
+    color: COLORS.primary
+  },
+  importStatLabel: {
+    fontSize: '12px',
+    color: COLORS.darkGray,
+    marginTop: '4px'
+  },
+  viewButton: {
+    backgroundColor: COLORS.primary,
+    color: COLORS.white,
+    border: 'none',
+    padding: '6px 12px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px'
   }
 }
 
