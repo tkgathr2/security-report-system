@@ -354,14 +354,9 @@ router.get('/today', async (req: Request, res: Response) => {
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN project_casts pc ON p.id = pc.project_id
-       LEFT JOIN staff_master sm ON pc.staff_id = sm.id
        WHERE p.work_date = $1
          AND p.status = 'active'
-         AND (
-           sm.display_name_kanji = $2 
-           OR sm.display_name_kana = $2
-           OR pc.staff_name = $2
-         )
+         AND pc.cast_name = $2
        ORDER BY p.work_date, p.work_name`,
       [today, user.name]
     );
