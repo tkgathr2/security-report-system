@@ -199,16 +199,19 @@ function AdminApp() {
 
   const fetchDashboardStats = async () => {
     try {
-      const [projectsRes, reportsRes, staffRes] = await Promise.all([
+      const [projectsRes, reportsRes, staffRes, clientsRes] = await Promise.all([
         fetch('/api/admin/projects', { credentials: 'include' }),
         fetch('/api/admin/reports', { credentials: 'include' }),
-        fetch('/api/admin/staff', { credentials: 'include' })
+        fetch('/api/admin/staff', { credentials: 'include' }),
+        fetch('/api/admin/clients', { credentials: 'include' })
       ])
       
       const projectsData = projectsRes.ok ? await projectsRes.json() : { projects: [] }
       const reportsData = reportsRes.ok ? await reportsRes.json() : { reports: [] }
       const staffData = staffRes.ok ? await staffRes.json() : { staff: [] }
+      const clientsData = clientsRes.ok ? await clientsRes.json() : { clients: [] }
       
+      setClients(clientsData.clients || [])
       setStats({
         total_projects: projectsData.projects?.length || 0,
         active_projects: projectsData.projects?.filter((p: Project) => p.status === 'active').length || 0,
@@ -727,6 +730,31 @@ function AdminApp() {
           {screen === 'dashboard' && (
             <div>
               <h2 style={styles.pageTitle}>ダッシュボード</h2>
+              
+              {/* Alert for clients without email */}
+              {clients.filter(c => !c.contact_email && c.is_active).length > 0 && (
+                <div style={styles.alertBox}>
+                  <span style={styles.alertIcon}>&#9888;</span>
+                  <div style={styles.alertContent}>
+                    <strong>メールアドレス未登録の会社があります</strong>
+                    <p style={styles.alertText}>
+                      以下の会社にメールアドレスが登録されていないため、報告書を送信できません：
+                    </p>
+                    <ul style={styles.alertList}>
+                      {clients.filter(c => !c.contact_email && c.is_active).map(c => (
+                        <li key={c.id}>{c.name}</li>
+                      ))}
+                    </ul>
+                    <button 
+                      style={styles.alertButton}
+                      onClick={() => navigateTo('clients')}
+                    >
+                      会社管理で登録する
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               <div style={styles.statsGrid}>
                 <div style={styles.statCard} onClick={() => navigateTo('projects')}>
                   <div style={styles.statIcon}>&#128203;</div>
@@ -2314,6 +2342,45 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: 500
+  },
+  alertBox: {
+    display: 'flex',
+    backgroundColor: '#FFF3CD',
+    border: '1px solid #FFECB5',
+    borderRadius: '8px',
+    padding: '16px',
+    marginBottom: '20px',
+    gap: '12px'
+  },
+  alertIcon: {
+    fontSize: '24px',
+    color: COLORS.warning,
+    flexShrink: 0
+  },
+  alertContent: {
+    flex: 1
+  },
+  alertText: {
+    margin: '8px 0',
+    fontSize: '14px',
+    color: COLORS.text
+  },
+  alertList: {
+    margin: '8px 0',
+    paddingLeft: '20px',
+    fontSize: '14px',
+    color: COLORS.text
+  },
+  alertButton: {
+    backgroundColor: COLORS.warning,
+    color: COLORS.white,
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500,
+    marginTop: '8px'
   }
 }
 
