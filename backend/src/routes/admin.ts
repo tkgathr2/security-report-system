@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
+import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '../utils/errorHandler';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -9,11 +10,7 @@ const router = Router();
 
 router.get('/me', (req: Request, res: Response) => {
   if (!req.isAuthenticated || !req.isAuthenticated() || !req.user) {
-    res.status(401).json({
-      error: 'ADMIN_UNAUTHORIZED',
-      message: '管理者セッションがありません',
-      details: {}
-    });
+    sendUnauthorized(res, '管理者セッションがありません');
     return;
   }
 
@@ -42,12 +39,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
       total: result.rows.length
     });
   } catch (error) {
-    console.error('Projects list error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'データベースエラーが発生しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Projects list');
   }
 });
 
@@ -69,12 +61,7 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response) => {
       total: result.rows.length
     });
   } catch (error) {
-    console.error('Reports list error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'データベースエラーが発生しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Reports list');
   }
 });
 
@@ -92,12 +79,7 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
       total: result.rows.length
     });
   } catch (error) {
-    console.error('Staff list error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'データベースエラーが発生しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Staff list');
   }
 });
 
@@ -106,11 +88,7 @@ router.post('/staff', requireAdmin, async (req: Request, res: Response) => {
     const { display_name_kanji, display_name_kana } = req.body;
 
     if (!display_name_kanji || !display_name_kana) {
-      res.status(400).json({
-        error: 'INVALID_PAYLOAD',
-        message: '漢字名とカタカナ名は必須です',
-        details: {}
-      });
+      sendBadRequest(res, '漢字名とカタカナ名は必須です');
       return;
     }
 
@@ -125,12 +103,7 @@ router.post('/staff', requireAdmin, async (req: Request, res: Response) => {
       staff: result.rows[0]
     });
   } catch (error) {
-    console.error('Staff create error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'データベースエラーが発生しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Staff create');
   }
 });
 
@@ -140,11 +113,7 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
     const { display_name_kanji, display_name_kana } = req.body;
 
     if (!display_name_kanji || !display_name_kana) {
-      res.status(400).json({
-        error: 'INVALID_PAYLOAD',
-        message: '漢字名とカタカナ名は必須です',
-        details: {}
-      });
+      sendBadRequest(res, '漢字名とカタカナ名は必須です');
       return;
     }
 
@@ -157,11 +126,7 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
-      res.status(404).json({
-        error: 'NOT_FOUND',
-        message: 'スタッフが見つかりません',
-        details: {}
-      });
+      sendNotFound(res, 'スタッフが見つかりません');
       return;
     }
 
@@ -169,12 +134,7 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
       staff: result.rows[0]
     });
   } catch (error) {
-    console.error('Staff update error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'データベースエラーが発生しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Staff update');
   }
 });
 
@@ -188,22 +148,13 @@ router.delete('/staff/:id', requireAdmin, async (req: Request, res: Response) =>
     );
 
     if (result.rows.length === 0) {
-      res.status(404).json({
-        error: 'NOT_FOUND',
-        message: 'スタッフが見つかりません',
-        details: {}
-      });
+      sendNotFound(res, 'スタッフが見つかりません');
       return;
     }
 
     res.json({ ok: true });
   } catch (error) {
-    console.error('Staff delete error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'データベースエラーが発生しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Staff delete');
   }
 });
 
@@ -223,12 +174,7 @@ router.get('/cast-users', requireAdmin, async (req: Request, res: Response) => {
       total: result.rows.length
     });
   } catch (error) {
-    console.error('Cast users list error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'データベースエラーが発生しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Cast users list');
   }
 });
 
@@ -244,11 +190,7 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
     );
 
     if (currentResult.rows.length === 0) {
-      res.status(404).json({
-        error: 'NOT_FOUND',
-        message: 'ユーザーが見つかりません',
-        details: {}
-      });
+      sendNotFound(res, 'ユーザーが見つかりません');
       return;
     }
 
@@ -283,12 +225,7 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
       audit_logged: true
     });
   } catch (error) {
-    console.error('Cast user name update error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'データベースエラーが発生しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Cast user name update');
   }
 });
 
@@ -299,11 +236,7 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
     const file = req.file;
 
     if (!file) {
-      res.status(400).json({
-        error: 'NO_FILE',
-        message: 'ファイルが選択されていません',
-        details: {}
-      });
+      sendBadRequest(res, 'ファイルが選択されていません');
       return;
     }
 
@@ -312,11 +245,7 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
     const lines = csvContent.split('\n').filter(line => line.trim());
 
     if (lines.length < 2) {
-      res.status(400).json({
-        error: 'CSV_EMPTY',
-        message: 'CSVにデータ行がありません',
-        details: {}
-      });
+      sendBadRequest(res, 'CSVにデータ行がありません');
       return;
     }
 
@@ -326,11 +255,7 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
     const nameKanaIdx = header.findIndex(h => h.includes('フリガナ') || h.includes('カナ'));
 
     if (nameKanjiIdx === -1 || nameKanaIdx === -1) {
-      res.status(400).json({
-        error: 'CSV_HEADER_MISMATCH',
-        message: '氏名とフリガナの列が見つかりません。ヘッダー行に「氏名」と「フリガナ」を含めてください。',
-        details: { found_headers: header }
-      });
+      sendBadRequest(res, '氏名とフリガナの列が見つかりません。ヘッダー行に「氏名」と「フリガナ」を含めてください。', { found_headers: header });
       return;
     }
 
@@ -387,12 +312,7 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
 
     res.json({ inserted, updated, skipped });
   } catch (error) {
-    console.error('Staff import error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'インポートに失敗しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Staff import');
   }
 });
 

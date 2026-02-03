@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import pool from '../db/pool';
+import { sendNotFound, sendForbidden, sendExpired, handleDbError } from '../utils/errorHandler';
 
 const router = Router();
 
@@ -38,11 +39,7 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
-      res.status(404).json({
-        error: 'NOT_FOUND',
-        message: '案件が見つかりません',
-        details: {}
-      });
+      sendNotFound(res, '案件が見つかりません');
       return;
     }
 
@@ -72,22 +69,14 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     const hasQualifier = project.qualifier_hint !== null && project.qualifier_hint.includes('有');
 
     if (project.status === 'pending_client') {
-      res.status(403).json({
-        error: 'FORBIDDEN',
-        message: '未登録会社のため保留',
-        details: {}
-      });
+      sendForbidden(res, '未登録会社のため保留');
       return;
     }
 
     const now = new Date();
     const expiresAt = new Date(project.url_expires_at);
     if (expiresAt < now) {
-      res.status(410).json({
-        error: 'EXPIRED_URL',
-        message: '期限切れ',
-        details: {}
-      });
+      sendExpired(res, '期限切れ');
       return;
     }
 
@@ -111,12 +100,7 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Project fetch error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: '案件取得中にエラーが発生しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Project fetch');
   }
 });
 
@@ -185,12 +169,7 @@ router.post('/test/create', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Test project creation error:', error);
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'テスト案件の作成に失敗しました',
-      details: {}
-    });
+    handleDbError(res, error, 'Test project creation');
   }
 });
 
