@@ -1,40 +1,9 @@
-import { Router, Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
+import { authenticateCast } from '../middleware/auth';
+import { AuthenticatedCastRequest } from '../types';
 
 const router = Router();
-
-const AUTH_SECRET = process.env.AUTH_SECRET || 'dev-secret-key';
-
-interface CastJwtPayload {
-  userId: string;
-  email: string;
-}
-
-function authenticateCast(req: Request, res: Response, next: NextFunction): void {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({
-      error: 'UNAUTHORIZED',
-      message: '認証が必要です'
-    });
-    return;
-  }
-
-  const token = authHeader.substring(7);
-
-  try {
-    const decoded = jwt.verify(token, AUTH_SECRET) as CastJwtPayload;
-    (req as Request & { castUser: CastJwtPayload }).castUser = decoded;
-    next();
-  } catch {
-    res.status(401).json({
-      error: 'UNAUTHORIZED',
-      message: 'トークンが無効または期限切れです'
-    });
-  }
-}
 
 function normalizeKatakana(input: string): string {
   let normalized = input
@@ -93,7 +62,7 @@ router.get('/search', authenticateCast, async (req: Request, res: Response) => {
 
 router.post('/select', authenticateCast, async (req: Request, res: Response) => {
   try {
-    const castUser = (req as Request & { castUser: CastJwtPayload }).castUser;
+    const castUser = (req as AuthenticatedCastRequest).castUser;
     const { staff_id, staff_name_kanji } = req.body;
 
     if (!staff_id || !staff_name_kanji) {
@@ -140,7 +109,7 @@ router.post('/select', authenticateCast, async (req: Request, res: Response) => 
 
 router.get('/me', authenticateCast, async (req: Request, res: Response) => {
   try {
-    const castUser = (req as Request & { castUser: CastJwtPayload }).castUser;
+    const castUser = (req as AuthenticatedCastRequest).castUser;
 
     const result = await pool.query(
       `SELECT selected_staff_id, selected_name_kanji FROM cast_users WHERE id = $1`,

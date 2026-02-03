@@ -1,48 +1,15 @@
-import { Router, Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
+import { authenticateCast } from '../middleware/auth';
+import { AuthenticatedCastRequest } from '../types';
 
 const router = Router();
-
-const AUTH_SECRET = process.env.AUTH_SECRET || 'dev-secret-key';
-
-interface CastJwtPayload {
-  userId: string;
-  email: string;
-}
-
-function authenticateCast(req: Request, res: Response, next: NextFunction): void {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({
-      error: 'UNAUTHORIZED',
-      message: '認証が必要です',
-      details: {}
-    });
-    return;
-  }
-
-  const token = authHeader.substring(7);
-
-  try {
-    const decoded = jwt.verify(token, AUTH_SECRET) as CastJwtPayload;
-    (req as Request & { castUser: CastJwtPayload }).castUser = decoded;
-    next();
-  } catch (error) {
-    res.status(401).json({
-      error: 'UNAUTHORIZED',
-      message: 'トークンが無効または期限切れです',
-      details: {}
-    });
-  }
-}
 
 router.put('/:project_unique_url', authenticateCast, async (req: Request, res: Response) => {
   try {
     const { project_unique_url } = req.params;
     const { payload_json, client_updated_at } = req.body;
-    const castUserId = (req as Request & { castUser: CastJwtPayload }).castUser.userId;
+    const castUserId = (req as AuthenticatedCastRequest).castUser.userId;
 
     if (!payload_json || !client_updated_at) {
       res.status(400).json({
@@ -146,7 +113,7 @@ router.put('/:project_unique_url', authenticateCast, async (req: Request, res: R
 router.get('/:project_unique_url', authenticateCast, async (req: Request, res: Response) => {
   try {
     const { project_unique_url } = req.params;
-    const castUserId = (req as Request & { castUser: CastJwtPayload }).castUser.userId;
+    const castUserId = (req as AuthenticatedCastRequest).castUser.userId;
 
     const projectResult = await pool.query(
       'SELECT id FROM projects WHERE unique_url = $1',

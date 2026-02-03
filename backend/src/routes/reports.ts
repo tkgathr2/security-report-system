@@ -1,44 +1,11 @@
-import { Router, Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { sendReportApprovalNotifications } from '../services/notifications';
 import { generateReportPdf } from '../services/pdfGenerator';
+import { authenticateCast } from '../middleware/auth';
+import { AuthenticatedCastRequest } from '../types';
 
 const router = Router();
-
-const AUTH_SECRET = process.env.AUTH_SECRET || 'dev-secret-key';
-
-interface CastJwtPayload {
-  userId: string;
-  email: string;
-}
-
-function authenticateCast(req: Request, res: Response, next: NextFunction): void {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({
-      error: 'UNAUTHORIZED',
-      message: '認証が必要です',
-      details: {}
-    });
-    return;
-  }
-
-  const token = authHeader.substring(7);
-
-  try {
-    const decoded = jwt.verify(token, AUTH_SECRET) as CastJwtPayload;
-    (req as Request & { castUser: CastJwtPayload }).castUser = decoded;
-    next();
-  } catch (error) {
-    res.status(401).json({
-      error: 'UNAUTHORIZED',
-      message: 'トークンが無効または期限切れです',
-      details: {}
-    });
-  }
-}
 
 function generateDummyPdf(): Buffer {
   const pdfContent = `%PDF-1.4
@@ -79,7 +46,7 @@ startxref
 router.post('/approve', authenticateCast, async (req: Request, res: Response) => {
   try {
     console.log('[APPROVE] Starting approval process');
-    const castUser = (req as Request & { castUser: CastJwtPayload }).castUser;
+    const castUser = (req as AuthenticatedCastRequest).castUser;
     const {
       project_unique_url,
       supervisor_name,
