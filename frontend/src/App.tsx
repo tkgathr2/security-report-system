@@ -20,7 +20,7 @@ const COLORS = {
   danger: '#E74C3C',
 }
 
-type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history'
+type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'pending_clients'
 
 interface AdminUser {
   id: string
@@ -98,6 +98,11 @@ interface CsvImportHistory {
   created_at: string
 }
 
+interface PendingClient {
+  client_name_raw: string
+  project_count: number
+}
+
 function AdminApp() {
   const [screen, setScreen] = useState<Screen>('dashboard')
   const [admin, setAdmin] = useState<AdminUser | null>(null)
@@ -119,12 +124,14 @@ function AdminApp() {
   const [isDragging, setIsDragging] = useState(false)
   const [sortColumn, setSortColumn] = useState<keyof Project | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-  const [importHistory, setImportHistory] = useState<CsvImportHistory[]>([])
-  const [selectedImport, setSelectedImport] = useState<CsvImportHistory | null>(null)
-  const [importedProjects, setImportedProjects] = useState<Project[]>([])
-  const [loadingImportProjects, setLoadingImportProjects] = useState(false)
+    const [importHistory, setImportHistory] = useState<CsvImportHistory[]>([])
+    const [selectedImport, setSelectedImport] = useState<CsvImportHistory | null>(null)
+    const [importedProjects, setImportedProjects] = useState<Project[]>([])
+    const [loadingImportProjects, setLoadingImportProjects] = useState(false)
+    const [pendingClients, setPendingClients] = useState<PendingClient[]>([])
+    const [registeringClient, setRegisteringClient] = useState<string | null>(null)
 
-  useEffect(() => {
+    useEffect(() => {
     checkAuth()
   }, [])
 
@@ -269,12 +276,54 @@ function AdminApp() {
     }
   }
 
-  const handleSelectImport = (importItem: CsvImportHistory) => {
-    setSelectedImport(importItem)
-    fetchImportedProjects(importItem.id)
-  }
+    const handleSelectImport = (importItem: CsvImportHistory) => {
+      setSelectedImport(importItem)
+      fetchImportedProjects(importItem.id)
+    }
 
-  const handleCreateStaff = async () => {
+    const fetchPendingClients = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const response = await fetch('/api/admin/pending-clients', {
+          credentials: 'include'
+        })
+        if (!response.ok) throw new Error('Failed to fetch pending clients')
+        const data = await response.json()
+        setPendingClients(data.pending_clients || [])
+      } catch {
+        setError('未登録会社一覧の取得に失敗しました')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    const handleRegisterClient = async (clientNameRaw: string) => {
+      setRegisteringClient(clientNameRaw)
+      setError(null)
+      try {
+        const response = await fetch('/api/admin/clients/register-and-activate', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_name_raw: clientNameRaw, emails: [] })
+        })
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.message || '登録に失敗しました')
+        }
+        const data = await response.json()
+        alert(`${clientNameRaw} を登録しました。${data.activated_projects_count}件の案件が有効化されました。`)
+        fetchPendingClients()
+        fetchDashboardStats()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '登録に失敗しました')
+      } finally {
+        setRegisteringClient(null)
+      }
+    }
+
+    const handleCreateStaff = async () => {
     if (!newStaff.display_name_kanji.trim() || !newStaff.display_name_kana.trim()) {
       setError('氏名（漢字）と氏名（カナ）を入力してください')
       return
@@ -404,17 +453,18 @@ function AdminApp() {
     window.open(`/api/admin/reports/${reportId}/pdf`, '_blank')
   }
 
-  const navigateTo = (newScreen: Screen) => {
-    setScreen(newScreen)
-    setError(null)
-    setSelectedImport(null)
-    setImportedProjects([])
-    if (newScreen === 'dashboard') fetchDashboardStats()
-    if (newScreen === 'projects') fetchProjects()
-    if (newScreen === 'reports') fetchReports()
-    if (newScreen === 'staff') fetchStaff()
-    if (newScreen === 'import_history') fetchImportHistory()
-  }
+    const navigateTo = (newScreen: Screen) => {
+      setScreen(newScreen)
+      setError(null)
+      setSelectedImport(null)
+      setImportedProjects([])
+      if (newScreen === 'dashboard') fetchDashboardStats()
+      if (newScreen === 'projects') fetchProjects()
+      if (newScreen === 'reports') fetchReports()
+      if (newScreen === 'staff') fetchStaff()
+      if (newScreen === 'import_history') fetchImportHistory()
+      if (newScreen === 'pending_clients') fetchPendingClients()
+    }
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-'
@@ -556,15 +606,22 @@ function AdminApp() {
               <span style={styles.sidebarIcon}>&#128101;</span>
               <span style={styles.sidebarText}>スタッフ管理</span>
             </button>
-            <button 
-              style={screen === 'import_history' ? styles.sidebarItemActive : styles.sidebarItem}
-              onClick={() => navigateTo('import_history')}
-            >
-              <span style={styles.sidebarIcon}>&#128197;</span>
-              <span style={styles.sidebarText}>インポート履歴</span>
-            </button>
-          </nav>
-        </aside>
+                    <button 
+                      style={screen === 'import_history' ? styles.sidebarItemActive : styles.sidebarItem}
+                      onClick={() => navigateTo('import_history')}
+                    >
+                      <span style={styles.sidebarIcon}>&#128197;</span>
+                      <span style={styles.sidebarText}>インポート履歴</span>
+                    </button>
+                    <button 
+                      style={screen === 'pending_clients' ? styles.sidebarItemActive : styles.sidebarItem}
+                      onClick={() => navigateTo('pending_clients')}
+                    >
+                      <span style={styles.sidebarIcon}>&#9888;</span>
+                      <span style={styles.sidebarText}>未登録会社</span>
+                    </button>
+                  </nav>
+                </aside>
 
         {/* Main Content */}
         <main style={styles.main}>
@@ -1041,6 +1098,50 @@ function AdminApp() {
                       </table>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Pending Clients */}
+          {screen === 'pending_clients' && (
+            <div>
+              <h2 style={styles.pageTitle}>未登録会社</h2>
+              <p style={styles.description}>
+                CSVインポート時に会社が登録されていなかった案件の一覧です。会社を登録すると、該当する案件が有効化されます。
+              </p>
+              {loading ? (
+                <p>読み込み中...</p>
+              ) : pendingClients.length === 0 ? (
+                <p style={styles.emptyMessage}>未登録会社はありません</p>
+              ) : (
+                <div style={styles.tableContainer}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>会社名</th>
+                        <th style={styles.th}>案件数</th>
+                        <th style={styles.th}>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingClients.map(client => (
+                        <tr key={client.client_name_raw} style={styles.tr}>
+                          <td style={styles.td}>{client.client_name_raw}</td>
+                          <td style={styles.td}>{client.project_count}件</td>
+                          <td style={styles.td}>
+                            <button 
+                              style={styles.primaryButton}
+                              onClick={() => handleRegisterClient(client.client_name_raw)}
+                              disabled={registeringClient === client.client_name_raw}
+                            >
+                              {registeringClient === client.client_name_raw ? '登録中...' : '登録して有効化'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

@@ -229,6 +229,140 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
   }
 });
 
+// GET /api/admin/clients - クライアント一覧
+router.get('/clients', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, name_normalized, emails, is_active, created_at, updated_at
+       FROM clients
+       ORDER BY name
+       LIMIT 500`
+    );
+
+    res.json({
+      clients: result.rows,
+      total: result.rows.length
+    });
+  } catch (error) {
+    handleDbError(res, error, 'Clients list');
+  }
+});
+
+// POST /api/admin/clients - クライアント登録
+router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { name, emails } = req.body;
+
+    if (!name || !name.trim()) {
+      sendBadRequest(res, '会社名は必須です');
+      return;
+    }
+
+    const nameNormalized = name
+      .replace(/[（）\(\)]/g, '')
+      .replace(/[\s　]+/g, '')
+      .replace(/株式会社|有限会社|合同会社/g, '')
+      .toLowerCase()
+      .trim();
+
+    const result = await pool.query(
+      `INSERT INTO clients (name, name_normalized, emails, is_active)
+       VALUES ($1, $2, $3, true)
+       RETURNING id, name, name_normalized, emails, is_active, created_at`,
+      [name.trim(), nameNormalized, emails || []]
+    );
+
+    res.status(201).json({
+      client: result.rows[0]
+    });
+  } catch (error) {
+    handleDbError(res, error, 'Client create');
+  }
+});
+
+// GET /api/admin/pending-clients - 未登録会社の案件一覧
+router.get('/pending-clients', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT client_name_raw, COUNT(*) as project_count
+       FROM projects
+       WHERE status = 'pending_client'
+       GROUP BY client_name_raw
+       ORDER BY project_count DESC`
+    );
+
+    res.json({
+      pending_clients: result.rows
+    });
+  } catch (error) {
+    handleDbError(res, error, 'Pending clients list');
+  }
+});
+
+// POST /api/admin/clients/register-and-activate - 会社登録と案件有効化
+router.post('/clients/register-and-activate', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { client_name_raw, emails } = req.body;
+    const adminUser = req.user as { id: string; email: string };
+
+    if (!client_name_raw || !client_name_raw.trim()) {
+      sendBadRequest(res, '会社名は必須です');
+      return;
+    }
+
+    const nameNormalized = client_name_raw
+      .replace(/[（）\(\)]/g, '')
+      .replace(/[\s　]+/g, '')
+      .replace(/株式会社|有限会社|合同会社/g, '')
+      .toLowerCase()
+      .trim();
+
+    // クライアントを登録
+    const clientResult = await pool.query(
+      `INSERT INTO clients (name, name_normalized, emails, is_active)
+       VALUES ($1, $2, $3, true)
+       ON CONFLICT (name_normalized) DO UPDATE SET emails = EXCLUDED.emails, is_active = true
+       RETURNING id, name`,
+      [client_name_raw.trim(), nameNormalized, emails || []]
+    );
+
+    const clientId = clientResult.rows[0].id;
+
+    // 該当する案件を有効化
+    const updateResult = await pool.query(
+      `UPDATE projects
+       SET client_id = $1, status = 'active'
+       WHERE client_name_raw = $2 AND status = 'pending_client'
+       RETURNING id`,
+      [clientId, client_name_raw]
+    );
+
+    // 監査ログ
+    await pool.query(
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, payload_json)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        adminUser.email,
+        'register_client_and_activate',
+        'client',
+        JSON.stringify({ 
+          client_name: client_name_raw, 
+          client_id: clientId,
+          activated_projects: updateResult.rowCount 
+        })
+      ]
+    );
+
+    res.status(201).json({
+      ok: true,
+      client: clientResult.rows[0],
+      activated_projects_count: updateResult.rowCount
+    });
+  } catch (error) {
+    handleDbError(res, error, 'Client register and activate');
+  }
+});
+
 // POST /api/admin/staff/import - スタッフCSVインポート
 router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Request, res: Response) => {
   try {
