@@ -309,17 +309,25 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
             existingProjectsCount++;
           } else {
             const clientNameNormalized = normalizeClientName(clientNameRaw);
-            const clientResult = await pool.query(
+            let clientResult = await pool.query(
               'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true',
               [clientNameNormalized]
             );
 
-            const clientId = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
-            const status = clientId ? 'active' : 'pending_client';
+            let clientId = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
 
             if (!clientId) {
+              const newClientResult = await pool.query(
+                `INSERT INTO clients (name, name_normalized, is_active, created_at, updated_at)
+                 VALUES ($1, $2, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                 RETURNING id`,
+                [clientNameRaw, clientNameNormalized]
+              );
+              clientId = newClientResult.rows[0].id;
               pendingClientRowsCount++;
             }
+
+            const status = 'active';
 
             const uniqueUrl = generateUniqueUrl();
             const urlExpiresAt = new Date(workDate);
