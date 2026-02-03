@@ -592,16 +592,24 @@ function AdminApp() {
                             </td>
                             <td style={styles.td}>{formatDate(project.url_expires_at)}</td>
                             <td style={styles.td}>
-                              <button 
-                                style={styles.smallButton}
-                                onClick={() => {
-                                  const url = `${window.location.origin}/report/${project.unique_url}`
-                                  navigator.clipboard.writeText(url)
-                                  alert('URLをコピーしました')
-                                }}
-                              >
-                                URLコピー
-                              </button>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button 
+                                  style={styles.smallButton}
+                                  onClick={() => {
+                                    const url = `${window.location.origin}/report/${project.unique_url}`
+                                    navigator.clipboard.writeText(url)
+                                    alert('URLをコピーしました')
+                                  }}
+                                >
+                                  URLコピー
+                                </button>
+                                <button 
+                                  style={styles.linkButton}
+                                  onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
+                                >
+                                  報告画面
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1160,6 +1168,15 @@ const styles: Record<string, React.CSSProperties> = {
   smallButton: {
     padding: '6px 12px',
     backgroundColor: COLORS.secondary,
+    color: COLORS.white,
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px'
+  },
+  linkButton: {
+    padding: '6px 12px',
+    backgroundColor: COLORS.primary,
     color: COLORS.white,
     border: 'none',
     borderRadius: '4px',
