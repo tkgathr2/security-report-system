@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import './App.css'
+import CastRegister from './pages/CastRegister'
+import CastVerify from './pages/CastVerify'
+import CastLogin from './pages/CastLogin'
+import CastToday from './pages/CastToday'
+import CastMagic from './pages/CastMagic'
 
 // Company logo URL from kotsuyudo.com
 const COMPANY_LOGO_URL = 'https://storage.googleapis.com/studio-design-asset-files/projects/9YWy6mwXOM/s-916x174_v-fs_webp_c479912b-ce1f-4198-95fa-49599e599ced_small.webp'
@@ -2269,4 +2275,32 @@ const styles: Record<string, React.CSSProperties> = {
   }
 }
 
-export default AdminApp
+function AppRouter() {
+  const location = useLocation()
+  
+  // Cast routes
+  if (location.pathname.startsWith('/cast/')) {
+    return (
+      <Routes>
+        <Route path="/cast/register" element={<CastRegister />} />
+        <Route path="/cast/verify" element={<CastVerify />} />
+        <Route path="/cast/login" element={<CastLogin />} />
+        <Route path="/cast/today" element={<CastToday />} />
+        <Route path="/cast/magic" element={<CastMagic />} />
+      </Routes>
+    )
+  }
+  
+  // Admin/default routes
+  return <AdminApp />
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppRouter />
+    </BrowserRouter>
+  )
+}
+
+export default App
