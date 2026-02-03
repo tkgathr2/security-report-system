@@ -589,12 +589,12 @@ function AdminApp() {
                   onClick={() => setSidebarOpen(false)}
                 />
               )}
-              {/* Sidebar */}
-              <aside style={{
-                ...styles.sidebar, 
-                ...(isMobile ? styles.sidebarMobile : {}),
-                ...(sidebarOpen ? {} : (isMobile ? styles.sidebarMobileClosed : styles.sidebarClosed))
-              }}>
+                            {/* Sidebar */}
+                            <aside style={{
+                              ...styles.sidebar, 
+                              ...(isMobile ? styles.sidebarMobile : {}),
+                              ...(isMobile ? (sidebarOpen ? styles.sidebarMobileOpen : styles.sidebarMobileClosed) : (sidebarOpen ? {} : styles.sidebarClosed))
+                            }}>
                 <nav style={styles.sidebarNav}>
             <button 
               style={screen === 'dashboard' ? styles.sidebarItemActive : styles.sidebarItem}
@@ -1314,18 +1314,21 @@ const styles: Record<string, React.CSSProperties> = {
       width: '0px',
       borderRight: 'none'
     },
-    sidebarMobile: {
-      position: 'fixed' as const,
-      top: '60px',
-      left: 0,
-      bottom: 0,
-      zIndex: 100,
-      boxShadow: '2px 0 8px rgba(0, 0, 0, 0.1)'
-    },
-    sidebarMobileClosed: {
-      transform: 'translateX(-100%)',
-      width: '240px'
-    },
+        sidebarMobile: {
+          position: 'fixed' as const,
+          top: '60px',
+          left: 0,
+          bottom: 0,
+          width: '240px',
+          zIndex: 100,
+          boxShadow: '2px 0 8px rgba(0, 0, 0, 0.1)'
+        },
+        sidebarMobileClosed: {
+          transform: 'translateX(-100%)'
+        },
+        sidebarMobileOpen: {
+          transform: 'translateX(0)'
+        },
     sidebarOverlay: {
       position: 'fixed' as const,
       top: '60px',
