@@ -742,7 +742,14 @@ function AdminApp() {
                     </p>
                     <ul style={styles.alertList}>
                       {clients.filter(c => !c.contact_email && c.is_active).map(c => (
-                        <li key={c.id}>{c.name}</li>
+                        <li key={c.id}>
+                          <span 
+                            style={styles.alertClientLink}
+                            onClick={() => setEditingClient(c)}
+                          >
+                            {c.name}
+                          </span>
+                        </li>
                       ))}
                     </ul>
                     <button 
@@ -2381,6 +2388,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     fontWeight: 500,
     marginTop: '8px'
+  },
+  alertClientLink: {
+    color: COLORS.primary,
+    cursor: 'pointer',
+    textDecoration: 'underline'
   }
 }
 
