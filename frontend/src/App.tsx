@@ -57,6 +57,33 @@ interface Report {
   location: string
 }
 
+interface ReportDetail {
+  id: string
+  project_id: string
+  supervisor_name: string
+  writer_name: string
+  weather: string
+  guard_contents: string[]
+  guard_other_text: string | null
+  overtime_hours: number | null
+  has_qualifier: boolean
+  qualifier_name: string | null
+  status: string
+  approved_at: string
+  created_at: string
+  pdf_generation_status: string
+  pdf_size: number
+  signature_base64: string | null
+  client_name_raw: string
+  work_date: string
+  work_name: string
+  location: string
+  start_time: string | null
+  end_time: string | null
+  writer_email: string | null
+  writer_registered_name: string | null
+}
+
 interface StaffMember {
   id: string
   display_name_kanji: string
@@ -101,6 +128,9 @@ function AdminApp() {
   const [creating, setCreating] = useState(false)
   const [staffImporting, setStaffImporting] = useState(false)
   const [staffImportResult, setStaffImportResult] = useState<{ inserted: number; updated: number; skipped: number } | null>(null)
+  const [selectedReport, setSelectedReport] = useState<ReportDetail | null>(null)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [loadingReport, setLoadingReport] = useState(false)
 
   useEffect(() => {
     checkAuth()
@@ -311,6 +341,48 @@ function AdminApp() {
 
   const handleDownloadPdf = (reportId: string) => {
     window.open(`/api/admin/reports/${reportId}/pdf`, '_blank')
+  }
+
+  const fetchReportDetail = async (reportId: string) => {
+    setLoadingReport(true)
+    try {
+      const response = await fetch(`/api/admin/reports/${reportId}`, {
+        credentials: 'include'
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setSelectedReport(data.report)
+        setShowReportModal(true)
+      }
+    } catch {
+      setError('報告書の取得に失敗しました')
+    } finally {
+      setLoadingReport(false)
+    }
+  }
+
+  const getWeatherLabel = (weather: string) => {
+    const labels: Record<string, string> = {
+      'sunny': '晴れ',
+      'cloudy': '曇り',
+      'rainy': '雨',
+      'snowy': '雪'
+    }
+    return labels[weather] || weather
+  }
+
+  const getGuardContentLabel = (content: string) => {
+    const labels: Record<string, string> = {
+      'traffic': '①交通誘導',
+      'pedestrian': '②歩行者誘導',
+      'vehicle': '③工事関係者、車両の誘導',
+      'safety': '④作業員の安全確保',
+      'property': '⑤占有物の安全確保',
+      'detour': '⑥通行止・迂回案内',
+      'alternating': '⑦交互通行',
+      'other': '⑧その他'
+    }
+    return labels[content] || content
   }
 
   const navigateTo = (newScreen: Screen) => {
@@ -641,7 +713,7 @@ function AdminApp() {
                           <th style={styles.th}>作業名</th>
                           <th style={styles.th}>監督者</th>
                           <th style={styles.th}>記入者</th>
-                          <th style={styles.th}>PDF</th>
+                          <th style={styles.th}>操作</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -654,18 +726,27 @@ function AdminApp() {
                             <td style={styles.td}>{report.supervisor_name}</td>
                             <td style={styles.td}>{report.writer_name}</td>
                             <td style={styles.td}>
-                              {report.pdf_generation_status === 'success' ? (
+                              <div style={{ display: 'flex', gap: '8px' }}>
                                 <button 
-                                  style={styles.downloadButton}
-                                  onClick={() => handleDownloadPdf(report.id)}
+                                  style={styles.linkButton}
+                                  onClick={() => fetchReportDetail(report.id)}
+                                  disabled={loadingReport}
                                 >
-                                  ダウンロード ({Math.round(report.pdf_size / 1024)}KB)
+                                  詳細
                                 </button>
-                              ) : (
-                                <span style={styles.pdfPending}>
-                                  {report.pdf_generation_status === 'pending' ? '生成中' : '未生成'}
-                                </span>
-                              )}
+                                {report.pdf_generation_status === 'success' ? (
+                                  <button 
+                                    style={styles.downloadButton}
+                                    onClick={() => handleDownloadPdf(report.id)}
+                                  >
+                                    PDF
+                                  </button>
+                                ) : (
+                                  <span style={styles.pdfPending}>
+                                    {report.pdf_generation_status === 'pending' ? '生成中' : '未生成'}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -791,6 +872,144 @@ function AdminApp() {
           )}
         </main>
       </div>
+
+      {/* Report Detail Modal */}
+      {showReportModal && selectedReport && (
+        <div style={styles.modalOverlay} onClick={() => setShowReportModal(false)}>
+          <div style={styles.reportModal} onClick={e => e.stopPropagation()}>
+            <div style={styles.reportModalHeader}>
+              <h3 style={styles.modalTitle}>報告書詳細</h3>
+              <button 
+                style={styles.modalCloseButton}
+                onClick={() => setShowReportModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div style={styles.reportModalContent}>
+              <div style={styles.reportSection}>
+                <h4 style={styles.reportSectionTitle}>案件情報</h4>
+                <div style={styles.reportGrid}>
+                  <div style={styles.reportItem}>
+                    <span style={styles.reportLabel}>会社名</span>
+                    <span style={styles.reportValue}>{selectedReport.client_name_raw}</span>
+                  </div>
+                  <div style={styles.reportItem}>
+                    <span style={styles.reportLabel}>実施日</span>
+                    <span style={styles.reportValue}>{formatDate(selectedReport.work_date)}</span>
+                  </div>
+                  <div style={styles.reportItem}>
+                    <span style={styles.reportLabel}>作業名</span>
+                    <span style={styles.reportValue}>{selectedReport.work_name}</span>
+                  </div>
+                  <div style={styles.reportItem}>
+                    <span style={styles.reportLabel}>場所</span>
+                    <span style={styles.reportValue}>{selectedReport.location}</span>
+                  </div>
+                  {selectedReport.start_time && selectedReport.end_time && (
+                    <div style={styles.reportItem}>
+                      <span style={styles.reportLabel}>作業時間</span>
+                      <span style={styles.reportValue}>{selectedReport.start_time} - {selectedReport.end_time}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={styles.reportSection}>
+                <h4 style={styles.reportSectionTitle}>報告内容</h4>
+                <div style={styles.reportGrid}>
+                  <div style={styles.reportItem}>
+                    <span style={styles.reportLabel}>監督者名</span>
+                    <span style={styles.reportValue}>{selectedReport.supervisor_name}</span>
+                  </div>
+                  <div style={styles.reportItem}>
+                    <span style={styles.reportLabel}>記入者</span>
+                    <span style={styles.reportValue}>{selectedReport.writer_registered_name || selectedReport.writer_name}</span>
+                  </div>
+                  <div style={styles.reportItem}>
+                    <span style={styles.reportLabel}>記入者メール</span>
+                    <span style={styles.reportValue}>{selectedReport.writer_email || '-'}</span>
+                  </div>
+                  <div style={styles.reportItem}>
+                    <span style={styles.reportLabel}>天気</span>
+                    <span style={styles.reportValue}>{getWeatherLabel(selectedReport.weather)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.reportSection}>
+                <h4 style={styles.reportSectionTitle}>警備内容</h4>
+                <div style={styles.guardContentList}>
+                  {selectedReport.guard_contents.map((content, idx) => (
+                    <span key={idx} style={styles.guardContentTag}>
+                      {getGuardContentLabel(content)}
+                    </span>
+                  ))}
+                </div>
+                {selectedReport.guard_other_text && (
+                  <p style={styles.reportOtherText}>その他: {selectedReport.guard_other_text}</p>
+                )}
+              </div>
+
+              {selectedReport.has_qualifier && (
+                <div style={styles.reportSection}>
+                  <h4 style={styles.reportSectionTitle}>有資格者情報</h4>
+                  <p style={styles.reportValue}>{selectedReport.qualifier_name || '有資格者あり'}</p>
+                </div>
+              )}
+
+              {selectedReport.overtime_hours && selectedReport.overtime_hours > 0 && (
+                <div style={styles.reportSection}>
+                  <h4 style={styles.reportSectionTitle}>残業時間</h4>
+                  <p style={styles.reportValue}>{selectedReport.overtime_hours}時間</p>
+                </div>
+              )}
+
+              {selectedReport.signature_base64 && (
+                <div style={styles.reportSection}>
+                  <h4 style={styles.reportSectionTitle}>署名</h4>
+                  <img 
+                    src={`data:image/png;base64,${selectedReport.signature_base64}`}
+                    alt="署名"
+                    style={styles.signatureImage}
+                  />
+                </div>
+              )}
+
+              <div style={styles.reportSection}>
+                <h4 style={styles.reportSectionTitle}>承認情報</h4>
+                <div style={styles.reportGrid}>
+                  <div style={styles.reportItem}>
+                    <span style={styles.reportLabel}>承認日時</span>
+                    <span style={styles.reportValue}>{formatDateTime(selectedReport.approved_at)}</span>
+                  </div>
+                  <div style={styles.reportItem}>
+                    <span style={styles.reportLabel}>作成日時</span>
+                    <span style={styles.reportValue}>{formatDateTime(selectedReport.created_at)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.reportModalActions}>
+                {selectedReport.pdf_generation_status === 'success' && (
+                  <button 
+                    style={styles.primaryButton}
+                    onClick={() => handleDownloadPdf(selectedReport.id)}
+                  >
+                    PDFダウンロード
+                  </button>
+                )}
+                <button 
+                  style={styles.cancelButton}
+                  onClick={() => setShowReportModal(false)}
+                >
+                  閉じる
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1312,6 +1531,96 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '20px',
     cursor: 'pointer',
     padding: '0 4px'
+  },
+  reportModal: {
+    backgroundColor: COLORS.white,
+    borderRadius: '12px',
+    width: '700px',
+    maxWidth: '95%',
+    maxHeight: '90vh',
+    overflow: 'hidden',
+    boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+  },
+  reportModalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '20px 24px',
+    borderBottom: `1px solid ${COLORS.gray}`
+  },
+  reportModalContent: {
+    padding: '24px',
+    overflowY: 'auto' as const,
+    maxHeight: 'calc(90vh - 80px)'
+  },
+  reportSection: {
+    marginBottom: '24px',
+    paddingBottom: '20px',
+    borderBottom: `1px solid ${COLORS.lightGray}`
+  },
+  reportSectionTitle: {
+    margin: '0 0 16px 0',
+    fontSize: '16px',
+    fontWeight: 600,
+    color: COLORS.secondary
+  },
+  reportGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '16px'
+  },
+  reportItem: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px'
+  },
+  reportLabel: {
+    fontSize: '12px',
+    color: COLORS.darkGray,
+    fontWeight: 500
+  },
+  reportValue: {
+    fontSize: '15px',
+    color: COLORS.text
+  },
+  guardContentList: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: '8px'
+  },
+  guardContentTag: {
+    display: 'inline-block',
+    padding: '6px 12px',
+    backgroundColor: COLORS.lightGray,
+    borderRadius: '20px',
+    fontSize: '13px',
+    color: COLORS.text
+  },
+  reportOtherText: {
+    marginTop: '12px',
+    fontSize: '14px',
+    color: COLORS.text
+  },
+  signatureImage: {
+    maxWidth: '300px',
+    border: `1px solid ${COLORS.gray}`,
+    borderRadius: '8px'
+  },
+  reportModalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '12px',
+    marginTop: '24px',
+    paddingTop: '20px',
+    borderTop: `1px solid ${COLORS.gray}`
+  },
+  modalCloseButton: {
+    backgroundColor: 'transparent',
+    border: 'none',
+    fontSize: '24px',
+    cursor: 'pointer',
+    color: COLORS.darkGray,
+    padding: '0'
   }
 }
 

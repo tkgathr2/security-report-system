@@ -78,6 +78,48 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
+router.get('/reports/:id', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `SELECT r.id, r.project_id, r.supervisor_name, r.writer_name, r.weather,
+              r.guard_contents, r.guard_other_text, r.overtime_hours,
+              r.has_qualifier, r.qualifier_name,
+              r.status, r.approved_at, r.created_at, r.pdf_generation_status,
+              length(r.pdf_bytes) as pdf_size,
+              encode(r.signature_png, 'base64') as signature_base64,
+              p.client_name_raw, p.work_date, p.work_name, p.location,
+              p.start_time, p.end_time,
+              cu.email as writer_email, cu.selected_name_kanji as writer_registered_name
+       FROM reports r
+       JOIN projects p ON r.project_id = p.id
+       LEFT JOIN cast_users cu ON r.cast_user_id = cu.id
+       WHERE r.id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({
+        error: 'NOT_FOUND',
+        message: '報告書が見つかりません',
+        details: {}
+      });
+      return;
+    }
+
+    res.json({
+      report: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Report detail error:', error);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'データベースエラーが発生しました',
+      details: {}
+    });
+  }
+});
+
 router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
