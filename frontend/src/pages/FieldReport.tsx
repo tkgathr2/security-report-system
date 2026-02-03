@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import SignatureModal from '../components/SignatureModal'
+import './FieldReport.css'
 
 interface ProjectCast {
   staff_no: string
@@ -955,7 +956,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     minHeight: '100vh',
     backgroundColor: '#f5f5f5',
-    padding: '20px'
+    padding: '16px'
   },
   loadingBox: {
     backgroundColor: 'white',
@@ -1022,7 +1023,7 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.8
   },
   main: {
-    padding: '20px',
+    padding: '16px',
     maxWidth: '600px',
     margin: '0 auto'
   },
@@ -1077,11 +1078,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   input: {
     width: '100%',
-    padding: '12px',
+    padding: '14px 12px',
     fontSize: '16px',
     border: '1px solid #ddd',
-    borderRadius: '4px',
-    boxSizing: 'border-box'
+    borderRadius: '6px',
+    boxSizing: 'border-box',
+    WebkitAppearance: 'none'
   },
   radioGroup: {
     display: 'flex',
@@ -1091,13 +1093,17 @@ const styles: Record<string, React.CSSProperties> = {
   radioLabel: {
     display: 'flex',
     alignItems: 'center',
-    gap: '5px',
-    fontSize: '14px',
-    cursor: 'pointer'
+    gap: '8px',
+    fontSize: '15px',
+    cursor: 'pointer',
+    padding: '10px 12px',
+    border: '1px solid #ddd',
+    borderRadius: '6px',
+    backgroundColor: '#fafafa'
   },
   radio: {
-    width: '18px',
-    height: '18px'
+    width: '20px',
+    height: '20px'
   },
   checkboxGroup: {
     display: 'flex',
@@ -1107,13 +1113,17 @@ const styles: Record<string, React.CSSProperties> = {
   checkboxLabel: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    fontSize: '14px',
-    cursor: 'pointer'
+    gap: '10px',
+    fontSize: '15px',
+    cursor: 'pointer',
+    padding: '12px',
+    border: '1px solid #ddd',
+    borderRadius: '6px',
+    backgroundColor: '#fafafa'
   },
   checkbox: {
-    width: '20px',
-    height: '20px'
+    width: '22px',
+    height: '22px'
   },
   numberInputWrapper: {
     display: 'flex',

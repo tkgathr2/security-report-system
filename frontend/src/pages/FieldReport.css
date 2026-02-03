@@ -1,0 +1,650 @@
+.field-report-page {
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.field-report-header {
+  background-color: #333;
+  color: white;
+  padding: 16px 20px;
+  text-align: center;
+}
+
+.field-report-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.field-report-header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.field-report-header p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.field-report-main {
+  padding: 16px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.field-report-section {
+  background-color: white;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.field-report-section h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: #333;
+  border-bottom: 2px solid #333;
+  padding-bottom: 8px;
+}
+
+.field-report-form-group {
+  margin-bottom: 16px;
+}
+
+.field-report-label {
+  display: block;
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.field-report-input {
+  width: 100%;
+  padding: 14px 12px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.field-report-input:focus {
+  outline: none;
+  border-color: #4caf50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.field-report-textarea {
+  width: 100%;
+  padding: 14px 12px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 100px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.field-report-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.field-report-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: #fafafa;
+}
+
+.field-report-radio-label.selected {
+  border-color: #4caf50;
+  background-color: #e8f5e9;
+}
+
+.field-report-radio-label input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.field-report-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field-report-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: #fafafa;
+}
+
+.field-report-checkbox-label.selected {
+  border-color: #4caf50;
+  background-color: #e8f5e9;
+}
+
+.field-report-checkbox-label input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+}
+
+.field-report-guard-card {
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.field-report-guard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.field-report-guard-name {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.field-report-guard-number {
+  color: #666;
+  font-size: 14px;
+}
+
+.field-report-guard-times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.field-report-time-input {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.field-report-signature-box {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  min-height: 120px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  background-color: #fafafa;
+  padding: 20px;
+}
+
+.field-report-signature-box.filled {
+  border: 2px solid #4caf50;
+  background-color: white;
+}
+
+.field-report-signature-placeholder {
+  color: #999;
+  font-size: 16px;
+  text-align: center;
+}
+
+.field-report-signature-image {
+  max-width: 100%;
+  max-height: 100px;
+  object-fit: contain;
+}
+
+.field-report-submit-button {
+  width: 100%;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 18px;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.field-report-submit-button:disabled {
+  background-color: #ccc;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.field-report-submit-button:active:not(:disabled) {
+  background-color: #388e3c;
+}
+
+@media screen and (max-width: 480px) {
+  .field-report-header {
+    padding: 12px 16px;
+  }
+
+  .field-report-header h1 {
+    font-size: 18px;
+  }
+
+  .field-report-header p {
+    font-size: 12px;
+  }
+
+  .field-report-main {
+    padding: 12px;
+  }
+
+  .field-report-section {
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+
+  .field-report-section h2 {
+    font-size: 15px;
+    margin-bottom: 10px;
+  }
+
+  .field-report-input,
+  .field-report-textarea,
+  .field-report-time-input {
+    padding: 12px 10px;
+    font-size: 16px;
+  }
+
+  .field-report-radio-group {
+    gap: 8px;
+  }
+
+  .field-report-radio-label {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .field-report-checkbox-label {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .field-report-guard-card {
+    padding: 12px;
+  }
+
+  .field-report-guard-times {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .field-report-submit-button {
+    padding: 16px;
+    font-size: 16px;
+  }
+}
+
+@media screen and (max-width: 360px) {
+  .field-report-header h1 {
+    font-size: 16px;
+  }
+
+  .field-report-section h2 {
+    font-size: 14px;
+  }
+
+  .field-report-label {
+    font-size: 13px;
+  }
+
+  .field-report-radio-label,
+  .field-report-checkbox-label {
+    font-size: 13px;
+    padding: 8px;
+  }
+}
+
+.field-report-info-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.field-report-info-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.field-report-info-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 2px;
+}
+
+.field-report-info-value {
+  font-size: 15px;
+  color: #333;
+}
+
+.field-report-help-button {
+  background-color: transparent;
+  color: white;
+  border: 1px solid white;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.field-report-resign-button {
+  margin-top: 10px;
+  background-color: transparent;
+  color: #666;
+  border: 1px solid #ddd;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.field-report-submit-hint {
+  text-align: center;
+  font-size: 13px;
+  color: #999;
+  margin-top: 10px;
+}
+
+.field-report-error-message {
+  text-align: center;
+  font-size: 14px;
+  color: #c00;
+  margin-top: 10px;
+  background-color: #fee;
+  padding: 10px;
+  border-radius: 4px;
+}
+
+.field-report-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+  padding: 16px;
+}
+
+.field-report-message-box {
+  background-color: white;
+  padding: 32px 24px;
+  border-radius: 8px;
+  text-align: center;
+  max-width: 400px;
+  width: 100%;
+}
+
+.field-report-message-box.error {
+  background-color: #fee;
+  color: #c00;
+}
+
+.field-report-message-box.expired {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.field-report-message-box.completed {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.field-report-message-box h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.field-report-message-box p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.field-report-success-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background-color: #4caf50;
+  color: white;
+  font-size: 36px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 auto 16px;
+}
+
+.field-report-email-box,
+.field-report-name-box {
+  background-color: white;
+  padding: 32px 24px;
+  border-radius: 8px;
+  max-width: 400px;
+  width: 100%;
+}
+
+.field-report-email-box h2,
+.field-report-name-box h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: #333;
+  text-align: center;
+}
+
+.field-report-email-box p,
+.field-report-name-box p {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 16px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.field-report-project-info {
+  background-color: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.field-report-project-info p {
+  margin: 4px 0;
+  text-align: left;
+}
+
+.field-report-email-input-group {
+  margin-bottom: 16px;
+}
+
+.field-report-email-input {
+  width: 100%;
+  padding: 14px 12px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.field-report-email-error {
+  color: #c00;
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.field-report-email-button {
+  width: 100%;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.field-report-email-button:disabled {
+  background-color: #ccc;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.field-report-name-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.field-report-name-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 14px 16px;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.field-report-name-result-item:active {
+  background-color: #e8f5e9;
+  border-color: #4caf50;
+}
+
+.field-report-name-kanji {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+.field-report-name-kana {
+  font-size: 14px;
+  color: #666;
+  margin-left: 8px;
+}
+
+.field-report-confirmation-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.field-report-confirm-yes {
+  flex: 1;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.field-report-confirm-no {
+  flex: 1;
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.field-report-registered-name-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.field-report-registered-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+.field-report-change-button {
+  background-color: transparent;
+  color: #666;
+  border: 1px solid #999;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+@media screen and (max-width: 480px) {
+  .field-report-message-box,
+  .field-report-email-box,
+  .field-report-name-box {
+    padding: 24px 20px;
+  }
+
+  .field-report-message-box h2,
+  .field-report-email-box h2,
+  .field-report-name-box h2 {
+    font-size: 17px;
+  }
+
+  .field-report-success-icon {
+    width: 56px;
+    height: 56px;
+    font-size: 32px;
+  }
+
+  .field-report-confirmation-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .field-report-confirm-yes,
+  .field-report-confirm-no {
+    padding: 14px;
+  }
+}
