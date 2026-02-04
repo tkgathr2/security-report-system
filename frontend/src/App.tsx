@@ -440,6 +440,24 @@ function AdminApp() {
           }
         }
 
+        const handleDeleteCastUser = async (userId: string, userEmail: string) => {
+          if (!confirm(`${userEmail} を削除しますか？この操作は取り消せません。`)) return
+          setError(null)
+          try {
+            const response = await fetch(`/api/admin/cast-users/${userId}`, {
+              method: 'DELETE',
+              credentials: 'include'
+            })
+            if (!response.ok) {
+              const data = await response.json()
+              throw new Error(data.message || '削除に失敗しました')
+            }
+            fetchCastUsers()
+          } catch (err) {
+            setError(err instanceof Error ? err.message : '削除に失敗しました')
+          }
+        }
+
           const handleCreateStaff = async () => {
       if (!newStaff.display_name_kanji.trim() || !newStaff.display_name_kana.trim()) {
         setError('氏名（漢字）と氏名（カナ）を入力してください')
@@ -1772,6 +1790,12 @@ function AdminApp() {
                           >
                             編集
                           </button>
+                          <button 
+                            style={{...styles.secondaryButton, backgroundColor: COLORS.danger, color: 'white', marginLeft: '8px'}}
+                            onClick={() => handleDeleteCastUser(user.id, user.email)}
+                          >
+                            削除
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1801,6 +1825,12 @@ function AdminApp() {
                                 onClick={() => setEditingCastUser(user)}
                               >
                                 編集
+                              </button>
+                              <button 
+                                style={{...styles.secondaryButton, backgroundColor: COLORS.danger, color: 'white', marginLeft: '8px'}}
+                                onClick={() => handleDeleteCastUser(user.id, user.email)}
+                              >
+                                削除
                               </button>
                             </td>
                           </tr>
