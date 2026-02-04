@@ -62,6 +62,7 @@ interface StaffMember {
   id: string
   display_name_kanji: string
   display_name_kana: string
+  email: string | null
   created_at: string
   updated_at: string
 }
@@ -153,9 +154,11 @@ function AdminApp() {
         const [clients, setClients] = useState<Client[]>([])
         const [editingClient, setEditingClient] = useState<Client | null>(null)
         const [savingClient, setSavingClient] = useState(false)
-        const [castUsers, setCastUsers] = useState<CastUser[]>([])
-        const [editingCastUser, setEditingCastUser] = useState<CastUser | null>(null)
-        const [savingCastUser, setSavingCastUser] = useState(false)
+                const [castUsers, setCastUsers] = useState<CastUser[]>([])
+                const [editingCastUser, setEditingCastUser] = useState<CastUser | null>(null)
+                const [savingCastUser, setSavingCastUser] = useState(false)
+                const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null)
+                const [savingStaff, setSavingStaff] = useState(false)
 
           useEffect(() => {
       checkAuth()
@@ -437,37 +440,65 @@ function AdminApp() {
           }
         }
 
-        const handleCreateStaff = async () => {
-    if (!newStaff.display_name_kanji.trim() || !newStaff.display_name_kana.trim()) {
-      setError('氏名（漢字）と氏名（カナ）を入力してください')
-      return
-    }
-
-    setCreating(true)
-    setError(null)
-
-    try {
-      const response = await fetch('/api/admin/staff', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newStaff)
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.message || '登録に失敗しました')
+          const handleCreateStaff = async () => {
+      if (!newStaff.display_name_kanji.trim() || !newStaff.display_name_kana.trim()) {
+        setError('氏名（漢字）と氏名（カナ）を入力してください')
+        return
       }
 
-      setShowStaffModal(false)
-      setNewStaff({ display_name_kanji: '', display_name_kana: '' })
-      fetchStaff()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '登録に失敗しました')
-    } finally {
-      setCreating(false)
+      setCreating(true)
+      setError(null)
+
+      try {
+        const response = await fetch('/api/admin/staff', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newStaff)
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.message || '登録に失敗しました')
+        }
+
+        setShowStaffModal(false)
+        setNewStaff({ display_name_kanji: '', display_name_kana: '' })
+        fetchStaff()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '登録に失敗しました')
+      } finally {
+        setCreating(false)
+      }
     }
-  }
+
+    const handleUpdateStaff = async () => {
+      if (!editingStaff) return
+      setSavingStaff(true)
+      setError(null)
+      try {
+        const response = await fetch(`/api/admin/staff/${editingStaff.id}`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            display_name_kanji: editingStaff.display_name_kanji,
+            display_name_kana: editingStaff.display_name_kana,
+            email: editingStaff.email
+          })
+        })
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.message || '更新に失敗しました')
+        }
+        setEditingStaff(null)
+        fetchStaff()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '更新に失敗しました')
+      } finally {
+        setSavingStaff(false)
+      }
+    }
 
   const handleStaffCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -1201,55 +1232,78 @@ function AdminApp() {
                 </div>
               )}
 
-                            {loading ? (
-                              <p>読み込み中...</p>
-                            ) : staff.length === 0 ? (
-                              <p style={styles.emptyMessage}>スタッフが登録されていません</p>
-                            ) : isMobile ? (
-                              <div style={styles.mobileCardList}>
-                                {staff.map(member => (
-                                  <div key={member.id} style={styles.mobileCard}>
-                                    <div style={styles.mobileCardBody}>
-                                      <div style={styles.mobileCardRow}>
-                                        <span style={styles.mobileCardLabel}>氏名（漢字）</span>
-                                        <span style={styles.mobileCardValue}>{member.display_name_kanji}</span>
-                                      </div>
-                                      <div style={styles.mobileCardRow}>
-                                        <span style={styles.mobileCardLabel}>氏名（カナ）</span>
-                                        <span style={styles.mobileCardValue}>{member.display_name_kana}</span>
-                                      </div>
-                                      <div style={styles.mobileCardRow}>
-                                        <span style={styles.mobileCardLabel}>登録日</span>
-                                        <span style={styles.mobileCardValue}>{formatDate(member.created_at)}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div style={styles.card}>
-                                <div style={styles.tableContainer}>
-                                  <table style={styles.table}>
-                                    <thead>
-                                      <tr>
-                                        <th style={styles.th}>氏名（漢字）</th>
-                                        <th style={styles.th}>氏名（カナ）</th>
-                                        <th style={styles.th}>登録日</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {staff.map(member => (
-                                        <tr key={member.id} style={styles.tr}>
-                                          <td style={styles.td}>{member.display_name_kanji}</td>
-                                          <td style={styles.td}>{member.display_name_kana}</td>
-                                          <td style={styles.td}>{formatDate(member.created_at)}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
+                                                        {loading ? (
+                                                          <p>読み込み中...</p>
+                                                        ) : staff.length === 0 ? (
+                                                          <p style={styles.emptyMessage}>スタッフが登録されていません</p>
+                                                        ) : isMobile ? (
+                                                          <div style={styles.mobileCardList}>
+                                                            {staff.map(member => (
+                                                              <div key={member.id} style={styles.mobileCard}>
+                                                                <div style={styles.mobileCardBody}>
+                                                                  <div style={styles.mobileCardRow}>
+                                                                    <span style={styles.mobileCardLabel}>氏名（漢字）</span>
+                                                                    <span style={styles.mobileCardValue}>{member.display_name_kanji}</span>
+                                                                  </div>
+                                                                  <div style={styles.mobileCardRow}>
+                                                                    <span style={styles.mobileCardLabel}>氏名（カナ）</span>
+                                                                    <span style={styles.mobileCardValue}>{member.display_name_kana}</span>
+                                                                  </div>
+                                                                  <div style={styles.mobileCardRow}>
+                                                                    <span style={styles.mobileCardLabel}>メールアドレス</span>
+                                                                    <span style={styles.mobileCardValue}>{member.email || '-'}</span>
+                                                                  </div>
+                                                                  <div style={styles.mobileCardRow}>
+                                                                    <span style={styles.mobileCardLabel}>登録日</span>
+                                                                    <span style={styles.mobileCardValue}>{formatDate(member.created_at)}</span>
+                                                                  </div>
+                                                                  <div style={styles.mobileCardRow}>
+                                                                    <button 
+                                                                      style={styles.primaryButton}
+                                                                      onClick={() => setEditingStaff(member)}
+                                                                    >
+                                                                      編集
+                                                                    </button>
+                                                                  </div>
+                                                                </div>
+                                                              </div>
+                                                            ))}
+                                                          </div>
+                                                        ) : (
+                                                          <div style={styles.card}>
+                                                            <div style={styles.tableContainer}>
+                                                              <table style={styles.table}>
+                                                                <thead>
+                                                                  <tr>
+                                                                    <th style={styles.th}>氏名（漢字）</th>
+                                                                    <th style={styles.th}>氏名（カナ）</th>
+                                                                    <th style={styles.th}>メールアドレス</th>
+                                                                    <th style={styles.th}>登録日</th>
+                                                                    <th style={styles.th}>操作</th>
+                                                                  </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                  {staff.map(member => (
+                                                                    <tr key={member.id} style={styles.tr}>
+                                                                      <td style={styles.td}>{member.display_name_kanji}</td>
+                                                                      <td style={styles.td}>{member.display_name_kana}</td>
+                                                                      <td style={styles.td}>{member.email || '-'}</td>
+                                                                      <td style={styles.td}>{formatDate(member.created_at)}</td>
+                                                                      <td style={styles.td}>
+                                                                        <button 
+                                                                          style={styles.primaryButton}
+                                                                          onClick={() => setEditingStaff(member)}
+                                                                        >
+                                                                          編集
+                                                                        </button>
+                                                                      </td>
+                                                                    </tr>
+                                                                  ))}
+                                                                </tbody>
+                                                              </table>
+                                                            </div>
+                                                          </div>
+                                                        )}
 
                             {/* New Staff Modal */}
               {showStaffModal && (
@@ -1294,11 +1348,66 @@ function AdminApp() {
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+                        )}
 
-          {/* Import History */}
+                        {/* Edit Staff Modal */}
+                        {editingStaff && (
+                          <div style={styles.modalOverlay} onClick={() => setEditingStaff(null)}>
+                            <div style={styles.modal} onClick={e => e.stopPropagation()}>
+                              <h3 style={styles.modalTitle}>スタッフ編集</h3>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>氏名（漢字）</label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={editingStaff.display_name_kanji}
+                                  onChange={e => setEditingStaff({ ...editingStaff, display_name_kanji: e.target.value })}
+                                  placeholder="例：山田 太郎"
+                                />
+                              </div>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>氏名（カナ）</label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={editingStaff.display_name_kana}
+                                  onChange={e => setEditingStaff({ ...editingStaff, display_name_kana: e.target.value })}
+                                  placeholder="例：ヤマダ タロウ"
+                                />
+                              </div>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>メールアドレス</label>
+                                <input
+                                  type="email"
+                                  style={styles.input}
+                                  value={editingStaff.email || ''}
+                                  onChange={e => setEditingStaff({ ...editingStaff, email: e.target.value || null })}
+                                  placeholder="例：yamada@example.com"
+                                />
+                              </div>
+                              <div style={styles.modalActions}>
+                                <button
+                                  style={styles.cancelButton}
+                                  onClick={() => setEditingStaff(null)}
+                                  disabled={savingStaff}
+                                >
+                                  キャンセル
+                                </button>
+                                <button
+                                  style={styles.primaryButton}
+                                  onClick={handleUpdateStaff}
+                                  disabled={savingStaff}
+                                >
+                                  {savingStaff ? '保存中...' : '保存'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Import History */}
           {screen === 'import_history' && (
             <div>
               <h2 style={styles.pageTitle}>インポート履歴</h2>
