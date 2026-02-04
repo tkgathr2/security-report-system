@@ -797,7 +797,7 @@ function AdminApp() {
               onClick={() => navigateTo('staff')}
             >
               <span style={styles.sidebarIcon}>&#128101;</span>
-              <span style={styles.sidebarText}>スタッフ管理</span>
+              <span style={styles.sidebarText}>キャスト管理</span>
             </button>
                     <button 
                       style={screen === 'import_history' ? styles.sidebarItemActive : styles.sidebarItem}
@@ -1248,7 +1248,7 @@ function AdminApp() {
           {screen === 'staff' && (
             <div>
               <div style={styles.pageHeader}>
-                <h2 style={{...styles.pageTitle, margin: 0}}>スタッフ管理</h2>
+                <h2 style={{...styles.pageTitle, margin: 0}}>キャスト管理</h2>
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <label style={styles.secondaryButton}>
                     <input
