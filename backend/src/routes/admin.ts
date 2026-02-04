@@ -115,9 +115,11 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response) => {
 router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT id, display_name_kanji, display_name_kana, email, created_at, updated_at
-       FROM staff_master
-       ORDER BY display_name_kana
+      `SELECT sm.id, sm.display_name_kanji, sm.display_name_kana, sm.email, sm.created_at, sm.updated_at,
+              cu.email as registered_email, cu.id as cast_user_id
+       FROM staff_master sm
+       LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true
+       ORDER BY sm.display_name_kana
        LIMIT 500`
     );
 
