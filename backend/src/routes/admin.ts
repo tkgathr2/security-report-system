@@ -195,6 +195,46 @@ router.get('/cast-users', requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
+router.delete('/cast-users/:id', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const adminUser = req.user as { id: string; email: string };
+
+    const currentResult = await pool.query(
+      `SELECT email, name FROM cast_users WHERE id = $1`,
+      [id]
+    );
+
+    if (currentResult.rows.length === 0) {
+      sendNotFound(res, 'キャストユーザーが見つかりません');
+      return;
+    }
+
+    const currentUser = currentResult.rows[0];
+
+    await pool.query(
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, target_id, payload_json)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        adminUser.email,
+        'DELETE_CAST_USER',
+        'cast_user',
+        id,
+        JSON.stringify({
+          deleted_email: currentUser.email,
+          deleted_name: currentUser.name
+        })
+      ]
+    );
+
+    await pool.query(`DELETE FROM cast_users WHERE id = $1`, [id]);
+
+    res.json({ ok: true });
+  } catch (error) {
+    handleDbError(res, error, 'Cast user delete');
+  }
+});
+
 router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
