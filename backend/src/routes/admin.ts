@@ -85,7 +85,7 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response) => {
 router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT id, display_name_kanji, display_name_kana, created_at, updated_at
+      `SELECT id, display_name_kanji, display_name_kana, email, created_at, updated_at
        FROM staff_master
        ORDER BY display_name_kana
        LIMIT 500`
@@ -127,7 +127,7 @@ router.post('/staff', requireAdmin, async (req: Request, res: Response) => {
 router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { display_name_kanji, display_name_kana } = req.body;
+    const { display_name_kanji, display_name_kana, email } = req.body;
 
     if (!display_name_kanji || !display_name_kana) {
       sendBadRequest(res, '漢字名とカタカナ名は必須です');
@@ -136,10 +136,10 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
 
     const result = await pool.query(
       `UPDATE staff_master 
-       SET display_name_kanji = $1, display_name_kana = $2, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3
-       RETURNING id, display_name_kanji, display_name_kana, updated_at`,
-      [display_name_kanji, display_name_kana, id]
+       SET display_name_kanji = $1, display_name_kana = $2, email = $3, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4
+       RETURNING id, display_name_kanji, display_name_kana, email, updated_at`,
+      [display_name_kanji, display_name_kana, email || null, id]
     );
 
     if (result.rows.length === 0) {
