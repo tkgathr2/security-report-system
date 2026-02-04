@@ -69,6 +69,8 @@ interface StaffMember {
   display_name_kanji: string
   display_name_kana: string
   email: string | null
+  registered_email: string | null
+  cast_user_id: string | null
   created_at: string
   updated_at: string
 }
@@ -1318,7 +1320,7 @@ function AdminApp() {
                                                                   </div>
                                                                   <div style={styles.mobileCardRow}>
                                                                     <span style={styles.mobileCardLabel}>メールアドレス</span>
-                                                                    <span style={styles.mobileCardValue}>{member.email || '-'}</span>
+                                                                    <span style={styles.mobileCardValue}>{member.registered_email || member.email || '-'}</span>
                                                                   </div>
                                                                   <div style={styles.mobileCardRow}>
                                                                     <span style={styles.mobileCardLabel}>登録日</span>
@@ -1354,7 +1356,7 @@ function AdminApp() {
                                                                     <tr key={member.id} style={styles.tr}>
                                                                       <td style={styles.td}>{member.display_name_kanji}</td>
                                                                       <td style={styles.td}>{member.display_name_kana}</td>
-                                                                      <td style={styles.td}>{member.email || '-'}</td>
+                                                                      <td style={styles.td}>{member.registered_email || member.email || '-'}</td>
                                                                       <td style={styles.td}>{formatDate(member.created_at)}</td>
                                                                       <td style={styles.td}>
                                                                         <button 
