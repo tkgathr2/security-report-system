@@ -24,15 +24,32 @@ router.get('/me', (req: Request, res: Response) => {
 
 router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      `SELECT p.id, p.project_key, p.client_name_raw, p.work_date, p.work_name, 
+    const { date } = req.query;
+    
+    let query: string;
+    let params: string[];
+    
+    if (date && typeof date === 'string') {
+      query = `SELECT p.id, p.project_key, p.client_name_raw, p.work_date, p.work_name, 
+              p.location, p.status, p.unique_url, p.url_expires_at, p.created_at,
+              c.name as client_name
+       FROM projects p
+       LEFT JOIN clients c ON p.client_id = c.id
+       WHERE p.work_date = $1
+       ORDER BY p.created_at DESC`;
+      params = [date];
+    } else {
+      query = `SELECT p.id, p.project_key, p.client_name_raw, p.work_date, p.work_name, 
               p.location, p.status, p.unique_url, p.url_expires_at, p.created_at,
               c.name as client_name
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
        ORDER BY p.work_date DESC, p.created_at DESC
-       LIMIT 100`
-    );
+       LIMIT 100`;
+      params = [];
+    }
+    
+    const result = await pool.query(query, params);
 
     res.json({
       projects: result.rows,

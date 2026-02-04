@@ -143,8 +143,9 @@ function AdminApp() {
   const [staffImporting, setStaffImporting] = useState(false)
   const [staffImportResult, setStaffImportResult] = useState<{ inserted: number; updated: number; skipped: number } | null>(null)
   const [isDragging, setIsDragging] = useState(false)
-  const [sortColumn, setSortColumn] = useState<keyof Project | null>(null)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+    const [sortColumn, setSortColumn] = useState<keyof Project | null>(null)
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
     const [importHistory, setImportHistory] = useState<CsvImportHistory[]>([])
     const [selectedImport, setSelectedImport] = useState<CsvImportHistory | null>(null)
     const [importedProjects, setImportedProjects] = useState<Project[]>([])
@@ -232,22 +233,46 @@ function AdminApp() {
     }
   }
 
-  const fetchProjects = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const response = await fetch('/api/admin/projects', {
-        credentials: 'include'
-      })
-      if (!response.ok) throw new Error('Failed to fetch projects')
-      const data = await response.json()
-      setProjects(data.projects)
-    } catch {
-      setError('案件一覧の取得に失敗しました')
-    } finally {
-      setLoading(false)
+    const fetchProjects = async (date?: string) => {
+      setLoading(true)
+      setError(null)
+      try {
+        const dateParam = date || selectedDate
+        const response = await fetch(`/api/admin/projects?date=${dateParam}`, {
+          credentials: 'include'
+        })
+        if (!response.ok) throw new Error('Failed to fetch projects')
+        const data = await response.json()
+        setProjects(data.projects)
+      } catch {
+        setError('案件一覧の取得に失敗しました')
+      } finally {
+        setLoading(false)
+      }
     }
-  }
+
+    const handleDateChange = (direction: 'prev' | 'next') => {
+      const current = new Date(selectedDate)
+      if (direction === 'prev') {
+        current.setDate(current.getDate() - 1)
+      } else {
+        current.setDate(current.getDate() + 1)
+      }
+      const newDate = current.toISOString().split('T')[0]
+      setSelectedDate(newDate)
+      fetchProjects(newDate)
+    }
+
+    const handleDateSelect = (date: string) => {
+      setSelectedDate(date)
+      fetchProjects(date)
+    }
+
+    const goToToday = () => {
+      const today = new Date().toISOString().split('T')[0]
+      setSelectedDate(today)
+      fetchProjects(today)
+    }
 
   const fetchReports = async () => {
     setLoading(true)
@@ -893,6 +918,39 @@ function AdminApp() {
                     {screen === 'projects' && (
                       <div>
                         <h2 style={styles.pageTitle}>案件一覧</h2>
+                        
+                        {/* Date Navigation */}
+                        <div style={styles.dateNavigation}>
+                          <button 
+                            style={styles.dateNavButton}
+                            onClick={() => handleDateChange('prev')}
+                          >
+                            &#9664; 前日
+                          </button>
+                          <div style={styles.dateDisplay}>
+                            <input
+                              type="date"
+                              value={selectedDate}
+                              onChange={(e) => handleDateSelect(e.target.value)}
+                              style={styles.dateInput}
+                            />
+                            {selectedDate !== new Date().toISOString().split('T')[0] && (
+                              <button 
+                                style={styles.todayButton}
+                                onClick={goToToday}
+                              >
+                                今日
+                              </button>
+                            )}
+                          </div>
+                          <button 
+                            style={styles.dateNavButton}
+                            onClick={() => handleDateChange('next')}
+                          >
+                            翌日 &#9654;
+                          </button>
+                        </div>
+
                         {loading ? (
                           <p>読み込み中...</p>
                         ) : projects.length === 0 ? (
@@ -2452,6 +2510,49 @@ const styles: Record<string, React.CSSProperties> = {
     color: COLORS.primary,
     cursor: 'pointer',
     textDecoration: 'underline'
+  },
+  dateNavigation: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '16px',
+    marginBottom: '20px',
+    padding: '12px',
+    backgroundColor: COLORS.white,
+    borderRadius: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+  },
+  dateNavButton: {
+    backgroundColor: COLORS.primary,
+    color: COLORS.white,
+    border: 'none',
+    padding: '10px 16px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500
+  },
+  dateDisplay: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  dateInput: {
+    padding: '10px 12px',
+    fontSize: '16px',
+    border: `1px solid ${COLORS.gray}`,
+    borderRadius: '6px',
+    cursor: 'pointer'
+  },
+  todayButton: {
+    backgroundColor: COLORS.secondary,
+    color: COLORS.white,
+    border: 'none',
+    padding: '10px 16px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500
   }
 }
 
