@@ -16,30 +16,16 @@ function getBaseUrl(req: Request): string {
   return `${protocol}://${host}`;
 }
 
-// Register - Step 1: Enter email and select staff
+// Register - Step 1: Enter email only
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, staffId, name } = req.body;
+    const { email } = req.body;
 
     if (!email || !email.includes('@')) {
       return res.status(400).json({ message: 'メールアドレスを入力してください' });
     }
 
-    if (!staffId || !name) {
-      return res.status(400).json({ message: 'スタッフを選択してください' });
-    }
-
     const normalizedEmail = email.toLowerCase().trim();
-
-    // Verify staff exists
-    const staffCheck = await pool.query(
-      'SELECT id, display_name_kanji FROM staff_master WHERE id = $1',
-      [staffId]
-    );
-
-    if (staffCheck.rows.length === 0) {
-      return res.status(400).json({ message: '選択されたスタッフが見つかりません' });
-    }
 
     // Check if user already exists
     const existingUser = await pool.query(
@@ -47,7 +33,6 @@ router.post('/register', async (req: Request, res: Response) => {
       [normalizedEmail]
     );
 
-    let userId: string;
     const token = generateToken();
     const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
@@ -59,28 +44,26 @@ router.post('/register', async (req: Request, res: Response) => {
           redirect: '/cast/login'
         });
       }
-      // Update verification token and name for incomplete registration
+      // Update verification token for incomplete registration
       await pool.query(
         `UPDATE cast_users 
-         SET verification_token = $1, verification_token_expires = $2, name = $3, staff_id = $4, updated_at = NOW()
-         WHERE id = $5`,
-        [token, tokenExpires, name, staffId, user.id]
+         SET verification_token = $1, verification_token_expires = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [token, tokenExpires, user.id]
       );
-      userId = user.id;
     } else {
-      // Create new user with staff_id
-      const result = await pool.query(
-        `INSERT INTO cast_users (email, verification_token, verification_token_expires, name, staff_id)
-         VALUES ($1, $2, $3, $4, $5)
+      // Create new user with email only
+      await pool.query(
+        `INSERT INTO cast_users (email, verification_token, verification_token_expires)
+         VALUES ($1, $2, $3)
          RETURNING id`,
-        [normalizedEmail, token, tokenExpires, name, staffId]
+        [normalizedEmail, token, tokenExpires]
       );
-      userId = result.rows[0].id;
     }
 
     // Send verification email
     const baseUrl = getBaseUrl(req);
-    const emailResult = await sendVerificationEmail(normalizedEmail, name, token, baseUrl);
+    const emailResult = await sendVerificationEmail(normalizedEmail, '', token, baseUrl);
 
     if (!emailResult.success) {
       console.error('Failed to send verification email:', emailResult.error);
@@ -100,7 +83,7 @@ router.post('/register', async (req: Request, res: Response) => {
 // Verify email and complete registration
 router.post('/verify', async (req: Request, res: Response) => {
   try {
-    const { token, name, pin } = req.body;
+    const { token, staffId, name, pin } = req.body;
 
     if (!token) {
       return res.status(400).json({ message: '無効なリンクです' });
@@ -119,21 +102,31 @@ router.post('/verify', async (req: Request, res: Response) => {
 
     const user = result.rows[0];
 
-    // If name and pin provided, complete registration
-    if (name && pin) {
+    // If staffId, name and pin provided, complete registration
+    if (staffId && name && pin) {
       if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
         return res.status(400).json({ message: 'PINコードは4桁の数字で入力してください' });
+      }
+
+      // Verify staff exists
+      const staffCheck = await pool.query(
+        'SELECT id, display_name_kanji FROM staff_master WHERE id = $1',
+        [staffId]
+      );
+
+      if (staffCheck.rows.length === 0) {
+        return res.status(400).json({ message: '選択されたスタッフが見つかりません' });
       }
 
       const pinHash = await bcrypt.hash(pin, 10);
 
       await pool.query(
         `UPDATE cast_users 
-         SET name = $1, pin_hash = $2, email_verified = true, 
+         SET name = $1, pin_hash = $2, email_verified = true, staff_id = $3,
              verification_token = NULL, verification_token_expires = NULL,
              updated_at = NOW()
-         WHERE id = $3`,
-        [name.trim(), pinHash, user.id]
+         WHERE id = $4`,
+        [name.trim(), pinHash, staffId, user.id]
       );
 
       // Send welcome email
@@ -157,8 +150,7 @@ router.post('/verify', async (req: Request, res: Response) => {
       // Return user info for form completion
       res.json({ 
         valid: true,
-        email: user.email,
-        existingName: user.name
+        email: user.email
       });
     }
   } catch (error) {
