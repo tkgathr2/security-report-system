@@ -109,11 +109,6 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       return;
     }
 
-    if (project.status === 'pending_client') {
-      sendForbidden(res, '未登録会社のため保留');
-      return;
-    }
-
     const now = new Date();
     const expiresAt = new Date(project.url_expires_at);
     if (expiresAt < now) {

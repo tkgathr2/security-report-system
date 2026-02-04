@@ -68,11 +68,6 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
 
     const hasQualifier = project.qualifier_hint !== null && project.qualifier_hint.includes('有');
 
-    if (project.status === 'pending_client') {
-      sendForbidden(res, '未登録会社のため保留');
-      return;
-    }
-
     const now = new Date();
     const expiresAt = new Date(project.url_expires_at);
     if (expiresAt < now) {
