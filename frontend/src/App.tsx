@@ -20,7 +20,7 @@ const COLORS = {
   danger: '#E74C3C',
 }
 
-type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients'
+type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients' | 'cast_users'
 
 interface AdminUser {
   id: string
@@ -111,6 +111,18 @@ interface Client {
   updated_at: string
 }
 
+interface CastUser {
+  id: string
+  email: string
+  name: string | null
+  selected_staff_id: string | null
+  selected_name_kanji: string | null
+  staff_name_kanji: string | null
+  staff_name_kana: string | null
+  created_at: string
+  updated_at: string
+}
+
 function AdminApp() {
   const [screen, setScreen] = useState<Screen>('dashboard')
   const [admin, setAdmin] = useState<AdminUser | null>(null)
@@ -137,11 +149,14 @@ function AdminApp() {
     const [selectedImport, setSelectedImport] = useState<CsvImportHistory | null>(null)
     const [importedProjects, setImportedProjects] = useState<Project[]>([])
     const [loadingImportProjects, setLoadingImportProjects] = useState(false)
-    const [clients, setClients] = useState<Client[]>([])
-    const [editingClient, setEditingClient] = useState<Client | null>(null)
-    const [savingClient, setSavingClient] = useState(false)
+        const [clients, setClients] = useState<Client[]>([])
+        const [editingClient, setEditingClient] = useState<Client | null>(null)
+        const [savingClient, setSavingClient] = useState(false)
+        const [castUsers, setCastUsers] = useState<CastUser[]>([])
+        const [editingCastUser, setEditingCastUser] = useState<CastUser | null>(null)
+        const [savingCastUser, setSavingCastUser] = useState(false)
 
-      useEffect(() => {
+          useEffect(() => {
       checkAuth()
     }, [])
 
@@ -323,37 +338,81 @@ function AdminApp() {
       }
     }
 
-    const handleUpdateClient = async () => {
-      if (!editingClient) return
-      setSavingClient(true)
-      setError(null)
-      try {
-        const response = await fetch(`/api/admin/clients/${editingClient.id}`, {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: editingClient.name,
-            contact_name: editingClient.contact_name,
-            contact_title: editingClient.contact_title,
-            contact_email: editingClient.contact_email,
-            emails: editingClient.emails
-          })
-        })
-        if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.message || '更新に失敗しました')
+        const handleUpdateClient = async () => {
+          if (!editingClient) return
+          setSavingClient(true)
+          setError(null)
+          try {
+            const response = await fetch(`/api/admin/clients/${editingClient.id}`, {
+              method: 'PUT',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: editingClient.name,
+                contact_name: editingClient.contact_name,
+                contact_title: editingClient.contact_title,
+                contact_email: editingClient.contact_email,
+                emails: editingClient.emails
+              })
+            })
+            if (!response.ok) {
+              const data = await response.json()
+              throw new Error(data.message || '更新に失敗しました')
+            }
+            setEditingClient(null)
+            fetchClients()
+          } catch (err) {
+            setError(err instanceof Error ? err.message : '更新に失敗しました')
+          } finally {
+            setSavingClient(false)
+          }
         }
-        setEditingClient(null)
-        fetchClients()
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '更新に失敗しました')
-      } finally {
-        setSavingClient(false)
-      }
-    }
 
-    const handleCreateStaff = async () => {
+        const fetchCastUsers = async () => {
+          setLoading(true)
+          setError(null)
+          try {
+            const response = await fetch('/api/admin/cast-users', {
+              credentials: 'include'
+            })
+            if (!response.ok) throw new Error('Failed to fetch cast users')
+            const data = await response.json()
+            setCastUsers(data.users || [])
+          } catch {
+            setError('キャストユーザー一覧の取得に失敗しました')
+          } finally {
+            setLoading(false)
+          }
+        }
+
+        const handleUpdateCastUser = async () => {
+          if (!editingCastUser) return
+          setSavingCastUser(true)
+          setError(null)
+          try {
+            const response = await fetch(`/api/admin/cast-users/${editingCastUser.id}/name`, {
+              method: 'PUT',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                staff_name_kanji: editingCastUser.name,
+                reason: '管理者による名前変更'
+              })
+            })
+            if (!response.ok) {
+              const data = await response.json()
+              throw new Error(data.message || '更新に失敗しました')
+            }
+            setEditingCastUser(null)
+            fetchCastUsers()
+          } catch (err) {
+            setError(err instanceof Error ? err.message : '更新に失敗しました')
+          } finally {
+            setSavingCastUser(false)
+          }
+        }
+
+        const handleCreateStaff = async () => {
     if (!newStaff.display_name_kanji.trim() || !newStaff.display_name_kana.trim()) {
       setError('氏名（漢字）と氏名（カナ）を入力してください')
       return
@@ -483,19 +542,20 @@ function AdminApp() {
     window.open(`/api/admin/reports/${reportId}/pdf`, '_blank')
   }
 
-        const navigateTo = (newScreen: Screen) => {
-          setScreen(newScreen)
-          setError(null)
-          setSelectedImport(null)
-          setImportedProjects([])
-          if (isMobile) setSidebarOpen(false)
-          if (newScreen === 'dashboard') fetchDashboardStats()
-          if (newScreen === 'projects') fetchProjects()
-          if (newScreen === 'reports') fetchReports()
-          if (newScreen === 'staff') fetchStaff()
-          if (newScreen === 'import_history') fetchImportHistory()
-          if (newScreen === 'clients') fetchClients()
-        }
+                const navigateTo = (newScreen: Screen) => {
+                  setScreen(newScreen)
+                  setError(null)
+                  setSelectedImport(null)
+                  setImportedProjects([])
+                  if (isMobile) setSidebarOpen(false)
+                  if (newScreen === 'dashboard') fetchDashboardStats()
+                  if (newScreen === 'projects') fetchProjects()
+                  if (newScreen === 'reports') fetchReports()
+                  if (newScreen === 'staff') fetchStaff()
+                  if (newScreen === 'import_history') fetchImportHistory()
+                  if (newScreen === 'clients') fetchClients()
+                  if (newScreen === 'cast_users') fetchCastUsers()
+                }
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-'
@@ -655,14 +715,21 @@ function AdminApp() {
                       <span style={styles.sidebarIcon}>&#128197;</span>
                       <span style={styles.sidebarText}>インポート履歴</span>
                     </button>
-                    <button 
-                      style={screen === 'clients' ? styles.sidebarItemActive : styles.sidebarItem}
-                      onClick={() => navigateTo('clients')}
-                    >
-                      <span style={styles.sidebarIcon}>&#127970;</span>
-                      <span style={styles.sidebarText}>会社管理</span>
-                    </button>
-                  </nav>
+                                      <button 
+                                        style={screen === 'clients' ? styles.sidebarItemActive : styles.sidebarItem}
+                                        onClick={() => navigateTo('clients')}
+                                      >
+                                        <span style={styles.sidebarIcon}>&#127970;</span>
+                                        <span style={styles.sidebarText}>会社管理</span>
+                                      </button>
+                                      <button 
+                                        style={screen === 'cast_users' ? styles.sidebarItemActive : styles.sidebarItem}
+                                        onClick={() => navigateTo('cast_users')}
+                                      >
+                                        <span style={styles.sidebarIcon}>&#128100;</span>
+                                        <span style={styles.sidebarText}>キャストユーザー</span>
+                                      </button>
+                                    </nav>
                 </aside>
 
         {/* Main Content */}
@@ -1503,6 +1570,125 @@ function AdminApp() {
                         )}
                       </div>
                     )}
+
+          {/* Cast Users Management */}
+          {screen === 'cast_users' && (
+            <div>
+              <h2 style={styles.pageTitle}>キャストユーザー管理</h2>
+              <p style={styles.pageDescription}>登録済みのキャストユーザー一覧です。名前を編集してCSVの氏名と紐づけできます。</p>
+              
+              {loading ? (
+                <p>読み込み中...</p>
+              ) : castUsers.length === 0 ? (
+                <p style={styles.emptyMessage}>キャストユーザーが登録されていません</p>
+              ) : isMobile ? (
+                <div style={styles.mobileCardList}>
+                  {castUsers.map(user => (
+                    <div key={user.id} style={styles.mobileCard}>
+                      <div style={styles.mobileCardBody}>
+                        <div style={styles.mobileCardRow}>
+                          <span style={styles.mobileCardLabel}>メールアドレス</span>
+                          <span style={styles.mobileCardValue}>{user.email}</span>
+                        </div>
+                        <div style={styles.mobileCardRow}>
+                          <span style={styles.mobileCardLabel}>名前</span>
+                          <span style={styles.mobileCardValue}>{user.name || user.selected_name_kanji || '-'}</span>
+                        </div>
+                        <div style={styles.mobileCardRow}>
+                          <span style={styles.mobileCardLabel}>登録日</span>
+                          <span style={styles.mobileCardValue}>{formatDate(user.created_at)}</span>
+                        </div>
+                        <div style={styles.mobileCardRow}>
+                          <button 
+                            style={styles.primaryButton}
+                            onClick={() => setEditingCastUser(user)}
+                          >
+                            編集
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={styles.card}>
+                  <div style={styles.tableContainer}>
+                    <table style={styles.table}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}>メールアドレス</th>
+                          <th style={styles.th}>名前</th>
+                          <th style={styles.th}>登録日</th>
+                          <th style={styles.th}>操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {castUsers.map(user => (
+                          <tr key={user.id} style={styles.tr}>
+                            <td style={styles.td}>{user.email}</td>
+                            <td style={styles.td}>{user.name || user.selected_name_kanji || '-'}</td>
+                            <td style={styles.td}>{formatDate(user.created_at)}</td>
+                            <td style={styles.td}>
+                              <button 
+                                style={styles.primaryButton}
+                                onClick={() => setEditingCastUser(user)}
+                              >
+                                編集
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Edit Cast User Modal */}
+              {editingCastUser && (
+                <div style={styles.modalOverlay}>
+                  <div style={styles.modal}>
+                    <h3 style={styles.modalTitle}>キャストユーザー編集</h3>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>メールアドレス</label>
+                      <input
+                        type="text"
+                        style={{...styles.input, backgroundColor: '#f0f0f0'}}
+                        value={editingCastUser.email}
+                        disabled
+                      />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>名前（CSVの氏名と一致させてください）</label>
+                      <input
+                        type="text"
+                        style={styles.input}
+                        value={editingCastUser.name || ''}
+                        onChange={(e) => setEditingCastUser({...editingCastUser, name: e.target.value || null})}
+                        placeholder="例: 高木豊大"
+                      />
+                    </div>
+                    <div style={styles.modalActions}>
+                      <button 
+                        style={styles.secondaryButton}
+                        onClick={() => setEditingCastUser(null)}
+                        disabled={savingCastUser}
+                      >
+                        キャンセル
+                      </button>
+                      <button 
+                        style={styles.primaryButton}
+                        onClick={handleUpdateCastUser}
+                        disabled={savingCastUser}
+                      >
+                        {savingCastUser ? '保存中...' : '保存'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
     </div>
