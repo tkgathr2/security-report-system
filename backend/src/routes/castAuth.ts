@@ -16,16 +16,30 @@ function getBaseUrl(req: Request): string {
   return `${protocol}://${host}`;
 }
 
-// Register - Step 1: Enter email
+// Register - Step 1: Enter email and select staff
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
+    const { email, staffId, name } = req.body;
 
     if (!email || !email.includes('@')) {
       return res.status(400).json({ message: 'メールアドレスを入力してください' });
     }
 
+    if (!staffId || !name) {
+      return res.status(400).json({ message: 'スタッフを選択してください' });
+    }
+
     const normalizedEmail = email.toLowerCase().trim();
+
+    // Verify staff exists
+    const staffCheck = await pool.query(
+      'SELECT id, display_name_kanji FROM staff_master WHERE id = $1',
+      [staffId]
+    );
+
+    if (staffCheck.rows.length === 0) {
+      return res.status(400).json({ message: '選択されたスタッフが見つかりません' });
+    }
 
     // Check if user already exists
     const existingUser = await pool.query(
@@ -45,28 +59,28 @@ router.post('/register', async (req: Request, res: Response) => {
           redirect: '/cast/login'
         });
       }
-      // Update verification token for incomplete registration
+      // Update verification token and name for incomplete registration
       await pool.query(
         `UPDATE cast_users 
-         SET verification_token = $1, verification_token_expires = $2, updated_at = NOW()
-         WHERE id = $3`,
-        [token, tokenExpires, user.id]
+         SET verification_token = $1, verification_token_expires = $2, name = $3, staff_id = $4, updated_at = NOW()
+         WHERE id = $5`,
+        [token, tokenExpires, name, staffId, user.id]
       );
       userId = user.id;
     } else {
-      // Create new user
+      // Create new user with staff_id
       const result = await pool.query(
-        `INSERT INTO cast_users (email, verification_token, verification_token_expires)
-         VALUES ($1, $2, $3)
+        `INSERT INTO cast_users (email, verification_token, verification_token_expires, name, staff_id)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING id`,
-        [normalizedEmail, token, tokenExpires]
+        [normalizedEmail, token, tokenExpires, name, staffId]
       );
       userId = result.rows[0].id;
     }
 
     // Send verification email
     const baseUrl = getBaseUrl(req);
-    const emailResult = await sendVerificationEmail(normalizedEmail, null, token, baseUrl);
+    const emailResult = await sendVerificationEmail(normalizedEmail, name, token, baseUrl);
 
     if (!emailResult.success) {
       console.error('Failed to send verification email:', emailResult.error);
@@ -368,6 +382,34 @@ router.get('/today', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Get today projects error:', error);
+    res.status(500).json({ message: 'エラーが発生しました' });
+  }
+});
+
+// Search staff by kana (for autocomplete)
+router.get('/search-staff', async (req: Request, res: Response) => {
+  try {
+    const { q } = req.query;
+
+    if (!q || typeof q !== 'string' || q.length < 1) {
+      return res.json({ staff: [] });
+    }
+
+    const searchTerm = q.trim();
+
+    // Search by kana (display_name_kana)
+    const result = await pool.query(
+      `SELECT id, display_name_kanji, display_name_kana 
+       FROM staff_master 
+       WHERE display_name_kana ILIKE $1
+       ORDER BY display_name_kana
+       LIMIT 10`,
+      [`%${searchTerm}%`]
+    );
+
+    res.json({ staff: result.rows });
+  } catch (error) {
+    console.error('Search staff error:', error);
     res.status(500).json({ message: 'エラーが発生しました' });
   }
 });
