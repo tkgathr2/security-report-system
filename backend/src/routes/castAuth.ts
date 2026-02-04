@@ -336,10 +336,12 @@ router.get('/today', async (req: Request, res: Response) => {
 
     const token = authHeader.substring(7);
 
-    // Get user
+    // Get user with staff info
     const userResult = await pool.query(
-      `SELECT id, email, name FROM cast_users 
-       WHERE magic_link_token = $1 AND magic_link_expires > NOW()`,
+      `SELECT cu.id, cu.email, cu.name, cu.staff_id, sm.display_name_kanji as staff_name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW()`,
       [token]
     );
 
@@ -350,8 +352,11 @@ router.get('/today', async (req: Request, res: Response) => {
     const user = userResult.rows[0];
 
     // Get today's projects where this cast is assigned
-    // Match by name in project_casts table or by staff_name in CSV import
+    // Match by comparing names with spaces removed for flexibility
     const today = new Date().toISOString().split('T')[0];
+
+    // Use staff_name from staff_master if available, otherwise use cast_users.name
+    const matchName = user.staff_name || user.name;
 
     const projectsResult = await pool.query(
       `SELECT DISTINCT p.id, p.project_key, p.client_name_raw, p.work_date, p.work_name, 
@@ -362,9 +367,14 @@ router.get('/today', async (req: Request, res: Response) => {
        LEFT JOIN project_casts pc ON p.id = pc.project_id
        WHERE p.work_date = $1
          AND p.status = 'active'
-         AND pc.cast_name = $2
+         AND (
+           pc.cast_name = $2
+           OR REPLACE(pc.cast_name, ' ', '') = REPLACE($2, ' ', '')
+           OR REPLACE(pc.cast_name, '　', '') = REPLACE($2, '　', '')
+           OR REPLACE(REPLACE(pc.cast_name, ' ', ''), '　', '') = REPLACE(REPLACE($2, ' ', ''), '　', '')
+         )
        ORDER BY p.work_date, p.work_name`,
-      [today, user.name]
+      [today, matchName]
     );
 
     res.json({ 
