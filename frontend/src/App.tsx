@@ -159,6 +159,7 @@ function AdminApp() {
                 const [savingCastUser, setSavingCastUser] = useState(false)
                 const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null)
                 const [savingStaff, setSavingStaff] = useState(false)
+                const [staffSearchQuery, setStaffSearchQuery] = useState('')
 
           useEffect(() => {
       checkAuth()
@@ -682,6 +683,16 @@ function AdminApp() {
     if (sortColumn !== column) return ' ↕'
     return sortDirection === 'asc' ? ' ↑' : ' ↓'
   }
+
+  const filteredStaff = staff.filter(member => {
+    if (!staffSearchQuery.trim()) return true
+    const query = staffSearchQuery.toLowerCase()
+    return (
+      member.display_name_kanji.toLowerCase().includes(query) ||
+      member.display_name_kana.toLowerCase().includes(query) ||
+      (member.email && member.email.toLowerCase().includes(query))
+    )
+  })
 
   if (loading && !admin) {
     return (
@@ -1250,13 +1261,31 @@ function AdminApp() {
                 </div>
               )}
 
+              {/* Staff Search */}
+              <div style={{ marginBottom: '16px' }}>
+                <input
+                  type="text"
+                  style={styles.searchInput}
+                  placeholder="氏名（漢字・カナ）またはメールで検索..."
+                  value={staffSearchQuery}
+                  onChange={(e) => setStaffSearchQuery(e.target.value)}
+                />
+                {staffSearchQuery && (
+                  <span style={{ marginLeft: '12px', color: COLORS.darkGray, fontSize: '14px' }}>
+                    {filteredStaff.length}件 / {staff.length}件
+                  </span>
+                )}
+              </div>
+
                                                         {loading ? (
                                                           <p>読み込み中...</p>
                                                         ) : staff.length === 0 ? (
                                                           <p style={styles.emptyMessage}>スタッフが登録されていません</p>
+                                                        ) : filteredStaff.length === 0 ? (
+                                                          <p style={styles.emptyMessage}>検索結果がありません</p>
                                                         ) : isMobile ? (
                                                           <div style={styles.mobileCardList}>
-                                                            {staff.map(member => (
+                                                            {filteredStaff.map(member => (
                                                               <div key={member.id} style={styles.mobileCard}>
                                                                 <div style={styles.mobileCardBody}>
                                                                   <div style={styles.mobileCardRow}>
@@ -1301,7 +1330,7 @@ function AdminApp() {
                                                                   </tr>
                                                                 </thead>
                                                                 <tbody>
-                                                                  {staff.map(member => (
+                                                                  {filteredStaff.map(member => (
                                                                     <tr key={member.id} style={styles.tr}>
                                                                       <td style={styles.td}>{member.display_name_kanji}</td>
                                                                       <td style={styles.td}>{member.display_name_kana}</td>
@@ -2417,6 +2446,15 @@ const styles: Record<string, React.CSSProperties> = {
   input: {
     width: '100%',
     padding: '12px',
+    fontSize: '15px',
+    border: `1px solid ${COLORS.gray}`,
+    borderRadius: '8px',
+    boxSizing: 'border-box' as const
+  },
+  searchInput: {
+    width: '100%',
+    maxWidth: '400px',
+    padding: '12px 16px',
     fontSize: '15px',
     border: `1px solid ${COLORS.gray}`,
     borderRadius: '8px',
