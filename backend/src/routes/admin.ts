@@ -161,7 +161,7 @@ router.delete('/staff/:id', requireAdmin, async (req: Request, res: Response) =>
 router.get('/cast-users', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT cu.id, cu.email, cu.selected_staff_id, cu.selected_name_kanji, cu.created_at, cu.updated_at,
+      `SELECT cu.id, cu.email, cu.name, cu.selected_staff_id, cu.selected_name_kanji, cu.created_at, cu.updated_at,
               sm.display_name_kanji as staff_name_kanji, sm.display_name_kana as staff_name_kana
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.selected_staff_id = sm.id
@@ -185,7 +185,7 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
     const adminUser = req.user as { id: string; email: string };
 
     const currentResult = await pool.query(
-      `SELECT email, selected_staff_id, selected_name_kanji FROM cast_users WHERE id = $1`,
+      `SELECT email, name, selected_staff_id, selected_name_kanji FROM cast_users WHERE id = $1`,
       [id]
     );
 
@@ -205,7 +205,7 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
         'cast_user',
         id,
         JSON.stringify({
-          old_value: { staff_id: currentUser.selected_staff_id, name: currentUser.selected_name_kanji },
+          old_value: { staff_id: currentUser.selected_staff_id, name: currentUser.name || currentUser.selected_name_kanji },
           new_value: { staff_id: staff_id, name: staff_name_kanji },
           reason: reason || null
         })
@@ -214,10 +214,10 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
 
     const result = await pool.query(
       `UPDATE cast_users 
-       SET selected_staff_id = $1, selected_name_kanji = $2, updated_at = CURRENT_TIMESTAMP
+       SET name = $1, selected_staff_id = $2, selected_name_kanji = $1, updated_at = CURRENT_TIMESTAMP
        WHERE id = $3
-       RETURNING id, email, selected_staff_id, selected_name_kanji`,
-      [staff_id || null, staff_name_kanji || null, id]
+       RETURNING id, email, name, selected_staff_id, selected_name_kanji`,
+      [staff_name_kanji || null, staff_id || null, id]
     );
 
     res.json({
