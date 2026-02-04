@@ -27,6 +27,11 @@ interface AdminUser {
   email: string
 }
 
+interface ProjectCast {
+  staff_no: string
+  cast_name: string
+}
+
 interface Project {
   id: string
   project_key: string
@@ -39,6 +44,7 @@ interface Project {
   url_expires_at: string
   created_at: string
   client_name: string | null
+  casts?: ProjectCast[]
 }
 
 interface Report {
@@ -1042,6 +1048,14 @@ function AdminApp() {
                                     <span style={styles.mobileCardLabel}>URL有効期限</span>
                                     <span style={styles.mobileCardValue}>{formatDate(project.url_expires_at)}</span>
                                   </div>
+                                  {project.casts && project.casts.length > 0 && (
+                                    <div style={styles.mobileCardRow}>
+                                      <span style={styles.mobileCardLabel}>キャスト</span>
+                                      <span style={styles.mobileCardValue}>
+                                        {project.casts.map(c => c.cast_name).join('、')}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                                 <div style={styles.mobileCardActions}>
                                   <button 
@@ -1074,6 +1088,7 @@ function AdminApp() {
                                     <th style={styles.sortableTh} onClick={() => handleSort('client_name_raw')}>会社名{getSortIndicator('client_name_raw')}</th>
                                     <th style={styles.sortableTh} onClick={() => handleSort('work_name')}>作業名{getSortIndicator('work_name')}</th>
                                     <th style={styles.sortableTh} onClick={() => handleSort('location')}>場所{getSortIndicator('location')}</th>
+                                    <th style={styles.th}>キャスト</th>
                                     <th style={styles.sortableTh} onClick={() => handleSort('status')}>状態{getSortIndicator('status')}</th>
                                     <th style={styles.sortableTh} onClick={() => handleSort('url_expires_at')}>URL有効期限{getSortIndicator('url_expires_at')}</th>
                                     <th style={styles.th}>操作</th>
@@ -1086,6 +1101,11 @@ function AdminApp() {
                                       <td style={styles.td}>{project.client_name || project.client_name_raw}</td>
                                       <td style={styles.td}>{project.work_name}</td>
                                       <td style={styles.td}>{project.location}</td>
+                                      <td style={styles.td}>
+                                        {project.casts && project.casts.length > 0 
+                                          ? project.casts.map(c => c.cast_name).join('、')
+                                          : '-'}
+                                      </td>
                                       <td style={styles.td}>
                                         <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
                                           {getStatusLabel(project.status)}

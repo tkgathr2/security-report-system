@@ -51,9 +51,39 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
     
     const result = await pool.query(query, params);
 
+    // Get casts for each project
+    const projectIds = result.rows.map(p => p.id);
+    let castsMap: Record<string, Array<{ staff_no: string; cast_name: string }>> = {};
+    
+    if (projectIds.length > 0) {
+      const castsResult = await pool.query(
+        `SELECT project_id, staff_no, cast_name 
+         FROM project_casts 
+         WHERE project_id = ANY($1)
+         ORDER BY row_index`,
+        [projectIds]
+      );
+      
+      for (const cast of castsResult.rows) {
+        if (!castsMap[cast.project_id]) {
+          castsMap[cast.project_id] = [];
+        }
+        castsMap[cast.project_id].push({
+          staff_no: cast.staff_no,
+          cast_name: cast.cast_name
+        });
+      }
+    }
+
+    // Add casts to each project
+    const projectsWithCasts = result.rows.map(project => ({
+      ...project,
+      casts: castsMap[project.id] || []
+    }));
+
     res.json({
-      projects: result.rows,
-      total: result.rows.length
+      projects: projectsWithCasts,
+      total: projectsWithCasts.length
     });
   } catch (error) {
     handleDbError(res, error, 'Projects list');
