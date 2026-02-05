@@ -367,21 +367,22 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
           }
         }
 
-        if (format === 'staff_assignment' && mapping.staffNo && mapping.staffName) {
-          const staffNo = row[mapping.staffNo]?.trim();
+        if (mapping.staffName) {
           const castName = row[mapping.staffName]?.trim();
+          const staffNo = mapping.staffNo ? row[mapping.staffNo]?.trim() : null;
           
-          if (staffNo && castName) {
+          if (castName) {
             const projectInfo = projectMap.get(projectKey)!;
+            const castIdentifier = staffNo || castName;
 
-            if (!projectInfo.casts.has(staffNo)) {
+            if (!projectInfo.casts.has(castIdentifier)) {
               await pool.query(
                 `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index)
                  VALUES ($1, $2, $3, $4)
                  ON CONFLICT (project_id, staff_no) DO NOTHING`,
-                [projectInfo.projectId, staffNo, castName, i]
+                [projectInfo.projectId, castIdentifier, castName, i]
               );
-              projectInfo.casts.add(staffNo);
+              projectInfo.casts.add(castIdentifier);
             }
 
             const castNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
