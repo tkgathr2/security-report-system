@@ -47,10 +47,20 @@ const HEADER_ALIASES: Record<string, string[]> = {
   'スタッフNo.': ['スタッフNo.', 'スタッフNo', 'スタッフ番号', 'staff_no', 'No.'],
 };
 
+function normalizeForComparison(str: string): string {
+  return str
+    .normalize('NFC')
+    .toLowerCase()
+    .trim()
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
 function findHeaderMatch(headers: string[], targetHeader: string): string | null {
   const aliases = HEADER_ALIASES[targetHeader] || [targetHeader];
   for (const alias of aliases) {
-    const found = headers.find(h => h.toLowerCase().trim() === alias.toLowerCase().trim());
+    const normalizedAlias = normalizeForComparison(alias);
+    const found = headers.find(h => normalizeForComparison(h) === normalizedAlias);
     if (found) return found;
   }
   return null;
