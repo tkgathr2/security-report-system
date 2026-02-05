@@ -168,6 +168,9 @@ function AdminApp() {
                 const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null)
                 const [savingStaff, setSavingStaff] = useState(false)
                 const [staffSearchQuery, setStaffSearchQuery] = useState('')
+                const [projectSearchQuery, setProjectSearchQuery] = useState('')
+                const [projectSearchMode, setProjectSearchMode] = useState<'all' | 'field'>('all')
+                const [projectSearchField, setProjectSearchField] = useState<'client_name_raw' | 'work_name' | 'location' | 'casts'>('client_name_raw')
 
           useEffect(() => {
       checkAuth()
@@ -702,6 +705,31 @@ function AdminApp() {
     )
   })
 
+  const filteredProjects = sortedProjects.filter(project => {
+    if (!projectSearchQuery.trim()) return true
+    const query = projectSearchQuery.toLowerCase()
+    
+    if (projectSearchMode === 'all') {
+      const clientName = (project.client_name || project.client_name_raw || '').toLowerCase()
+      const workName = (project.work_name || '').toLowerCase()
+      const location = (project.location || '').toLowerCase()
+      const castsStr = project.casts?.map(c => c.cast_name).join(' ').toLowerCase() || ''
+      return clientName.includes(query) || workName.includes(query) || location.includes(query) || castsStr.includes(query)
+    } else {
+      if (projectSearchField === 'client_name_raw') {
+        return (project.client_name || project.client_name_raw || '').toLowerCase().includes(query)
+      } else if (projectSearchField === 'work_name') {
+        return (project.work_name || '').toLowerCase().includes(query)
+      } else if (projectSearchField === 'location') {
+        return (project.location || '').toLowerCase().includes(query)
+      } else if (projectSearchField === 'casts') {
+        const castsStr = project.casts?.map(c => c.cast_name).join(' ').toLowerCase() || ''
+        return castsStr.includes(query)
+      }
+    }
+    return true
+  })
+
   if (loading && !admin) {
     return (
       <div style={styles.loadingContainer}>
@@ -987,6 +1015,58 @@ function AdminApp() {
                       <div>
                         <h2 style={styles.pageTitle}>案件一覧</h2>
                         
+                        {/* Search Box */}
+                        <div style={styles.searchContainer}>
+                          <div style={styles.searchModeToggle}>
+                            <button
+                              style={projectSearchMode === 'all' ? styles.searchModeButtonActive : styles.searchModeButton}
+                              onClick={() => setProjectSearchMode('all')}
+                            >
+                              全文検索
+                            </button>
+                            <button
+                              style={projectSearchMode === 'field' ? styles.searchModeButtonActive : styles.searchModeButton}
+                              onClick={() => setProjectSearchMode('field')}
+                            >
+                              項目別検索
+                            </button>
+                          </div>
+                          <div style={styles.searchInputRow}>
+                            {projectSearchMode === 'field' && (
+                              <select
+                                style={styles.searchFieldSelect}
+                                value={projectSearchField}
+                                onChange={(e) => setProjectSearchField(e.target.value as 'client_name_raw' | 'work_name' | 'location' | 'casts')}
+                              >
+                                <option value="client_name_raw">会社名</option>
+                                <option value="work_name">作業名</option>
+                                <option value="location">場所</option>
+                                <option value="casts">キャスト</option>
+                              </select>
+                            )}
+                            <input
+                              type="text"
+                              placeholder={projectSearchMode === 'all' ? '会社名、作業名、場所、キャストで検索...' : `${projectSearchField === 'client_name_raw' ? '会社名' : projectSearchField === 'work_name' ? '作業名' : projectSearchField === 'location' ? '場所' : 'キャスト'}で検索...`}
+                              value={projectSearchQuery}
+                              onChange={(e) => setProjectSearchQuery(e.target.value)}
+                              style={styles.projectSearchInput}
+                            />
+                            {projectSearchQuery && (
+                              <button
+                                style={styles.searchClearButton}
+                                onClick={() => setProjectSearchQuery('')}
+                              >
+                                クリア
+                              </button>
+                            )}
+                          </div>
+                          {projectSearchQuery && (
+                            <div style={styles.searchResultCount}>
+                              {filteredProjects.length}件 / {sortedProjects.length}件
+                            </div>
+                          )}
+                        </div>
+
                         {/* Date Navigation */}
                         <div style={styles.dateNavigation}>
                           <button 
@@ -1025,7 +1105,7 @@ function AdminApp() {
                           <p style={styles.emptyMessage}>案件がありません</p>
                         ) : isMobile ? (
                           <div style={styles.mobileCardList}>
-                            {sortedProjects.map(project => (
+                            {filteredProjects.map(project => (
                               <div key={project.id} style={styles.mobileCard}>
                                 <div style={styles.mobileCardHeader}>
                                   <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
@@ -1097,7 +1177,7 @@ function AdminApp() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {sortedProjects.map(project => (
+                                  {filteredProjects.map(project => (
                                     <tr key={project.id} style={styles.tr}>
                                       <td style={styles.td}>{formatDate(project.work_date)}</td>
                                       <td style={styles.td}>{project.client_name || project.client_name_raw}</td>
@@ -2752,6 +2832,73 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: 500
+  },
+  searchContainer: {
+    marginBottom: '20px',
+    padding: '16px',
+    backgroundColor: COLORS.white,
+    borderRadius: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+  },
+  searchModeToggle: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '12px'
+  },
+  searchModeButton: {
+    backgroundColor: COLORS.lightGray,
+    color: COLORS.text,
+    border: `1px solid ${COLORS.gray}`,
+    padding: '8px 16px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500
+  },
+  searchModeButtonActive: {
+    backgroundColor: COLORS.primary,
+    color: COLORS.white,
+    border: `1px solid ${COLORS.primary}`,
+    padding: '8px 16px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500
+  },
+  searchInputRow: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center'
+  },
+  searchFieldSelect: {
+    padding: '10px 12px',
+    fontSize: '14px',
+    border: `1px solid ${COLORS.gray}`,
+    borderRadius: '6px',
+    backgroundColor: COLORS.white,
+    cursor: 'pointer',
+    minWidth: '120px'
+  },
+  projectSearchInput: {
+    flex: 1,
+    padding: '10px 12px',
+    fontSize: '14px',
+    border: `1px solid ${COLORS.gray}`,
+    borderRadius: '6px'
+  },
+  searchClearButton: {
+    backgroundColor: COLORS.lightGray,
+    color: COLORS.text,
+    border: `1px solid ${COLORS.gray}`,
+    padding: '10px 16px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px'
+  },
+  searchResultCount: {
+    marginTop: '8px',
+    fontSize: '14px',
+    color: COLORS.darkGray
   }
 }
 
