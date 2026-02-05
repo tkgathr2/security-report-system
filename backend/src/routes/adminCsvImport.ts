@@ -242,9 +242,14 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   const buffer = req.file.buffer;
   const originalFileName = req.file.originalname;
   
+  console.log('[CSV Import] File received:', originalFileName, 'Size:', buffer.length);
+  console.log('[CSV Import] First 50 bytes:', Array.from(buffer.slice(0, 50)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+  
   const detectedEncoding = detectEncoding(buffer);
+  console.log('[CSV Import] Detected encoding:', detectedEncoding);
   
   const csvText = convertToUtf8(buffer);
+  console.log('[CSV Import] CSV text (first 200 chars):', csvText.substring(0, 200));
 
   let records: CsvRow[];
   try {
@@ -273,9 +278,19 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
 
   const firstRow = records[0];
   const headers = Object.keys(firstRow);
+  console.log('[CSV Import] Parsed headers:', headers);
+  console.log('[CSV Import] First row:', firstRow);
+  
   const formatInfo = detectCsvFormat(headers);
+  console.log('[CSV Import] Format info:', formatInfo);
   
   if (!formatInfo) {
+    console.log('[CSV Import] Header matching failed. Testing individual matches:');
+    console.log('[CSV Import] 案件名 match:', findHeaderMatch(headers, '案件名'));
+    console.log('[CSV Import] クライアント名 match:', findHeaderMatch(headers, 'クライアント名'));
+    console.log('[CSV Import] 実施場所 match:', findHeaderMatch(headers, '実施場所'));
+    console.log('[CSV Import] 実施日 match:', findHeaderMatch(headers, '実施日'));
+    
     res.status(400).json({
       error: 'CSV_HEADER_MISMATCH',
       message: '必須ヘッダーが不足しています。案件名、クライアント名、実施場所、実施日が必要です。',
