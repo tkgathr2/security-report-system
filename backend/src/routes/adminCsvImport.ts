@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
-import iconv from 'iconv-lite';
 import Encoding from 'encoding-japanese';
 import crypto from 'crypto';
 import pool from '../db/pool';
@@ -128,48 +127,6 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
   return null;
 }
 
-function detectEncoding(buffer: Buffer): string {
-  if (buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
-    return 'utf8_bom';
-  }
-  
-  const uint8Array = new Uint8Array(buffer);
-  const detected = Encoding.detect(uint8Array);
-  
-  if (detected === 'UTF8') {
-    return 'utf8';
-  } else if (detected === 'SJIS' || detected === 'EUCJP') {
-    return 'cp932';
-  } else if (detected === 'UNICODE') {
-    return 'utf16';
-  } else if (detected === 'ASCII') {
-    return 'utf8';
-  }
-  
-  try {
-    const utf8Text = buffer.toString('utf8');
-    if (!utf8Text.includes('\ufffd')) {
-      const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(utf8Text);
-      if (hasJapanese || /^[\x00-\x7F]*$/.test(utf8Text)) {
-        return 'utf8';
-      }
-    }
-  } catch (e) {
-    // Not UTF-8
-  }
-  
-  try {
-    const cp932Text = iconv.decode(buffer, 'cp932');
-    if (!cp932Text.includes('\ufffd')) {
-      return 'cp932';
-    }
-  } catch (e) {
-    // Not CP932
-  }
-  
-  return 'cp932';
-}
-
 function convertToUtf8(buffer: Buffer): string {
   const uint8Array = new Uint8Array(buffer);
   const detected = Encoding.detect(uint8Array);
@@ -251,15 +208,8 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
 
   const buffer = req.file.buffer;
   const originalFileName = req.file.originalname;
-  
-  console.log('[CSV Import] File received:', originalFileName, 'Size:', buffer.length);
-  console.log('[CSV Import] First 50 bytes:', Array.from(buffer.slice(0, 50)).map(b => b.toString(16).padStart(2, '0')).join(' '));
-  
-  const detectedEncoding = detectEncoding(buffer);
-  console.log('[CSV Import] Detected encoding:', detectedEncoding);
-  
+  const detectedEncoding = Encoding.detect(new Uint8Array(buffer)) || 'unknown';
   const csvText = convertToUtf8(buffer);
-  console.log('[CSV Import] CSV text (first 200 chars):', csvText.substring(0, 200));
 
   let records: CsvRow[];
   try {
@@ -288,19 +238,9 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
 
   const firstRow = records[0];
   const headers = Object.keys(firstRow);
-  console.log('[CSV Import] Parsed headers:', headers);
-  console.log('[CSV Import] First row:', firstRow);
-  
   const formatInfo = detectCsvFormat(headers);
-  console.log('[CSV Import] Format info:', formatInfo);
   
   if (!formatInfo) {
-    console.log('[CSV Import] Header matching failed. Testing individual matches:');
-    console.log('[CSV Import] 案件名 match:', findHeaderMatch(headers, '案件名'));
-    console.log('[CSV Import] クライアント名 match:', findHeaderMatch(headers, 'クライアント名'));
-    console.log('[CSV Import] 実施場所 match:', findHeaderMatch(headers, '実施場所'));
-    console.log('[CSV Import] 実施日 match:', findHeaderMatch(headers, '実施日'));
-    
     res.status(400).json({
       error: 'CSV_HEADER_MISMATCH',
       message: '必須ヘッダーが不足しています。案件名、クライアント名、実施場所、実施日が必要です。',
