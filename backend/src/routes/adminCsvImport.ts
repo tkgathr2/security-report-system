@@ -241,12 +241,20 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   const formatInfo = detectCsvFormat(headers);
   
   if (!formatInfo) {
+    const missingHeaders: string[] = [];
+    const requiredHeaders = ['案件名', 'クライアント名', '実施場所', '実施日', '氏名'];
+    for (const required of requiredHeaders) {
+      if (!findHeaderMatch(headers, required)) {
+        missingHeaders.push(required);
+      }
+    }
     res.status(400).json({
-      error: 'CSV_HEADER_MISMATCH',
-      message: '必須ヘッダーが不足しています。案件名、クライアント名、実施場所、実施日が必要です。',
+      error: 'CSV_FORMAT_INVALID',
+      message: 'ファイルが指定された形式と違います。',
       details: { 
+        missing_headers: missingHeaders,
         found_headers: headers.slice(0, 20),
-        required: JOB_EXPORT_HEADERS
+        required: requiredHeaders
       }
     });
     return;
@@ -273,13 +281,25 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     const location = row[mapping.location]?.trim();
     const workDateStr = row[mapping.workDate]?.trim();
 
-    if (!projectName || !clientNameRaw || !location || !workDateStr) {
-      errors.push({ row: rowNum, reason: '必須列（案件名、クライアント名、実施場所、実施日）が空です' });
+    const emptyFields: string[] = [];
+    if (!projectName) emptyFields.push('案件名');
+    if (!clientNameRaw) emptyFields.push('クライアント名');
+    if (!location) emptyFields.push('実施場所');
+    if (!workDateStr) emptyFields.push('実施日');
+    
+    if (emptyFields.length > 0) {
+      errors.push({ row: rowNum, reason: `以下の項目が空です: ${emptyFields.join(', ')}` });
       skippedRowsCount++;
       continue;
     }
 
-    const workDates = workDateStr.includes('・') ? workDateStr.split('・') : [workDateStr];
+    // At this point, all required fields are guaranteed to be non-empty strings
+    const validProjectName = projectName as string;
+    const validClientNameRaw = clientNameRaw as string;
+    const validLocation = location as string;
+    const validWorkDateStr = workDateStr as string;
+
+    const workDates = validWorkDateStr.includes('・') ? validWorkDateStr.split('・') : [validWorkDateStr];
     
     for (const singleDateStr of workDates) {
       const trimmedDate = singleDateStr.trim();
@@ -294,25 +314,34 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
 
       const projectKey = generateProjectKey(
         workDate.toISOString().split('T')[0],
-        projectName,
-        location,
-        clientNameRaw
+        validProjectName,
+        validLocation,
+        validClientNameRaw
       );
 
-      if (!processedWorkDates.has(projectName)) {
-        processedWorkDates.set(projectName, new Set());
+      if (!processedWorkDates.has(validProjectName)) {
+        processedWorkDates.set(validProjectName, new Set());
       }
       const dateKey = workDate.toISOString().split('T')[0];
-      if (processedWorkDates.get(projectName)!.has(dateKey)) {
+      if (processedWorkDates.get(validProjectName)!.has(dateKey)) {
         continue;
       }
-      processedWorkDates.get(projectName)!.add(dateKey);
+      processedWorkDates.get(validProjectName)!.add(dateKey);
 
-      const workName = (mapping.workContent && row[mapping.workContent]?.trim()) || projectName;
+      const workName = (mapping.workContent && row[mapping.workContent]?.trim()) || validProjectName;
       const startTime = (mapping.startTime && row[mapping.startTime]?.trim()) || null;
       const endTime = (mapping.endTime && row[mapping.endTime]?.trim()) || null;
       const breakTime = (mapping.breakTime && row[mapping.breakTime]?.trim()) || null;
-      const qualifierHint = extractQualifierHint(projectName);
+      const qualifierHint = extractQualifierHint(validProjectName);
+
+      // Check required time fields
+      const timeEmptyFields: string[] = [];
+      if (!startTime) timeEmptyFields.push('開始時間');
+      if (!endTime) timeEmptyFields.push('終了時間');
+      
+      if (timeEmptyFields.length > 0) {
+        errors.push({ row: rowNum, reason: `以下の項目が空です: ${timeEmptyFields.join(', ')}` });
+      }
 
       try {
         if (!projectMap.has(projectKey)) {
@@ -330,7 +359,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
             projectMap.set(projectKey, { projectId: existingProject.rows[0].id, casts: castSet });
             existingProjectsCount++;
           } else {
-            const clientNameNormalized = normalizeClientName(clientNameRaw);
+            const clientNameNormalized = normalizeClientName(validClientNameRaw);
             const clientResult = await pool.query(
               'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true',
               [clientNameNormalized]
@@ -356,8 +385,8 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
               RETURNING id`,
               [
-                projectKey, clientId, clientNameRaw, workDate, workName, location,
-                startTime, endTime, breakTime, projectName, qualifierHint,
+                projectKey, clientId, validClientNameRaw, workDate, workName, validLocation,
+                startTime, endTime, breakTime, validProjectName, qualifierHint,
                 uniqueUrl, urlExpiresAt, status
               ]
             );
@@ -370,6 +399,17 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
         if (mapping.staffName) {
           const castName = row[mapping.staffName]?.trim();
           const staffNo = mapping.staffNo ? row[mapping.staffNo]?.trim() : null;
+          const castNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
+          
+          // Check required cast fields
+          const castEmptyFields: string[] = [];
+          if (!castName) castEmptyFields.push('氏名');
+          if (!staffNo) castEmptyFields.push('スタッフNo.');
+          if (!castNameKana) castEmptyFields.push('フリガナ');
+          
+          if (castEmptyFields.length > 0) {
+            errors.push({ row: rowNum, reason: `以下の項目が空です: ${castEmptyFields.join(', ')}` });
+          }
           
           if (castName) {
             const projectInfo = projectMap.get(projectKey)!;
@@ -384,8 +424,6 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
               );
               projectInfo.casts.add(castIdentifier);
             }
-
-            const castNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
             const staffKanaKey = castNameKana || castName;
 
             if (staffKanaKey && !processedStaffKana.has(staffKanaKey)) {
@@ -417,6 +455,38 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
         skippedRowsCount++;
       }
     }
+  }
+
+  // 全行がエラーの場合、または80%以上がエラーの場合は「形式が違う」エラーを返す
+  const errorRate = skippedRowsCount / records.length;
+  if (skippedRowsCount === records.length || errorRate >= 0.8) {
+    // どの項目が空だったかを集計
+    const emptyFieldCounts: Record<string, number> = {};
+    for (const err of errors) {
+      const match = err.reason.match(/以下の項目が空です: (.+)/);
+      if (match) {
+        const fields = match[1].split(', ');
+        for (const field of fields) {
+          emptyFieldCounts[field] = (emptyFieldCounts[field] || 0) + 1;
+        }
+      }
+    }
+    
+    const emptyFieldsList = Object.entries(emptyFieldCounts)
+      .filter(([, count]) => count > records.length * 0.5)
+      .map(([field]) => field);
+    
+    res.status(400).json({
+      error: 'CSV_FORMAT_INVALID',
+      message: 'ファイルが指定された形式と違います。',
+      details: {
+        empty_fields: emptyFieldsList.length > 0 ? emptyFieldsList : ['データが不足しています'],
+        total_rows: records.length,
+        error_rows: skippedRowsCount,
+        sample_errors: errors.slice(0, 5)
+      }
+    });
+    return;
   }
 
   const importStatus = skippedRowsCount === records.length ? 'failed' :
