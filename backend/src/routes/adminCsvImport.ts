@@ -87,8 +87,13 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
   }
   
   if (JOB_EXPORT_HEADERS.every(h => headerSet.has(h))) {
+    // Check if staff info columns exist even in job_export format
+    const staffNameHeader = findHeaderMatch(headers, '氏名');
+    const staffNoHeader = findHeaderMatch(headers, 'スタッフNo.');
+    const hasStaffInfo = staffNameHeader !== null;
+    
     return {
-      format: 'job_export',
+      format: hasStaffInfo ? 'staff_assignment' : 'job_export',
       mapping: {
         projectName: '案件名',
         clientName: 'クライアント名',
@@ -97,7 +102,9 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
         workContent: '業務内容(2)',
         startTime: '開始時間',
         endTime: '終了時間',
-        breakTime: '休憩時間'
+        breakTime: '休憩時間',
+        staffNo: staffNoHeader || undefined,
+        staffName: staffNameHeader || undefined
       }
     };
   }

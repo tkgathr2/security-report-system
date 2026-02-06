@@ -581,4 +581,51 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
   }
 });
 
+// Delete projects without casts
+router.delete('/projects/without-casts', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    // First, get the count of projects without casts
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as count FROM projects p
+       WHERE NOT EXISTS (
+         SELECT 1 FROM project_casts pc WHERE pc.project_id = p.id
+       )`
+    );
+    const countToDelete = parseInt(countResult.rows[0].count, 10);
+
+    if (countToDelete === 0) {
+      res.json({ deleted: 0, message: 'キャストがいない案件はありません' });
+      return;
+    }
+
+    // Delete projects without casts (cascade will handle related records)
+    const deleteResult = await pool.query(
+      `DELETE FROM projects p
+       WHERE NOT EXISTS (
+         SELECT 1 FROM project_casts pc WHERE pc.project_id = p.id
+       )
+       RETURNING id`
+    );
+
+    const deletedCount = deleteResult.rowCount || 0;
+
+    // Log the action
+    const adminUser = req.user as { email: string };
+    await pool.query(
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, payload_json)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        adminUser.email,
+        'delete_projects_without_casts',
+        'projects',
+        JSON.stringify({ deleted_count: deletedCount })
+      ]
+    );
+
+    res.json({ deleted: deletedCount, message: `${deletedCount}件の案件を削除しました` });
+  } catch (error) {
+    handleDbError(res, error, 'Delete projects without casts');
+  }
+});
+
 export default router;
