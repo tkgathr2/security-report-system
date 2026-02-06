@@ -24,12 +24,22 @@ router.get('/me', (req: Request, res: Response) => {
 
 router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { date } = req.query;
+    const { date, start_date, end_date } = req.query;
     
     let query: string;
     let params: string[];
     
-    if (date && typeof date === 'string') {
+    if (start_date && end_date && typeof start_date === 'string' && typeof end_date === 'string') {
+      // Date range query for infinite scroll
+      query = `SELECT p.id, p.project_key, p.client_name_raw, p.work_date, p.work_name, 
+              p.location, p.status, p.unique_url, p.url_expires_at, p.created_at,
+              c.name as client_name
+       FROM projects p
+       LEFT JOIN clients c ON p.client_id = c.id
+       WHERE p.work_date >= $1 AND p.work_date <= $2
+       ORDER BY p.work_date ASC, p.created_at DESC`;
+      params = [start_date, end_date];
+    } else if (date && typeof date === 'string') {
       query = `SELECT p.id, p.project_key, p.client_name_raw, p.work_date, p.work_name, 
               p.location, p.status, p.unique_url, p.url_expires_at, p.created_at,
               c.name as client_name
