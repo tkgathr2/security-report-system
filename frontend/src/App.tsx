@@ -578,6 +578,13 @@ function AdminApp() {
       })
       const data = await response.json()
       if (!response.ok) {
+        // 形式エラーの場合、詳細情報を含めたエラーメッセージを表示
+        if (data.error === 'CSV_FORMAT_INVALID' && data.details) {
+          const emptyFields = data.details.empty_fields || data.details.missing_headers || []
+          if (emptyFields.length > 0) {
+            throw new Error(`${data.message} 以下の項目が入っていません: ${emptyFields.join(', ')}`)
+          }
+        }
         throw new Error(data.message || 'インポートに失敗しました')
       }
       setImportResult(data)
