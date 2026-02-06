@@ -334,6 +334,15 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
       const breakTime = (mapping.breakTime && row[mapping.breakTime]?.trim()) || null;
       const qualifierHint = extractQualifierHint(validProjectName);
 
+      // Check required time fields
+      const timeEmptyFields: string[] = [];
+      if (!startTime) timeEmptyFields.push('開始時間');
+      if (!endTime) timeEmptyFields.push('終了時間');
+      
+      if (timeEmptyFields.length > 0) {
+        errors.push({ row: rowNum, reason: `以下の項目が空です: ${timeEmptyFields.join(', ')}` });
+      }
+
       try {
         if (!projectMap.has(projectKey)) {
           const existingProject = await pool.query(
@@ -390,9 +399,16 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
         if (mapping.staffName) {
           const castName = row[mapping.staffName]?.trim();
           const staffNo = mapping.staffNo ? row[mapping.staffNo]?.trim() : null;
+          const castNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
           
-          if (!castName) {
-            errors.push({ row: rowNum, reason: '氏名が空です' });
+          // Check required cast fields
+          const castEmptyFields: string[] = [];
+          if (!castName) castEmptyFields.push('氏名');
+          if (!staffNo) castEmptyFields.push('スタッフNo.');
+          if (!castNameKana) castEmptyFields.push('フリガナ');
+          
+          if (castEmptyFields.length > 0) {
+            errors.push({ row: rowNum, reason: `以下の項目が空です: ${castEmptyFields.join(', ')}` });
           }
           
           if (castName) {
@@ -408,8 +424,6 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
               );
               projectInfo.casts.add(castIdentifier);
             }
-
-            const castNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
             const staffKanaKey = castNameKana || castName;
 
             if (staffKanaKey && !processedStaffKana.has(staffKanaKey)) {
@@ -455,9 +469,6 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
         for (const field of fields) {
           emptyFieldCounts[field] = (emptyFieldCounts[field] || 0) + 1;
         }
-      }
-      if (err.reason === '氏名が空です') {
-        emptyFieldCounts['氏名'] = (emptyFieldCounts['氏名'] || 0) + 1;
       }
     }
     
