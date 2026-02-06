@@ -171,6 +171,7 @@ function AdminApp() {
                 const [projectSearchQuery, setProjectSearchQuery] = useState('')
                 const [projectSearchMode, setProjectSearchMode] = useState<'all' | 'field'>('all')
                 const [projectSearchField, setProjectSearchField] = useState<'client_name_raw' | 'work_name' | 'location' | 'casts'>('client_name_raw')
+                const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
 
           useEffect(() => {
       checkAuth()
@@ -1140,8 +1141,13 @@ function AdminApp() {
                                   {project.casts && project.casts.length > 0 && (
                                     <div style={styles.mobileCardRow}>
                                       <span style={styles.mobileCardLabel}>キャスト</span>
-                                      <span style={styles.mobileCardValue}>
-                                        {project.casts.map(c => c.cast_name).join('、')}
+                                      <span 
+                                        style={{...styles.mobileCardValue, cursor: 'pointer', color: COLORS.primary, textDecoration: 'underline'}}
+                                        onClick={() => setCastsModalProject(project)}
+                                      >
+                                        {project.casts.length === 1 
+                                          ? project.casts[0].cast_name
+                                          : `${project.casts[0].cast_name} 他${project.casts.length - 1}人`}
                                       </span>
                                     </div>
                                   )}
@@ -1192,7 +1198,16 @@ function AdminApp() {
                                       <td style={styles.td}>{project.location}</td>
                                       <td style={styles.td}>
                                         {project.casts && project.casts.length > 0 
-                                          ? project.casts.map(c => c.cast_name).join('、')
+                                          ? (
+                                            <span 
+                                              style={{ cursor: 'pointer', color: COLORS.primary, textDecoration: 'underline' }}
+                                              onClick={() => setCastsModalProject(project)}
+                                            >
+                                              {project.casts.length === 1 
+                                                ? project.casts[0].cast_name
+                                                : `${project.casts[0].cast_name} 他${project.casts.length - 1}人`}
+                                            </span>
+                                          )
                                           : '-'}
                                       </td>
                                       <td style={styles.td}>
@@ -1975,6 +1990,46 @@ function AdminApp() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Casts List Modal */}
+              {castsModalProject && (
+                <div style={styles.modalOverlay} onClick={() => setCastsModalProject(null)}>
+                  <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+                    <h3 style={styles.modalTitle}>キャスト一覧</h3>
+                    <p style={{ marginBottom: '16px', color: COLORS.darkGray }}>
+                      {castsModalProject.work_name} - {formatDate(castsModalProject.work_date)}
+                    </p>
+                    <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                      <table style={styles.table}>
+                        <thead>
+                          <tr>
+                            <th style={styles.th}>No.</th>
+                            <th style={styles.th}>氏名</th>
+                            <th style={styles.th}>スタッフNo.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {castsModalProject.casts?.map((cast, index) => (
+                            <tr key={index} style={styles.tr}>
+                              <td style={styles.td}>{index + 1}</td>
+                              <td style={styles.td}>{cast.cast_name}</td>
+                              <td style={styles.td}>{cast.staff_no || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={styles.modalActions}>
+                      <button 
+                        style={styles.primaryButton}
+                        onClick={() => setCastsModalProject(null)}
+                      >
+                        閉じる
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
