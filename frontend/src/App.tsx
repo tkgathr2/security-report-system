@@ -172,15 +172,18 @@ function AdminApp() {
                 const [projectSearchField, setProjectSearchField] = useState<'client_name_raw' | 'work_name' | 'location' | 'casts'>('client_name_raw')
                 const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
                 
-                // Infinite scroll state for projects
+                // Date header design variant (1-5)
+                const [dateHeaderDesign, setDateHeaderDesign] = useState<number>(1)
+                
+                // Infinite scroll state for projects (1 month before and after)
                 const [dateRangeStart, setDateRangeStart] = useState<string>(() => {
                   const d = new Date()
-                  d.setDate(d.getDate() - 7)
+                  d.setMonth(d.getMonth() - 1)
                   return d.toISOString().split('T')[0]
                 })
                 const [dateRangeEnd, setDateRangeEnd] = useState<string>(() => {
                   const d = new Date()
-                  d.setDate(d.getDate() + 7)
+                  d.setMonth(d.getMonth() + 1)
                   return d.toISOString().split('T')[0]
                 })
                 const [loadingMore, setLoadingMore] = useState(false)
@@ -785,31 +788,259 @@ function AdminApp() {
   // Get today's date for highlighting
   const todayStr = new Date().toISOString().split('T')[0]
   
-  // Format date with day of week
-  const formatDateWithDay = (dateStr: string) => {
-    const date = new Date(dateStr)
+  // Parse date parts for custom formatting
+  const parseDateParts = (dateStr: string) => {
+    const datePart = dateStr.split('T')[0]
+    const [year, month, day] = datePart.split('-')
+    const date = new Date(datePart + 'T12:00:00')
     const days = ['日', '月', '火', '水', '木', '金', '土']
     const dayOfWeek = days[date.getDay()]
-    const isToday = dateStr === todayStr
-    return `${dateStr.replace(/-/g, '/')} (${dayOfWeek})${isToday ? ' - 今日' : ''}`
+    const isToday = datePart === todayStr
+    const isWeekend = date.getDay() === 0 || date.getDay() === 6
+    return { year, month, day, dayOfWeek, isToday, isWeekend, datePart }
+  }
+  
+  // Render date header based on design variant
+  const renderDateHeader = (dateStr: string, count: number) => {
+    const { year, month, day, dayOfWeek, isToday, isWeekend } = parseDateParts(dateStr)
+    
+    // Design 1: カレンダー風 - 大きな日付と小さな月年
+    if (dateHeaderDesign === 1) {
+      return (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '12px 16px',
+          backgroundColor: isToday ? COLORS.primary : (isWeekend ? '#fff5f5' : '#f8f9fa'),
+          color: isToday ? 'white' : (isWeekend ? '#e53e3e' : COLORS.darkGray),
+          borderRadius: '8px 8px 0 0',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          gap: '16px'
+        }}>
+          <div style={{
+            fontSize: '32px',
+            fontWeight: 'bold',
+            lineHeight: 1,
+            minWidth: '50px',
+            textAlign: 'center'
+          }}>
+            {day}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '14px', opacity: 0.8 }}>{year}年{parseInt(month)}月</div>
+            <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{dayOfWeek}曜日{isToday ? ' (今日)' : ''}</div>
+          </div>
+          <div style={{
+            backgroundColor: isToday ? 'rgba(255,255,255,0.2)' : COLORS.primary,
+            color: 'white',
+            padding: '4px 12px',
+            borderRadius: '16px',
+            fontSize: '14px',
+            fontWeight: 'bold'
+          }}>
+            {count}件
+          </div>
+        </div>
+      )
+    }
+    
+    // Design 2: タイムライン風 - 左側に縦線
+    if (dateHeaderDesign === 2) {
+      return (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '12px 16px',
+          backgroundColor: isToday ? '#eef6ff' : '#ffffff',
+          borderLeft: `4px solid ${isToday ? COLORS.primary : (isWeekend ? '#e53e3e' : '#cbd5e0')}`,
+          position: 'sticky',
+          top: 0,
+          zIndex: 10
+        }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            backgroundColor: isToday ? COLORS.primary : (isWeekend ? '#fed7d7' : '#e2e8f0'),
+            color: isToday ? 'white' : (isWeekend ? '#e53e3e' : COLORS.darkGray),
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 'bold',
+            fontSize: '18px',
+            marginRight: '16px'
+          }}>
+            {day}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 'bold', color: isToday ? COLORS.primary : COLORS.darkGray }}>
+              {year}/{month}/{day} ({dayOfWeek})
+              {isToday && <span style={{ marginLeft: '8px', color: COLORS.primary }}>今日</span>}
+            </div>
+          </div>
+          <div style={{
+            backgroundColor: '#f0f0f0',
+            padding: '6px 14px',
+            borderRadius: '4px',
+            fontSize: '14px',
+            color: COLORS.darkGray
+          }}>
+            {count}件
+          </div>
+        </div>
+      )
+    }
+    
+    // Design 3: バッジ風 - コンパクトで情報密度高め
+    if (dateHeaderDesign === 3) {
+      return (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '10px 16px',
+          backgroundColor: isToday ? COLORS.primary : '#f7fafc',
+          color: isToday ? 'white' : COLORS.darkGray,
+          borderRadius: '8px 8px 0 0',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          gap: '8px'
+        }}>
+          <span style={{
+            backgroundColor: isToday ? 'rgba(255,255,255,0.2)' : (isWeekend ? '#fed7d7' : '#e2e8f0'),
+            color: isToday ? 'white' : (isWeekend ? '#e53e3e' : COLORS.darkGray),
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontWeight: 'bold',
+            fontSize: '12px'
+          }}>
+            {dayOfWeek}
+          </span>
+          <span style={{ fontWeight: 'bold', fontSize: '16px' }}>
+            {parseInt(month)}/{parseInt(day)}
+          </span>
+          <span style={{ fontSize: '12px', opacity: 0.7 }}>
+            ({year})
+          </span>
+          {isToday && (
+            <span style={{
+              backgroundColor: isToday ? 'rgba(255,255,255,0.3)' : COLORS.success,
+              color: 'white',
+              padding: '2px 8px',
+              borderRadius: '10px',
+              fontSize: '11px'
+            }}>
+              TODAY
+            </span>
+          )}
+          <span style={{ marginLeft: 'auto', fontWeight: 'bold' }}>
+            {count}件
+          </span>
+        </div>
+      )
+    }
+    
+    // Design 4: グラデーション風 - モダンなデザイン
+    if (dateHeaderDesign === 4) {
+      return (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 20px',
+          background: isToday 
+            ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+            : (isWeekend ? 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'),
+          opacity: isToday ? 1 : 0.7,
+          color: 'white',
+          borderRadius: '8px 8px 0 0',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10
+        }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontSize: '24px', fontWeight: 'bold' }}>{parseInt(month)}/{parseInt(day)}</span>
+            <span style={{ fontSize: '14px', opacity: 0.9 }}>({dayOfWeek})</span>
+            {isToday && <span style={{ fontSize: '12px', backgroundColor: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '10px' }}>今日</span>}
+          </div>
+          <div style={{
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            padding: '6px 16px',
+            borderRadius: '20px',
+            fontWeight: 'bold'
+          }}>
+            {count}件
+          </div>
+        </div>
+      )
+    }
+    
+    // Design 5: シンプル下線風 - ミニマルデザイン
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '12px 0',
+        borderBottom: `2px solid ${isToday ? COLORS.primary : '#e2e8f0'}`,
+        marginBottom: '8px',
+        position: 'sticky',
+        top: 0,
+        zIndex: 10,
+        backgroundColor: 'white'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{
+            color: isToday ? COLORS.primary : (isWeekend ? '#e53e3e' : COLORS.darkGray),
+            fontWeight: 'bold',
+            fontSize: '18px'
+          }}>
+            {parseInt(month)}/{parseInt(day)}
+          </span>
+          <span style={{
+            color: isWeekend ? '#e53e3e' : '#718096',
+            fontSize: '14px'
+          }}>
+            {dayOfWeek}曜日
+          </span>
+          {isToday && (
+            <span style={{
+              color: COLORS.primary,
+              fontSize: '12px',
+              fontWeight: 'bold'
+            }}>
+              今日
+            </span>
+          )}
+        </div>
+        <span style={{
+          color: '#718096',
+          fontSize: '14px'
+        }}>
+          {count}件
+        </span>
+      </div>
+    )
   }
 
-  // Load more past projects (scroll up)
+  // Load more past projects (scroll up) - 1 month at a time
   const loadMorePastProjects = useCallback(async () => {
     if (loadingMore) return
     const newStart = new Date(dateRangeStart)
-    newStart.setDate(newStart.getDate() - 7)
+    newStart.setMonth(newStart.getMonth() - 1)
     const newStartStr = newStart.toISOString().split('T')[0]
     const oldStartStr = dateRangeStart
     setDateRangeStart(newStartStr)
     await fetchProjects(newStartStr, oldStartStr, 'before')
   }, [dateRangeStart, loadingMore])
 
-  // Load more future projects (scroll down)
+  // Load more future projects (scroll down) - 1 month at a time
   const loadMoreFutureProjects = useCallback(async () => {
     if (loadingMore) return
     const newEnd = new Date(dateRangeEnd)
-    newEnd.setDate(newEnd.getDate() + 7)
+    newEnd.setMonth(newEnd.getMonth() + 1)
     const newEndStr = newEnd.toISOString().split('T')[0]
     const oldEndStr = dateRangeEnd
     setDateRangeEnd(newEndStr)
@@ -1186,9 +1417,30 @@ function AdminApp() {
                         </div>
 
                         {/* Date info and loading indicator */}
-                        <div style={{ marginBottom: '16px', color: COLORS.darkGray, fontSize: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>スクロールで前後の日付を表示 ({sortedDates.length > 0 ? `${sortedDates[0]} 〜 ${sortedDates[sortedDates.length - 1]}` : '-'})</span>
-                          {loadingMore && <span style={{ color: COLORS.primary }}>読み込み中...</span>}
+                        <div style={{ marginBottom: '16px', color: COLORS.darkGray, fontSize: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <span>スクロールで前後の日付を表示 ({sortedDates.length > 0 ? `${sortedDates[0].split('T')[0].replace(/-/g, '/')} 〜 ${sortedDates[sortedDates.length - 1].split('T')[0].replace(/-/g, '/')}` : '-'})</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '12px' }}>デザイン:</span>
+                            {[1, 2, 3, 4, 5].map(n => (
+                              <button
+                                key={n}
+                                onClick={() => setDateHeaderDesign(n)}
+                                style={{
+                                  padding: '4px 10px',
+                                  border: dateHeaderDesign === n ? `2px solid ${COLORS.primary}` : '1px solid #ccc',
+                                  borderRadius: '4px',
+                                  backgroundColor: dateHeaderDesign === n ? COLORS.primary : 'white',
+                                  color: dateHeaderDesign === n ? 'white' : COLORS.darkGray,
+                                  cursor: 'pointer',
+                                  fontSize: '12px',
+                                  fontWeight: dateHeaderDesign === n ? 'bold' : 'normal'
+                                }}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                            {loadingMore && <span style={{ color: COLORS.primary, marginLeft: '8px' }}>読み込み中...</span>}
+                          </div>
                         </div>
 
                         {loading ? (
@@ -1203,19 +1455,7 @@ function AdminApp() {
                           >
                             {sortedDates.map(date => (
                               <div key={date} id={`date-${date}`}>
-                                <div style={{
-                                  padding: '12px 16px',
-                                  backgroundColor: date === todayStr ? COLORS.primary : COLORS.lightGray,
-                                  color: date === todayStr ? 'white' : COLORS.darkGray,
-                                  fontWeight: 'bold',
-                                  borderRadius: '8px',
-                                  marginBottom: '8px',
-                                  position: 'sticky',
-                                  top: 0,
-                                  zIndex: 10
-                                }}>
-                                  {formatDateWithDay(date)} ({projectsByDate[date].length}件)
-                                </div>
+                                {renderDateHeader(date, projectsByDate[date].length)}
                                 {projectsByDate[date].map(project => (
                               <div key={project.id} style={styles.mobileCard}>
                                 <div style={styles.mobileCardHeader}>
@@ -1285,18 +1525,7 @@ function AdminApp() {
                           >
                             {sortedDates.map(date => (
                               <div key={date} id={`date-${date}`} style={{ marginBottom: '24px' }}>
-                                <div style={{
-                                  padding: '12px 16px',
-                                  backgroundColor: date === todayStr ? COLORS.primary : COLORS.lightGray,
-                                  color: date === todayStr ? 'white' : COLORS.darkGray,
-                                  fontWeight: 'bold',
-                                  borderRadius: '8px 8px 0 0',
-                                  position: 'sticky',
-                                  top: 0,
-                                  zIndex: 10
-                                }}>
-                                  {formatDateWithDay(date)} ({projectsByDate[date].length}件)
-                                </div>
+                                {renderDateHeader(date, projectsByDate[date].length)}
                                 <div style={styles.card}>
                                   <div style={styles.tableContainer}>
                                     <table style={styles.table}>
