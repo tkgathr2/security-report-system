@@ -154,7 +154,6 @@ function AdminApp() {
   const [isDragging, setIsDragging] = useState(false)
     const [sortColumn, setSortColumn] = useState<keyof Project | null>(null)
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
     const [importHistory, setImportHistory] = useState<CsvImportHistory[]>([])
     const [selectedImport, setSelectedImport] = useState<CsvImportHistory | null>(null)
     const [importedProjects, setImportedProjects] = useState<Project[]>([])
@@ -249,12 +248,21 @@ function AdminApp() {
     }
   }
 
-    const fetchProjects = async (date?: string) => {
+    const fetchProjects = async (startDate?: string, endDate?: string) => {
       setLoading(true)
       setError(null)
       try {
-        const dateParam = date || selectedDate
-        const response = await fetch(`/api/admin/projects?date=${dateParam}`, {
+        // Fetch 7 days of data centered around today (3 days before, today, 3 days after)
+        const today = new Date()
+        const start = new Date(today)
+        start.setDate(start.getDate() - 3)
+        const end = new Date(today)
+        end.setDate(end.getDate() + 3)
+        
+        const startParam = startDate || start.toISOString().split('T')[0]
+        const endParam = endDate || end.toISOString().split('T')[0]
+        
+        const response = await fetch(`/api/admin/projects?start_date=${startParam}&end_date=${endParam}`, {
           credentials: 'include'
         })
         if (!response.ok) throw new Error('Failed to fetch projects')
@@ -267,30 +275,7 @@ function AdminApp() {
       }
     }
 
-    const handleDateChange = (direction: 'prev' | 'next') => {
-      const current = new Date(selectedDate)
-      if (direction === 'prev') {
-        current.setDate(current.getDate() - 1)
-      } else {
-        current.setDate(current.getDate() + 1)
-      }
-      const newDate = current.toISOString().split('T')[0]
-      setSelectedDate(newDate)
-      fetchProjects(newDate)
-    }
-
-    const handleDateSelect = (date: string) => {
-      setSelectedDate(date)
-      fetchProjects(date)
-    }
-
-    const goToToday = () => {
-      const today = new Date().toISOString().split('T')[0]
-      setSelectedDate(today)
-      fetchProjects(today)
-    }
-
-  const fetchReports = async () => {
+  const fetchReports= async () => {
     setLoading(true)
     setError(null)
     try {
@@ -471,7 +456,28 @@ function AdminApp() {
           }
         }
 
-          const handleCreateStaff = async () => {
+        const handleDeleteProjectsWithoutCasts = async () => {
+          if (!confirm('キャストがいない案件をすべて削除しますか？この操作は取り消せません。')) return
+          setError(null)
+          try {
+            const response = await fetch('/api/admin/projects/without-casts', {
+              method: 'DELETE',
+              credentials: 'include'
+            })
+            if (!response.ok) {
+              const data = await response.json()
+              throw new Error(data.message || '削除に失敗しました')
+            }
+            const data = await response.json()
+            alert(data.message)
+            fetchProjects()
+            fetchDashboardStats()
+          } catch (err) {
+            setError(err instanceof Error ? err.message : '削除に失敗しました')
+          }
+        }
+
+          const handleCreateStaff= async () => {
       if (!newStaff.display_name_kanji.trim() || !newStaff.display_name_kana.trim()) {
         setError('氏名（漢字）と氏名（カナ）を入力してください')
         return
@@ -738,6 +744,31 @@ function AdminApp() {
     return true
   })
 
+  // Group projects by date
+  const projectsByDate = filteredProjects.reduce((acc, project) => {
+    const date = project.work_date
+    if (!acc[date]) {
+      acc[date] = []
+    }
+    acc[date].push(project)
+    return acc
+  }, {} as Record<string, Project[]>)
+
+  // Get sorted dates (ascending order)
+  const sortedDates = Object.keys(projectsByDate).sort()
+  
+  // Get today's date for highlighting
+  const todayStr = new Date().toISOString().split('T')[0]
+  
+  // Format date with day of week
+  const formatDateWithDay = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const days = ['日', '月', '火', '水', '木', '金', '土']
+    const dayOfWeek = days[date.getDay()]
+    const isToday = dateStr === todayStr
+    return `${dateStr.replace(/-/g, '/')} (${dayOfWeek})${isToday ? ' - 今日' : ''}`
+  }
+
   if (loading && !admin) {
     return (
       <div style={styles.loadingContainer}>
@@ -947,6 +978,10 @@ function AdminApp() {
                     <span style={styles.actionIcon}>&#128101;</span>
                     スタッフを管理
                   </button>
+                  <button style={{...styles.actionButton, backgroundColor: '#fff3cd', borderColor: '#ffc107'}} onClick={handleDeleteProjectsWithoutCasts}>
+                    <span style={styles.actionIcon}>&#128465;</span>
+                    キャストなし案件を削除
+                  </button>
                 </div>
               </div>
             </div>
@@ -1075,36 +1110,9 @@ function AdminApp() {
                           )}
                         </div>
 
-                        {/* Date Navigation */}
-                        <div style={styles.dateNavigation}>
-                          <button 
-                            style={styles.dateNavButton}
-                            onClick={() => handleDateChange('prev')}
-                          >
-                            &#9664; 前日
-                          </button>
-                          <div style={styles.dateDisplay}>
-                            <input
-                              type="date"
-                              value={selectedDate}
-                              onChange={(e) => handleDateSelect(e.target.value)}
-                              style={styles.dateInput}
-                            />
-                            {selectedDate !== new Date().toISOString().split('T')[0] && (
-                              <button 
-                                style={styles.todayButton}
-                                onClick={goToToday}
-                              >
-                                今日
-                              </button>
-                            )}
-                          </div>
-                          <button 
-                            style={styles.dateNavButton}
-                            onClick={() => handleDateChange('next')}
-                          >
-                            翌日 &#9654;
-                          </button>
+                        {/* Date info */}
+                        <div style={{ marginBottom: '16px', color: COLORS.darkGray, fontSize: '14px' }}>
+                          表示期間: 前後3日間 ({sortedDates.length > 0 ? `${sortedDates[0]} 〜 ${sortedDates[sortedDates.length - 1]}` : '-'})
                         </div>
 
                         {loading ? (
@@ -1113,13 +1121,27 @@ function AdminApp() {
                           <p style={styles.emptyMessage}>案件がありません</p>
                         ) : isMobile ? (
                           <div style={styles.mobileCardList}>
-                            {filteredProjects.map(project => (
+                            {sortedDates.map(date => (
+                              <div key={date} id={`date-${date}`}>
+                                <div style={{
+                                  padding: '12px 16px',
+                                  backgroundColor: date === todayStr ? COLORS.primary : COLORS.lightGray,
+                                  color: date === todayStr ? 'white' : COLORS.darkGray,
+                                  fontWeight: 'bold',
+                                  borderRadius: '8px',
+                                  marginBottom: '8px',
+                                  position: 'sticky',
+                                  top: 0,
+                                  zIndex: 10
+                                }}>
+                                  {formatDateWithDay(date)} ({projectsByDate[date].length}件)
+                                </div>
+                                {projectsByDate[date].map(project => (
                               <div key={project.id} style={styles.mobileCard}>
                                 <div style={styles.mobileCardHeader}>
                                   <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
                                     {getStatusLabel(project.status)}
                                   </span>
-                                  <span style={styles.mobileCardDate}>{formatDate(project.work_date)}</span>
                                 </div>
                                 <div style={styles.mobileCardBody}>
                                   <div style={styles.mobileCardRow}>
@@ -1171,76 +1193,92 @@ function AdminApp() {
                                   </button>
                                 </div>
                               </div>
+                                ))}
+                              </div>
                             ))}
                           </div>
                         ) : (
-                          <div style={styles.card}>
-                            <div style={styles.tableContainer}>
-                              <table style={styles.table}>
-                                <thead>
-                                  <tr>
-                                    <th style={styles.sortableTh} onClick={() => handleSort('work_date')}>実施日{getSortIndicator('work_date')}</th>
-                                    <th style={styles.sortableTh} onClick={() => handleSort('client_name_raw')}>会社名{getSortIndicator('client_name_raw')}</th>
-                                    <th style={styles.sortableTh} onClick={() => handleSort('work_name')}>作業名{getSortIndicator('work_name')}</th>
-                                    <th style={styles.sortableTh} onClick={() => handleSort('location')}>場所{getSortIndicator('location')}</th>
-                                    <th style={styles.th}>キャスト</th>
-                                    <th style={styles.sortableTh} onClick={() => handleSort('status')}>状態{getSortIndicator('status')}</th>
-                                    <th style={styles.sortableTh} onClick={() => handleSort('url_expires_at')}>URL有効期限{getSortIndicator('url_expires_at')}</th>
-                                    <th style={styles.th}>操作</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {filteredProjects.map(project => (
-                                    <tr key={project.id} style={styles.tr}>
-                                      <td style={styles.td}>{formatDate(project.work_date)}</td>
-                                      <td style={styles.td}>{project.client_name || project.client_name_raw}</td>
-                                      <td style={styles.td}>{project.work_name}</td>
-                                      <td style={styles.td}>{project.location}</td>
-                                      <td style={styles.td}>
-                                        {project.casts && project.casts.length > 0 
-                                          ? (
-                                            <span 
-                                              style={{ cursor: 'pointer', color: COLORS.primary, textDecoration: 'underline' }}
-                                              onClick={() => setCastsModalProject(project)}
-                                            >
-                                              {project.casts.length === 1 
-                                                ? project.casts[0].cast_name
-                                                : `${project.casts[0].cast_name} 他${project.casts.length - 1}人`}
-                                            </span>
-                                          )
-                                          : '-'}
-                                      </td>
-                                      <td style={styles.td}>
-                                        <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
-                                          {getStatusLabel(project.status)}
-                                        </span>
-                                      </td>
-                                      <td style={styles.td}>{formatDate(project.url_expires_at)}</td>
-                                      <td style={styles.td}>
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                          <button 
-                                            style={styles.smallButton}
-                                            onClick={() => {
-                                              const url = `${window.location.origin}/report/${project.unique_url}`
-                                              navigator.clipboard.writeText(url)
-                                              alert('URLをコピーしました')
-                                            }}
-                                          >
-                                            URLコピー
-                                          </button>
-                                          <button 
-                                            style={styles.linkButton}
-                                            onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
-                                          >
-                                            報告画面
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
+                          <div>
+                            {sortedDates.map(date => (
+                              <div key={date} id={`date-${date}`} style={{ marginBottom: '24px' }}>
+                                <div style={{
+                                  padding: '12px 16px',
+                                  backgroundColor: date === todayStr ? COLORS.primary : COLORS.lightGray,
+                                  color: date === todayStr ? 'white' : COLORS.darkGray,
+                                  fontWeight: 'bold',
+                                  borderRadius: '8px 8px 0 0',
+                                  position: 'sticky',
+                                  top: 0,
+                                  zIndex: 10
+                                }}>
+                                  {formatDateWithDay(date)} ({projectsByDate[date].length}件)
+                                </div>
+                                <div style={styles.card}>
+                                  <div style={styles.tableContainer}>
+                                    <table style={styles.table}>
+                                      <thead>
+                                        <tr>
+                                          <th style={styles.sortableTh} onClick={() => handleSort('client_name_raw')}>会社名{getSortIndicator('client_name_raw')}</th>
+                                          <th style={styles.sortableTh} onClick={() => handleSort('work_name')}>作業名{getSortIndicator('work_name')}</th>
+                                          <th style={styles.sortableTh} onClick={() => handleSort('location')}>場所{getSortIndicator('location')}</th>
+                                          <th style={styles.th}>キャスト</th>
+                                          <th style={styles.sortableTh} onClick={() => handleSort('status')}>状態{getSortIndicator('status')}</th>
+                                          <th style={styles.th}>操作</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {projectsByDate[date].map(project => (
+                                          <tr key={project.id} style={styles.tr}>
+                                            <td style={styles.td}>{project.client_name || project.client_name_raw}</td>
+                                            <td style={styles.td}>{project.work_name}</td>
+                                            <td style={styles.td}>{project.location}</td>
+                                            <td style={styles.td}>
+                                              {project.casts && project.casts.length > 0 
+                                                ? (
+                                                  <span 
+                                                    style={{ cursor: 'pointer', color: COLORS.primary, textDecoration: 'underline' }}
+                                                    onClick={() => setCastsModalProject(project)}
+                                                  >
+                                                    {project.casts.length === 1 
+                                                      ? project.casts[0].cast_name
+                                                      : `${project.casts[0].cast_name} 他${project.casts.length - 1}人`}
+                                                  </span>
+                                                )
+                                                : '-'}
+                                            </td>
+                                            <td style={styles.td}>
+                                              <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
+                                                {getStatusLabel(project.status)}
+                                              </span>
+                                            </td>
+                                            <td style={styles.td}>
+                                              <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button 
+                                                  style={styles.smallButton}
+                                                  onClick={() => {
+                                                    const url = `${window.location.origin}/report/${project.unique_url}`
+                                                    navigator.clipboard.writeText(url)
+                                                    alert('URLをコピーしました')
+                                                  }}
+                                                >
+                                                  URLコピー
+                                                </button>
+                                                <button 
+                                                  style={styles.linkButton}
+                                                  onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
+                                                >
+                                                  報告画面
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
