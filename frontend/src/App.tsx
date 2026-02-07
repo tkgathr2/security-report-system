@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 
 // Company logo URL from kotsuyudo.com
@@ -171,6 +171,20 @@ function AdminApp() {
                 const [projectSearchMode, setProjectSearchMode] = useState<'all' | 'field'>('all')
                 const [projectSearchField, setProjectSearchField] = useState<'client_name_raw' | 'work_name' | 'location' | 'casts'>('client_name_raw')
                 const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
+                
+                // Infinite scroll state for projects
+                const [dateRangeStart, setDateRangeStart] = useState<string>(() => {
+                  const d = new Date()
+                  d.setDate(d.getDate() - 7)
+                  return d.toISOString().split('T')[0]
+                })
+                const [dateRangeEnd, setDateRangeEnd] = useState<string>(() => {
+                  const d = new Date()
+                  d.setDate(d.getDate() + 7)
+                  return d.toISOString().split('T')[0]
+                })
+                const [loadingMore, setLoadingMore] = useState(false)
+                const projectsContainerRef = useRef<HTMLDivElement>(null)
 
           useEffect(() => {
       checkAuth()
@@ -248,30 +262,41 @@ function AdminApp() {
     }
   }
 
-    const fetchProjects = async (startDate?: string, endDate?: string) => {
-      setLoading(true)
+    const fetchProjects = async (startDate?: string, endDate?: string, append: 'before' | 'after' | 'replace' = 'replace') => {
+      if (append === 'replace') {
+        setLoading(true)
+      } else {
+        setLoadingMore(true)
+      }
       setError(null)
       try {
-        // Fetch 7 days of data centered around today (3 days before, today, 3 days after)
-        const today = new Date()
-        const start = new Date(today)
-        start.setDate(start.getDate() - 3)
-        const end = new Date(today)
-        end.setDate(end.getDate() + 3)
-        
-        const startParam = startDate || start.toISOString().split('T')[0]
-        const endParam = endDate || end.toISOString().split('T')[0]
+        const startParam = startDate || dateRangeStart
+        const endParam = endDate || dateRangeEnd
         
         const response = await fetch(`/api/admin/projects?start_date=${startParam}&end_date=${endParam}`, {
           credentials: 'include'
         })
         if (!response.ok) throw new Error('Failed to fetch projects')
         const data = await response.json()
-        setProjects(data.projects)
+        
+        if (append === 'before') {
+          // Add older projects, avoiding duplicates
+          const existingIds = new Set(projects.map(p => p.id))
+          const newProjects = data.projects.filter((p: Project) => !existingIds.has(p.id))
+          setProjects([...newProjects, ...projects])
+        } else if (append === 'after') {
+          // Add newer projects, avoiding duplicates
+          const existingIds = new Set(projects.map(p => p.id))
+          const newProjects = data.projects.filter((p: Project) => !existingIds.has(p.id))
+          setProjects([...projects, ...newProjects])
+        } else {
+          setProjects(data.projects)
+        }
       } catch {
         setError('案件一覧の取得に失敗しました')
       } finally {
         setLoading(false)
+        setLoadingMore(false)
       }
     }
 
@@ -769,6 +794,56 @@ function AdminApp() {
     return `${dateStr.replace(/-/g, '/')} (${dayOfWeek})${isToday ? ' - 今日' : ''}`
   }
 
+  // Load more past projects (scroll up)
+  const loadMorePastProjects = useCallback(async () => {
+    if (loadingMore) return
+    const newStart = new Date(dateRangeStart)
+    newStart.setDate(newStart.getDate() - 7)
+    const newStartStr = newStart.toISOString().split('T')[0]
+    const oldStartStr = dateRangeStart
+    setDateRangeStart(newStartStr)
+    await fetchProjects(newStartStr, oldStartStr, 'before')
+  }, [dateRangeStart, loadingMore])
+
+  // Load more future projects (scroll down)
+  const loadMoreFutureProjects = useCallback(async () => {
+    if (loadingMore) return
+    const newEnd = new Date(dateRangeEnd)
+    newEnd.setDate(newEnd.getDate() + 7)
+    const newEndStr = newEnd.toISOString().split('T')[0]
+    const oldEndStr = dateRangeEnd
+    setDateRangeEnd(newEndStr)
+    await fetchProjects(oldEndStr, newEndStr, 'after')
+  }, [dateRangeEnd, loadingMore])
+
+  // Handle scroll for infinite loading
+  const handleProjectsScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement
+    const { scrollTop, scrollHeight, clientHeight } = target
+    
+    // Load more past projects when scrolling near top
+    if (scrollTop < 100 && !loadingMore) {
+      loadMorePastProjects()
+    }
+    
+    // Load more future projects when scrolling near bottom
+    if (scrollHeight - scrollTop - clientHeight < 100 && !loadingMore) {
+      loadMoreFutureProjects()
+    }
+  }, [loadMorePastProjects, loadMoreFutureProjects, loadingMore])
+
+  // Scroll to today on initial load
+  useEffect(() => {
+    if (screen === 'projects' && sortedDates.length > 0) {
+      const todayElement = document.getElementById(`date-${todayStr}`)
+      if (todayElement) {
+        setTimeout(() => {
+          todayElement.scrollIntoView({ behavior: 'auto', block: 'start' })
+        }, 100)
+      }
+    }
+  }, [screen, sortedDates.length, todayStr])
+
   if (loading && !admin) {
     return (
       <div style={styles.loadingContainer}>
@@ -1110,9 +1185,10 @@ function AdminApp() {
                           )}
                         </div>
 
-                        {/* Date info */}
-                        <div style={{ marginBottom: '16px', color: COLORS.darkGray, fontSize: '14px' }}>
-                          表示期間: 前後3日間 ({sortedDates.length > 0 ? `${sortedDates[0]} 〜 ${sortedDates[sortedDates.length - 1]}` : '-'})
+                        {/* Date info and loading indicator */}
+                        <div style={{ marginBottom: '16px', color: COLORS.darkGray, fontSize: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>スクロールで前後の日付を表示 ({sortedDates.length > 0 ? `${sortedDates[0]} 〜 ${sortedDates[sortedDates.length - 1]}` : '-'})</span>
+                          {loadingMore && <span style={{ color: COLORS.primary }}>読み込み中...</span>}
                         </div>
 
                         {loading ? (
@@ -1120,7 +1196,11 @@ function AdminApp() {
                         ) : projects.length === 0 ? (
                           <p style={styles.emptyMessage}>案件がありません</p>
                         ) : isMobile ? (
-                          <div style={styles.mobileCardList}>
+                          <div 
+                            ref={projectsContainerRef}
+                            style={{...styles.mobileCardList, maxHeight: '70vh', overflowY: 'auto'}}
+                            onScroll={handleProjectsScroll}
+                          >
                             {sortedDates.map(date => (
                               <div key={date} id={`date-${date}`}>
                                 <div style={{
@@ -1198,7 +1278,11 @@ function AdminApp() {
                             ))}
                           </div>
                         ) : (
-                          <div>
+                          <div 
+                            ref={projectsContainerRef}
+                            style={{ maxHeight: '70vh', overflowY: 'auto' }}
+                            onScroll={handleProjectsScroll}
+                          >
                             {sortedDates.map(date => (
                               <div key={date} id={`date-${date}`} style={{ marginBottom: '24px' }}>
                                 <div style={{
