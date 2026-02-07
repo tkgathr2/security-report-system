@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import session from 'express-session';
+import connectPgSimple from 'connect-pg-simple';
 import passport from 'passport';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -30,7 +31,15 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(express.json());
 
+// PostgreSQL session store for persistent sessions
+const PgSession = connectPgSimple(session);
+
 app.use(session({
+  store: new PgSession({
+    pool: pool,
+    tableName: 'session',
+    createTableIfMissing: true
+  }),
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
@@ -38,7 +47,7 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'lax', // Required for OAuth redirects
-    maxAge: 7 * 24 * 60 * 60 * 1000
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   }
 }));
 
