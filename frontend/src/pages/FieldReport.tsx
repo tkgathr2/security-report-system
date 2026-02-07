@@ -514,12 +514,6 @@ export default function FieldReport() {
               報告書の記入者として登録するメールアドレスを入力してください。
               このメールアドレスは報告書送信時の通知先にもなります。
             </p>
-            {project && (
-              <div style={styles.emailProjectInfo}>
-                <p><strong>案件:</strong> {project.work_name}</p>
-                <p><strong>会社:</strong> {project.client_name_raw}</p>
-              </div>
-            )}
             <div style={styles.emailInputGroup}>
               <input
                 type="email"
@@ -551,12 +545,6 @@ export default function FieldReport() {
             <p style={styles.nameSelectionDesc}>
               カタカナでお名前を検索し、候補から選択してください。
             </p>
-            {project && (
-              <div style={styles.emailProjectInfo}>
-                <p><strong>案件:</strong> {project.work_name}</p>
-                <p><strong>会社:</strong> {project.client_name_raw}</p>
-              </div>
-            )}
             <div style={styles.nameSearchInputGroup}>
               <input
                 type="text"
