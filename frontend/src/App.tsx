@@ -171,6 +171,8 @@ function AdminApp() {
                 const [projectSearchMode, setProjectSearchMode] = useState<'all' | 'field'>('all')
                 const [projectSearchField, setProjectSearchField] = useState<'client_name_raw' | 'work_name' | 'location' | 'casts'>('client_name_raw')
                 const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
+                const [searchDateFrom, setSearchDateFrom] = useState<string>('')
+                const [searchDateTo, setSearchDateTo] = useState<string>('')
                 
                 // Date header design is fixed to Design 1 (Calendar style)
                 
@@ -747,6 +749,14 @@ function AdminApp() {
   })
 
   const filteredProjects = sortedProjects.filter(project => {
+    // Date range filter
+    if (searchDateFrom || searchDateTo) {
+      const projectDate = project.work_date.split('T')[0]
+      if (searchDateFrom && projectDate < searchDateFrom) return false
+      if (searchDateTo && projectDate > searchDateTo) return false
+    }
+    
+    // Text search filter
     if (!projectSearchQuery.trim()) return true
     const query = projectSearchQuery.toLowerCase()
     
@@ -1227,7 +1237,32 @@ function AdminApp() {
                               </button>
                             )}
                           </div>
-                          {projectSearchQuery && (
+                          {/* Date Range Filter */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '14px', color: COLORS.darkGray }}>期間:</span>
+                            <input
+                              type="date"
+                              value={searchDateFrom}
+                              onChange={(e) => setSearchDateFrom(e.target.value)}
+                              style={{ padding: '6px 10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '14px' }}
+                            />
+                            <span style={{ color: COLORS.darkGray }}>〜</span>
+                            <input
+                              type="date"
+                              value={searchDateTo}
+                              onChange={(e) => setSearchDateTo(e.target.value)}
+                              style={{ padding: '6px 10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '14px' }}
+                            />
+                            {(searchDateFrom || searchDateTo) && (
+                              <button
+                                style={{ padding: '6px 12px', backgroundColor: '#f0f0f0', border: '1px solid #ddd', borderRadius: '4px', cursor: 'pointer', fontSize: '14px' }}
+                                onClick={() => { setSearchDateFrom(''); setSearchDateTo(''); }}
+                              >
+                                期間クリア
+                              </button>
+                            )}
+                          </div>
+                          {(projectSearchQuery || searchDateFrom || searchDateTo) && (
                             <div style={styles.searchResultCount}>
                               {filteredProjects.length}件 / {sortedProjects.length}件
                             </div>
