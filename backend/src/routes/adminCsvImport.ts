@@ -162,6 +162,11 @@ function normalizeClientName(name: string): string {
     .trim();
 }
 
+function normalizeNameSpaces(name: string): string {
+  // Convert full-width spaces to half-width spaces
+  return name.replace(/　/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function generateProjectKey(workDate: string, projectName: string, location: string, clientName: string): string {
   const normalized = `${workDate}|${projectName}|${location}|${clientName}`;
   return crypto.createHash('sha256').update(normalized).digest('hex').substring(0, 16);
@@ -404,9 +409,11 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
         }
 
         if (mapping.staffName) {
-          const castName = row[mapping.staffName]?.trim();
+          const rawCastName = row[mapping.staffName]?.trim();
+          const castName = rawCastName ? normalizeNameSpaces(rawCastName) : undefined;
           const staffNo = mapping.staffNo ? row[mapping.staffNo]?.trim() : null;
-          const castNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
+          const rawCastNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
+          const castNameKana = rawCastNameKana ? normalizeNameSpaces(rawCastNameKana) : undefined;
           
           // Check required cast fields
           const castEmptyFields: string[] = [];
