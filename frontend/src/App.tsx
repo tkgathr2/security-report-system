@@ -434,7 +434,7 @@ function AdminApp() {
             const data = await response.json()
             setCastUsers(data.users || [])
           } catch {
-            setError('キャストユーザー一覧の取得に失敗しました')
+            setError('キャスト一覧の取得に失敗しました')
           } finally {
             setLoading(false)
           }
@@ -1021,7 +1021,7 @@ function AdminApp() {
                                         onClick={() => navigateTo('cast_users')}
                                       >
                                         <span style={styles.sidebarIcon}>&#128100;</span>
-                                        <span style={styles.sidebarText}>キャストユーザー</span>
+                                        <span style={styles.sidebarText}>キャスト</span>
                                       </button>
                                     </nav>
                 </aside>
@@ -1275,11 +1275,11 @@ function AdminApp() {
                           {loadingMore && <span style={{ color: COLORS.primary }}>読み込み中...</span>}
                         </div>
 
-                        {loading ? (
-                          <p>読み込み中...</p>
-                        ) : projects.length === 0 ? (
-                          <p style={styles.emptyMessage}>案件がありません</p>
-                        ) : isMobile ? (
+                                                {loading ? (
+                                                  <p>読み込み中...</p>
+                                                ) : projects.length === 0 && !loadingMore ? (
+                                                  <p style={styles.emptyMessage}>案件がありません</p>
+                                                ) : isMobile ? (
                           <div 
                             ref={projectsContainerRef}
                             style={{...styles.mobileCardList, maxHeight: '70vh', overflowY: 'auto'}}
@@ -2095,13 +2095,13 @@ function AdminApp() {
           {/* Cast Users Management */}
           {screen === 'cast_users' && (
             <div>
-              <h2 style={styles.pageTitle}>キャストユーザー管理</h2>
-              <p style={styles.pageDescription}>登録済みのキャストユーザー一覧です。名前を編集してCSVの氏名と紐づけできます。</p>
+                            <h2 style={styles.pageTitle}>キャスト管理</h2>
+                            <p style={styles.pageDescription}>登録済みのキャスト一覧です。名前を編集してCSVの氏名と紐づけできます。</p>
               
               {loading ? (
                 <p>読み込み中...</p>
               ) : castUsers.length === 0 ? (
-                <p style={styles.emptyMessage}>キャストユーザーが登録されていません</p>
+                <p style={styles.emptyMessage}>キャストが登録されていません</p>
               ) : isMobile ? (
                 <div style={styles.mobileCardList}>
                   {castUsers.map(user => (
@@ -2221,7 +2221,7 @@ function AdminApp() {
               {editingCastUser && (
                 <div style={styles.modalOverlay}>
                   <div style={styles.modal}>
-                    <h3 style={styles.modalTitle}>キャストユーザー編集</h3>
+                    <h3 style={styles.modalTitle}>キャスト編集</h3>
                     <div style={styles.formGroup}>
                       <label style={styles.label}>メールアドレス</label>
                       <input
