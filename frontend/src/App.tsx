@@ -1275,11 +1275,11 @@ function AdminApp() {
                           {loadingMore && <span style={{ color: COLORS.primary }}>読み込み中...</span>}
                         </div>
 
-                                                {loading || loadingMore ? (
-                                                  <p>読み込み中...</p>
-                                                ) : projects.length === 0 ? (
-                                                  <p style={styles.emptyMessage}>案件がありません</p>
-                                                ) : isMobile ? (
+                                                                                                {loading || loadingMore ? (
+                                                                                                  <p>読み込み中...</p>
+                                                                                                ) : filteredProjects.length === 0 ? (
+                                                                                                  <p style={styles.emptyMessage}>案件がありません</p>
+                                                                                                ) : isMobile ? (
                           <div 
                             ref={projectsContainerRef}
                             style={{...styles.mobileCardList, maxHeight: '70vh', overflowY: 'auto'}}
