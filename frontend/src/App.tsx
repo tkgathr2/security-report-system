@@ -2177,46 +2177,6 @@ function AdminApp() {
                 </div>
               )}
 
-              {/* Casts List Modal */}
-              {castsModalProject && (
-                <div style={styles.modalOverlay} onClick={() => setCastsModalProject(null)}>
-                  <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-                    <h3 style={styles.modalTitle}>キャスト一覧</h3>
-                    <p style={{ marginBottom: '16px', color: COLORS.darkGray }}>
-                      {castsModalProject.work_name} - {formatDate(castsModalProject.work_date)}
-                    </p>
-                    <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                      <table style={styles.table}>
-                        <thead>
-                          <tr>
-                            <th style={styles.th}>No.</th>
-                            <th style={styles.th}>氏名</th>
-                            <th style={styles.th}>スタッフNo.</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {castsModalProject.casts?.map((cast, index) => (
-                            <tr key={index} style={styles.tr}>
-                              <td style={styles.td}>{index + 1}</td>
-                              <td style={styles.td}>{cast.cast_name}</td>
-                              <td style={styles.td}>{cast.staff_no || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div style={styles.modalActions}>
-                      <button 
-                        style={styles.primaryButton}
-                        onClick={() => setCastsModalProject(null)}
-                      >
-                        閉じる
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Edit Cast User Modal */}
               {editingCastUser && (
                 <div style={styles.modalOverlay}>
@@ -2260,6 +2220,46 @@ function AdminApp() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Casts List Modal - moved outside screen conditions */}
+          {castsModalProject && (
+            <div style={styles.modalOverlay} onClick={() => setCastsModalProject(null)}>
+              <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+                <h3 style={styles.modalTitle}>キャスト一覧</h3>
+                <p style={{ marginBottom: '16px', color: COLORS.darkGray }}>
+                  {castsModalProject.work_name} - {formatDate(castsModalProject.work_date)}
+                </p>
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>No.</th>
+                        <th style={styles.th}>氏名</th>
+                        <th style={styles.th}>スタッフNo.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {castsModalProject.casts?.map((cast, index) => (
+                        <tr key={index} style={styles.tr}>
+                          <td style={styles.td}>{index + 1}</td>
+                          <td style={styles.td}>{cast.cast_name}</td>
+                          <td style={styles.td}>{cast.staff_no || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={styles.modalActions}>
+                  <button 
+                    style={styles.primaryButton}
+                    onClick={() => setCastsModalProject(null)}
+                  >
+                    閉じる
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </main>
