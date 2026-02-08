@@ -505,6 +505,13 @@ export default function FieldReport() {
     )
   }
 
+    const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault()
+        action()
+      }
+    }
+
     if (pageState === 'email_registration') {
       return (
         <div style={styles.container}>
@@ -520,6 +527,7 @@ export default function FieldReport() {
                 style={styles.emailInput}
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, handleEmailRegistration)}
                 placeholder="example@email.com"
                 disabled={registering}
               />
@@ -579,7 +587,7 @@ export default function FieldReport() {
 
     if (pageState === 'name_confirmation') {
       return (
-        <div style={styles.container}>
+        <div style={styles.container} onKeyDown={(e) => handleKeyDown(e, handleNameConfirm)} tabIndex={0}>
           <div style={styles.nameConfirmationBox}>
             <h2 style={styles.nameConfirmationTitle}>確認</h2>
             <p style={styles.nameConfirmationQuestion}>
@@ -610,8 +618,15 @@ export default function FieldReport() {
     setShowTutorial(false)
   }
 
+  const handleFormKeyDown = (e: React.KeyboardEvent) => {
+    if (e.ctrlKey && e.key === 'Enter' && isFormValid && !submitting) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
   return (
-    <div style={styles.page}>
+    <div style={styles.page} onKeyDown={handleFormKeyDown} tabIndex={0}>
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div>

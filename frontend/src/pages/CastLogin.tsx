@@ -82,6 +82,13 @@ export default function CastLogin() {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
+    if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
+      action();
+    }
+  };
+
   if (magicLinkSent) {
     return (
       <div className="cast-container">
@@ -119,6 +126,7 @@ export default function CastLogin() {
                 id="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, () => { if (email) { const form = e.currentTarget.form; if (form) form.requestSubmit(); } })}
                 placeholder="example@email.com"
                 required
                 disabled={loading}
@@ -160,6 +168,7 @@ export default function CastLogin() {
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, () => { if (email && pin) { const form = e.currentTarget.form; if (form) form.requestSubmit(); } })}
               placeholder="example@email.com"
               required
               disabled={loading}
@@ -173,6 +182,7 @@ export default function CastLogin() {
               id="pin"
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onKeyDown={(e) => handleKeyDown(e, () => { if (email && pin) { const form = e.currentTarget.form; if (form) form.requestSubmit(); } })}
               placeholder="••••"
               inputMode="numeric"
               pattern="\d{4}"

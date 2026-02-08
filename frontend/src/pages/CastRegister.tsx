@@ -43,6 +43,13 @@ export default function CastRegister() {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
+    if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
+      action();
+    }
+  };
+
   if (sent) {
     return (
       <div className="cast-container">
@@ -82,6 +89,7 @@ export default function CastRegister() {
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, () => { if (email) { const form = e.currentTarget.form; if (form) form.requestSubmit(); } })}
               placeholder="example@email.com"
               required
               disabled={loading}

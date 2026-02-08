@@ -149,6 +149,13 @@ export default function CastVerify() {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
+    if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
+      action();
+    }
+  };
+
   if (loading) {
     return (
       <div className="cast-container">
@@ -236,6 +243,7 @@ export default function CastVerify() {
               id="pin"
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onKeyDown={(e) => handleKeyDown(e, () => { if (selectedStaffId && pin && confirmPin) { const form = e.currentTarget.form; if (form) form.requestSubmit(); } })}
               placeholder="••••"
               inputMode="numeric"
               pattern="\d{4}"
@@ -252,6 +260,7 @@ export default function CastVerify() {
               id="confirmPin"
               value={confirmPin}
               onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onKeyDown={(e) => handleKeyDown(e, () => { if (selectedStaffId && pin && confirmPin) { const form = e.currentTarget.form; if (form) form.requestSubmit(); } })}
               placeholder="••••"
               inputMode="numeric"
               pattern="\d{4}"
