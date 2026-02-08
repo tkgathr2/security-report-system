@@ -1275,9 +1275,9 @@ function AdminApp() {
                           {loadingMore && <span style={{ color: COLORS.primary }}>読み込み中...</span>}
                         </div>
 
-                                                {loading ? (
+                                                {loading || loadingMore ? (
                                                   <p>読み込み中...</p>
-                                                ) : projects.length === 0 && !loadingMore ? (
+                                                ) : projects.length === 0 ? (
                                                   <p style={styles.emptyMessage}>案件がありません</p>
                                                 ) : isMobile ? (
                           <div 
