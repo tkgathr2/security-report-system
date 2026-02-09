@@ -51,6 +51,7 @@ function AdminApp() {
   const [staffImporting, setStaffImporting] = useState(false)
   const [staffImportResult, setStaffImportResult] = useState<{ inserted: number; updated: number; skipped: number } | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+<<<<<<< HEAD
   const [sortColumn, setSortColumn] = useState<keyof Project | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const [importHistory, setImportHistory] = useState<CsvImportHistory[]>([])
@@ -88,6 +89,46 @@ function AdminApp() {
   const [pendingAccessName, setPendingAccessName] = useState<string | null>(null)
   const [requestingAccess, setRequestingAccess] = useState(false)
   const [accessRequestResult, setAccessRequestResult] = useState<string | null>(null)
+=======
+    const [sortColumn, setSortColumn] = useState<keyof Project | null>(null)
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+    const [importHistory, setImportHistory] = useState<CsvImportHistory[]>([])
+    const [selectedImport, setSelectedImport] = useState<CsvImportHistory | null>(null)
+    const [importedProjects, setImportedProjects] = useState<Project[]>([])
+    const [loadingImportProjects, setLoadingImportProjects] = useState(false)
+        const [clients, setClients] = useState<Client[]>([])
+        const [editingClient, setEditingClient] = useState<Client | null>(null)
+        const [savingClient, setSavingClient] = useState(false)
+                const [castUsers, setCastUsers] = useState<CastUser[]>([])
+                const [editingCastUser, setEditingCastUser] = useState<CastUser | null>(null)
+                const [savingCastUser, setSavingCastUser] = useState(false)
+                const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null)
+                const [savingStaff, setSavingStaff] = useState(false)
+                const [staffSearchQuery, setStaffSearchQuery] = useState('')
+                const [projectSearchQuery, setProjectSearchQuery] = useState('')
+                const [projectSearchMode, setProjectSearchMode] = useState<'all' | 'field'>('all')
+                const [projectSearchField, setProjectSearchField] = useState<'client_name_raw' | 'work_name' | 'location' | 'casts'>('client_name_raw')
+                const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
+                const [searchDateFrom, setSearchDateFrom] = useState<string>('')
+                const [searchDateTo, setSearchDateTo] = useState<string>('')
+                
+                // Date header design is fixed to Design 1 (Calendar style)
+                
+                // Infinite scroll state for projects (1 month before and after)
+                const [dateRangeStart, setDateRangeStart] = useState<string>(() => {
+                  const d = new Date()
+                  d.setMonth(d.getMonth() - 1)
+                  return d.toISOString().split('T')[0]
+                })
+                const [dateRangeEnd, setDateRangeEnd] = useState<string>(() => {
+                  const d = new Date()
+                  d.setMonth(d.getMonth() + 1)
+                  return d.toISOString().split('T')[0]
+                })
+                const [loadingMore, setLoadingMore] = useState(false)
+                const projectsContainerRef = useRef<HTMLDivElement>(null)
+                const scrollTickingRef = useRef(false)
+>>>>>>> 67e4390 (Perf: Add useMemo/useCallback optimizations to App.tsx)
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
@@ -1038,6 +1079,7 @@ function AdminApp() {
     }
   }
 
+<<<<<<< HEAD
   const sortedProjects = useMemo(() => [...projects].sort((a, b) => {
     if (!sortColumn) return 0
     const aVal = a[sortColumn] ?? ''
@@ -1045,12 +1087,26 @@ function AdminApp() {
     const comparison = String(aVal).localeCompare(String(bVal), 'ja')
     return sortDirection === 'asc' ? comparison : -comparison
   }), [projects, sortColumn, sortDirection])
+=======
+  const sortedProjects = useMemo(() => {
+    if (!sortColumn) return projects
+    const arr = [...projects]
+    arr.sort((a, b) => {
+      const aVal = a[sortColumn] ?? ''
+      const bVal = b[sortColumn] ?? ''
+      const comparison = String(aVal).localeCompare(String(bVal), 'ja')
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+    return arr
+  }, [projects, sortColumn, sortDirection])
+>>>>>>> 67e4390 (Perf: Add useMemo/useCallback optimizations to App.tsx)
 
   const getSortIndicator = (column: keyof Project) => {
     if (sortColumn !== column) return ' ↕'
     return sortDirection === 'asc' ? ' ↑' : ' ↓'
   }
 
+<<<<<<< HEAD
   const normalizeForSearch = (text: string): string => {
     const toKatakana = (input: string) => input.replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
 
@@ -1085,9 +1141,19 @@ function AdminApp() {
       (member.email && member.email.toLowerCase().includes(queryLower)) ||
       (member.registered_email && member.registered_email.toLowerCase().includes(queryLower)) ||
       (member.procast_staff_no && member.procast_staff_no.toLowerCase().includes(queryLower))
+=======
+  const filteredStaff = useMemo(() => {
+    if (!staffSearchQuery.trim()) return staff
+    const query = staffSearchQuery.toLowerCase()
+    return staff.filter(member =>
+      member.display_name_kanji.toLowerCase().includes(query) ||
+      member.display_name_kana.toLowerCase().includes(query) ||
+      (member.email && member.email.toLowerCase().includes(query))
+>>>>>>> 67e4390 (Perf: Add useMemo/useCallback optimizations to App.tsx)
     )
-  })
+  }, [staff, staffSearchQuery])
 
+<<<<<<< HEAD
   const filteredClients = clients.filter(client => {
     if (!clientSearchQuery.trim()) return true
     const query = clientSearchQuery.toLowerCase()
@@ -1114,6 +1180,61 @@ function AdminApp() {
 
   const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
 
+=======
+  const filteredProjects = useMemo(() => {
+    const query = projectSearchQuery.trim().toLowerCase()
+    return sortedProjects.filter(project => {
+      if (searchDateFrom || searchDateTo) {
+        const projectDate = project.work_date.split('T')[0]
+        if (searchDateFrom && projectDate < searchDateFrom) return false
+        if (searchDateTo && projectDate > searchDateTo) return false
+      }
+
+      if (!query) return true
+
+      if (projectSearchMode === 'all') {
+        const clientName = (project.client_name || project.client_name_raw || '').toLowerCase()
+        const workName = (project.work_name || '').toLowerCase()
+        const location = (project.location || '').toLowerCase()
+        const castsStr = project.casts?.map(c => c.cast_name).join(' ').toLowerCase() || ''
+        return clientName.includes(query) || workName.includes(query) || location.includes(query) || castsStr.includes(query)
+      } else {
+        if (projectSearchField === 'client_name_raw') {
+          return (project.client_name || project.client_name_raw || '').toLowerCase().includes(query)
+        } else if (projectSearchField === 'work_name') {
+          return (project.work_name || '').toLowerCase().includes(query)
+        } else if (projectSearchField === 'location') {
+          return (project.location || '').toLowerCase().includes(query)
+        } else if (projectSearchField === 'casts') {
+          const castsStr = project.casts?.map(c => c.cast_name).join(' ').toLowerCase() || ''
+          return castsStr.includes(query)
+        }
+      }
+      return true
+    })
+  }, [sortedProjects, searchDateFrom, searchDateTo, projectSearchQuery, projectSearchMode, projectSearchField])
+
+  // Group projects by date (memoized)
+  const projectsByDate = useMemo(() => {
+    return filteredProjects.reduce((acc, project) => {
+      const date = project.work_date
+      if (!acc[date]) acc[date] = []
+      acc[date].push(project)
+      return acc
+    }, {} as Record<string, Project[]>)
+  }, [filteredProjects])
+
+  // Get sorted dates (ascending order) - memoized
+  const sortedDates = useMemo(() => Object.keys(projectsByDate).sort(), [projectsByDate])
+  
+  // Get today's date for highlighting (stable across renders within same day)
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
+
+  // Clients without email (for dashboard alert) - memoized to avoid duplicate filter
+  const clientsWithoutEmail = useMemo(() => clients.filter(c => !c.contact_email && c.is_active), [clients])
+
+  // Parse date parts for custom formatting
+>>>>>>> 67e4390 (Perf: Add useMemo/useCallback optimizations to App.tsx)
   const parseDateParts = (dateStr: string) => {
     const datePart = dateStr.split('T')[0]
     const [year, month, day] = datePart.split('-')
@@ -1190,6 +1311,7 @@ function AdminApp() {
     fetchReports(newDate, ac.signal)
   }
 
+<<<<<<< HEAD
   const goToReportToday = () => {
     if (abortRef.current) abortRef.current.abort()
     const ac = new AbortController()
@@ -1198,6 +1320,36 @@ function AdminApp() {
     setReportDate(today)
     fetchReports(today, ac.signal)
   }
+=======
+  // Handle scroll for infinite loading (throttled via rAF)
+  const handleProjectsScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement
+    if (scrollTickingRef.current) return
+    scrollTickingRef.current = true
+    requestAnimationFrame(() => {
+      const { scrollTop, scrollHeight, clientHeight } = target
+      if (scrollTop < 100 && !loadingMore) {
+        loadMorePastProjects()
+      }
+      if (scrollHeight - scrollTop - clientHeight < 100 && !loadingMore) {
+        loadMoreFutureProjects()
+      }
+      scrollTickingRef.current = false
+    })
+  }, [loadMorePastProjects, loadMoreFutureProjects, loadingMore])
+
+  // Scroll to today on initial load
+  useEffect(() => {
+    if (screen === 'projects' && sortedDates.length > 0) {
+      const todayElement = document.getElementById(`date-${todayStr}`)
+      if (todayElement) {
+        setTimeout(() => {
+          todayElement.scrollIntoView({ behavior: 'auto', block: 'start' })
+        }, 100)
+      }
+    }
+  }, [screen, sortedDates.length, todayStr])
+>>>>>>> 67e4390 (Perf: Add useMemo/useCallback optimizations to App.tsx)
 
   if (loading && !admin) {
     return (
@@ -1392,6 +1544,7 @@ function AdminApp() {
           {error && <div style={styles.error}>{error}</div>}
 
           {screen === 'dashboard' && (
+<<<<<<< HEAD
             <DashboardPage
               stats={stats}
               clients={clients}
@@ -1408,6 +1561,95 @@ function AdminApp() {
               formatDateTime={formatDateTime}
               parseDateParts={parseDateParts}
             />
+=======
+            <div>
+              <h2 style={styles.pageTitle}>ダッシュボード</h2>
+              
+              {/* Alert for clients without email */}
+              {clientsWithoutEmail.length > 0 && (
+                <div style={styles.alertBox}>
+                  <span style={styles.alertIcon}>&#9888;</span>
+                  <div style={styles.alertContent}>
+                    <strong>メールアドレス未登録の会社があります</strong>
+                    <p style={styles.alertText}>
+                      以下の会社にメールアドレスが登録されていないため、報告書を送信できません：
+                    </p>
+                    <ul style={styles.alertList}>
+                      {clientsWithoutEmail.map(c => (
+                        <li key={c.id}>
+                          <span 
+                            style={styles.alertClientLink}
+                            onClick={() => setEditingClient(c)}
+                          >
+                            {c.name}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <button 
+                      style={styles.alertButton}
+                      onClick={() => navigateTo('clients')}
+                    >
+                      会社管理で登録する
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              <div style={styles.statsGrid}>
+                <div style={styles.statCard} onClick={() => navigateTo('projects')}>
+                  <div style={styles.statIcon}>&#128203;</div>
+                  <div style={styles.statContent}>
+                    <div style={styles.statValue}>{stats?.total_projects || 0}</div>
+                    <div style={styles.statLabel}>総案件数</div>
+                  </div>
+                </div>
+                <div style={{...styles.statCard, ...styles.statCardActive}} onClick={() => navigateTo('projects')}>
+                  <div style={styles.statIcon}>&#9989;</div>
+                  <div style={styles.statContent}>
+                    <div style={styles.statValue}>{stats?.active_projects || 0}</div>
+                    <div style={styles.statLabel}>有効な案件</div>
+                  </div>
+                </div>
+                <div style={styles.statCard} onClick={() => navigateTo('reports')}>
+                  <div style={styles.statIcon}>&#128196;</div>
+                  <div style={styles.statContent}>
+                    <div style={styles.statValue}>{stats?.total_reports || 0}</div>
+                    <div style={styles.statLabel}>報告書数</div>
+                  </div>
+                </div>
+                <div style={styles.statCard} onClick={() => navigateTo('staff')}>
+                  <div style={styles.statIcon}>&#128101;</div>
+                  <div style={styles.statContent}>
+                    <div style={styles.statValue}>{stats?.total_staff || 0}</div>
+                    <div style={styles.statLabel}>スタッフ数</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.quickActions}>
+                <h3 style={styles.sectionTitle}>クイックアクション</h3>
+                <div style={styles.actionButtons}>
+                  <button style={styles.actionButton} onClick={() => navigateTo('csv')}>
+                    <span style={styles.actionIcon}>&#128193;</span>
+                    CSVをインポート
+                  </button>
+                  <button style={styles.actionButton} onClick={() => navigateTo('reports')}>
+                    <span style={styles.actionIcon}>&#128196;</span>
+                    報告書を確認
+                  </button>
+                  <button style={styles.actionButton} onClick={() => navigateTo('staff')}>
+                    <span style={styles.actionIcon}>&#128101;</span>
+                    スタッフを管理
+                  </button>
+                  <button style={{...styles.actionButton, backgroundColor: '#fff3cd', borderColor: '#ffc107'}} onClick={handleDeleteProjectsWithoutCasts}>
+                    <span style={styles.actionIcon}>&#128465;</span>
+                    キャストなし案件を削除
+                  </button>
+                </div>
+              </div>
+            </div>
+>>>>>>> 67e4390 (Perf: Add useMemo/useCallback optimizations to App.tsx)
           )}
 
           {screen === 'csv' && (
@@ -1478,6 +1720,266 @@ function AdminApp() {
             />
           )}
 
+<<<<<<< HEAD
+=======
+                                                {loading || loadingMore ? (
+                                                  <p>読み込み中...</p>
+                                                ) : filteredProjects.length === 0 ? (
+                                                  <p style={styles.emptyMessage}>案件がありません</p>
+                                                ) : isMobile ? (
+                          <div 
+                            ref={projectsContainerRef}
+                            style={{...styles.mobileCardList, maxHeight: '70vh', overflowY: 'auto'}}
+                            onScroll={handleProjectsScroll}
+                          >
+                            {sortedDates.map(date => (
+                              <div key={date} id={`date-${date}`}>
+                                {renderDateHeader(date, projectsByDate[date].length)}
+                                {projectsByDate[date].map(project => (
+                              <div key={project.id} style={styles.mobileCard}>
+                                <div style={styles.mobileCardHeader}>
+                                  <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
+                                    {getStatusLabel(project.status)}
+                                  </span>
+                                </div>
+                                <div style={styles.mobileCardBody}>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>会社名</span>
+                                    <span style={styles.mobileCardValue}>{project.client_name || project.client_name_raw}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>作業名</span>
+                                    <span style={styles.mobileCardValue}>{project.work_name}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>場所</span>
+                                    <span style={styles.mobileCardValue}>{project.location}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>URL有効期限</span>
+                                    <span style={styles.mobileCardValue}>{formatDate(project.url_expires_at)}</span>
+                                  </div>
+                                  {project.casts && project.casts.length > 0 && (
+                                    <div style={styles.mobileCardRow}>
+                                      <span style={styles.mobileCardLabel}>キャスト</span>
+                                      <span 
+                                        style={{...styles.mobileCardValue, cursor: 'pointer', color: COLORS.primary, textDecoration: 'underline'}}
+                                        onClick={() => setCastsModalProject(project)}
+                                      >
+                                        {project.casts.length === 1 
+                                          ? project.casts[0].cast_name
+                                          : `${project.casts[0].cast_name} 他${project.casts.length - 1}人`}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div style={styles.mobileCardActions}>
+                                  <button 
+                                    style={styles.mobileActionButton}
+                                    onClick={() => {
+                                      const url = `${window.location.origin}/report/${project.unique_url}`
+                                      navigator.clipboard.writeText(url)
+                                      alert('URLをコピーしました')
+                                    }}
+                                  >
+                                    URLコピー
+                                  </button>
+                                  <button 
+                                    style={styles.mobileActionButtonPrimary}
+                                    onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
+                                  >
+                                    報告画面
+                                  </button>
+                                </div>
+                              </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div 
+                            ref={projectsContainerRef}
+                            style={{ maxHeight: '70vh', overflowY: 'auto' }}
+                            onScroll={handleProjectsScroll}
+                          >
+                            {sortedDates.map(date => (
+                              <div key={date} id={`date-${date}`} style={{ marginBottom: '24px' }}>
+                                {renderDateHeader(date, projectsByDate[date].length)}
+                                <div style={styles.card}>
+                                  <div style={styles.tableContainer}>
+                                    <table style={styles.table}>
+                                      <thead>
+                                        <tr>
+                                          <th style={styles.sortableTh} onClick={() => handleSort('client_name_raw')}>会社名{getSortIndicator('client_name_raw')}</th>
+                                          <th style={styles.sortableTh} onClick={() => handleSort('work_name')}>作業名{getSortIndicator('work_name')}</th>
+                                          <th style={styles.sortableTh} onClick={() => handleSort('location')}>場所{getSortIndicator('location')}</th>
+                                          <th style={styles.th}>キャスト</th>
+                                          <th style={styles.sortableTh} onClick={() => handleSort('status')}>状態{getSortIndicator('status')}</th>
+                                          <th style={styles.th}>操作</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {projectsByDate[date].map(project => (
+                                          <tr key={project.id} style={styles.tr}>
+                                            <td style={styles.td}>{project.client_name || project.client_name_raw}</td>
+                                            <td style={styles.td}>{project.work_name}</td>
+                                            <td style={styles.td}>{project.location}</td>
+                                            <td style={styles.td}>
+                                              {project.casts && project.casts.length > 0 
+                                                ? (
+                                                  <span 
+                                                    style={{ cursor: 'pointer', color: COLORS.primary, textDecoration: 'underline' }}
+                                                    onClick={() => setCastsModalProject(project)}
+                                                  >
+                                                    {project.casts.length === 1 
+                                                      ? project.casts[0].cast_name
+                                                      : `${project.casts[0].cast_name} 他${project.casts.length - 1}人`}
+                                                  </span>
+                                                )
+                                                : '-'}
+                                            </td>
+                                            <td style={styles.td}>
+                                              <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
+                                                {getStatusLabel(project.status)}
+                                              </span>
+                                            </td>
+                                            <td style={styles.td}>
+                                              <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button 
+                                                  style={styles.smallButton}
+                                                  onClick={() => {
+                                                    const url = `${window.location.origin}/report/${project.unique_url}`
+                                                    navigator.clipboard.writeText(url)
+                                                    alert('URLをコピーしました')
+                                                  }}
+                                                >
+                                                  URLコピー
+                                                </button>
+                                                <button 
+                                                  style={styles.linkButton}
+                                                  onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
+                                                >
+                                                  報告画面
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Reports List */}
+                    {screen === 'reports' && (
+                      <div>
+                        <h2 style={styles.pageTitle}>報告書一覧</h2>
+                        {loading ? (
+                          <p>読み込み中...</p>
+                        ) : reports.length === 0 ? (
+                          <p style={styles.emptyMessage}>報告書がありません</p>
+                        ) : isMobile ? (
+                          <div style={styles.mobileCardList}>
+                            {reports.map(report => (
+                              <div key={report.id} style={styles.mobileCard}>
+                                <div style={styles.mobileCardHeader}>
+                                  <span style={styles.mobileCardDate}>{formatDateTime(report.approved_at)}</span>
+                                </div>
+                                <div style={styles.mobileCardBody}>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>会社名</span>
+                                    <span style={styles.mobileCardValue}>{report.client_name_raw}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>実施日</span>
+                                    <span style={styles.mobileCardValue}>{formatDate(report.work_date)}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>作業名</span>
+                                    <span style={styles.mobileCardValue}>{report.work_name}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>監督者</span>
+                                    <span style={styles.mobileCardValue}>{report.supervisor_name}</span>
+                                  </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>記入者</span>
+                                    <span style={styles.mobileCardValue}>{report.writer_name}</span>
+                                  </div>
+                                </div>
+                                <div style={styles.mobileCardActions}>
+                                  {report.pdf_generation_status === 'success' ? (
+                                    <button 
+                                      style={styles.mobileActionButtonPrimary}
+                                      onClick={() => handleDownloadPdf(report.id)}
+                                    >
+                                      PDFダウンロード ({Math.round(report.pdf_size / 1024)}KB)
+                                    </button>
+                                  ) : (
+                                    <span style={styles.pdfPending}>
+                                      {report.pdf_generation_status === 'pending' ? '生成中' : '未生成'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={styles.card}>
+                            <div style={styles.tableContainer}>
+                              <table style={styles.table}>
+                                <thead>
+                                  <tr>
+                                    <th style={styles.th}>承認日時</th>
+                                    <th style={styles.th}>会社名</th>
+                                    <th style={styles.th}>実施日</th>
+                                    <th style={styles.th}>作業名</th>
+                                    <th style={styles.th}>監督者</th>
+                                    <th style={styles.th}>記入者</th>
+                                    <th style={styles.th}>PDF</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {reports.map(report => (
+                                    <tr key={report.id} style={styles.tr}>
+                                      <td style={styles.td}>{formatDateTime(report.approved_at)}</td>
+                                      <td style={styles.td}>{report.client_name_raw}</td>
+                                      <td style={styles.td}>{formatDate(report.work_date)}</td>
+                                      <td style={styles.td}>{report.work_name}</td>
+                                      <td style={styles.td}>{report.supervisor_name}</td>
+                                      <td style={styles.td}>{report.writer_name}</td>
+                                      <td style={styles.td}>
+                                        {report.pdf_generation_status === 'success' ? (
+                                          <button 
+                                            style={styles.downloadButton}
+                                            onClick={() => handleDownloadPdf(report.id)}
+                                          >
+                                            ダウンロード ({Math.round(report.pdf_size / 1024)}KB)
+                                          </button>
+                                        ) : (
+                                          <span style={styles.pdfPending}>
+                                            {report.pdf_generation_status === 'pending' ? '生成中' : '未生成'}
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+          {/* Staff Management */}
+>>>>>>> 67e4390 (Perf: Add useMemo/useCallback optimizations to App.tsx)
           {screen === 'staff' && (
             <StaffPage
               staff={staff}
@@ -1673,3 +2175,4 @@ function AdminApp() {
 }
 
 export default AdminApp
+
