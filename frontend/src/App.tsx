@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 
 // Company logo URL from kotsuyudo.com
@@ -189,6 +189,7 @@ function AdminApp() {
                 })
                 const [loadingMore, setLoadingMore] = useState(false)
                 const projectsContainerRef = useRef<HTMLDivElement>(null)
+                const scrollTickingRef = useRef(false)
 
           useEffect(() => {
       checkAuth()
@@ -725,78 +726,85 @@ function AdminApp() {
     }
   }
 
-  const sortedProjects = [...projects].sort((a, b) => {
-    if (!sortColumn) return 0
-    const aVal = a[sortColumn] ?? ''
-    const bVal = b[sortColumn] ?? ''
-    const comparison = String(aVal).localeCompare(String(bVal), 'ja')
-    return sortDirection === 'asc' ? comparison : -comparison
-  })
+  const sortedProjects = useMemo(() => {
+    if (!sortColumn) return projects
+    const arr = [...projects]
+    arr.sort((a, b) => {
+      const aVal = a[sortColumn] ?? ''
+      const bVal = b[sortColumn] ?? ''
+      const comparison = String(aVal).localeCompare(String(bVal), 'ja')
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+    return arr
+  }, [projects, sortColumn, sortDirection])
 
   const getSortIndicator = (column: keyof Project) => {
     if (sortColumn !== column) return ' ↕'
     return sortDirection === 'asc' ? ' ↑' : ' ↓'
   }
 
-  const filteredStaff = staff.filter(member => {
-    if (!staffSearchQuery.trim()) return true
+  const filteredStaff = useMemo(() => {
+    if (!staffSearchQuery.trim()) return staff
     const query = staffSearchQuery.toLowerCase()
-    return (
+    return staff.filter(member =>
       member.display_name_kanji.toLowerCase().includes(query) ||
       member.display_name_kana.toLowerCase().includes(query) ||
       (member.email && member.email.toLowerCase().includes(query))
     )
-  })
+  }, [staff, staffSearchQuery])
 
-  const filteredProjects = sortedProjects.filter(project => {
-    // Date range filter
-    if (searchDateFrom || searchDateTo) {
-      const projectDate = project.work_date.split('T')[0]
-      if (searchDateFrom && projectDate < searchDateFrom) return false
-      if (searchDateTo && projectDate > searchDateTo) return false
-    }
-    
-    // Text search filter
-    if (!projectSearchQuery.trim()) return true
-    const query = projectSearchQuery.toLowerCase()
-    
-    if (projectSearchMode === 'all') {
-      const clientName = (project.client_name || project.client_name_raw || '').toLowerCase()
-      const workName = (project.work_name || '').toLowerCase()
-      const location = (project.location || '').toLowerCase()
-      const castsStr = project.casts?.map(c => c.cast_name).join(' ').toLowerCase() || ''
-      return clientName.includes(query) || workName.includes(query) || location.includes(query) || castsStr.includes(query)
-    } else {
-      if (projectSearchField === 'client_name_raw') {
-        return (project.client_name || project.client_name_raw || '').toLowerCase().includes(query)
-      } else if (projectSearchField === 'work_name') {
-        return (project.work_name || '').toLowerCase().includes(query)
-      } else if (projectSearchField === 'location') {
-        return (project.location || '').toLowerCase().includes(query)
-      } else if (projectSearchField === 'casts') {
-        const castsStr = project.casts?.map(c => c.cast_name).join(' ').toLowerCase() || ''
-        return castsStr.includes(query)
+  const filteredProjects = useMemo(() => {
+    const query = projectSearchQuery.trim().toLowerCase()
+    return sortedProjects.filter(project => {
+      if (searchDateFrom || searchDateTo) {
+        const projectDate = project.work_date.split('T')[0]
+        if (searchDateFrom && projectDate < searchDateFrom) return false
+        if (searchDateTo && projectDate > searchDateTo) return false
       }
-    }
-    return true
-  })
 
-  // Group projects by date
-  const projectsByDate = filteredProjects.reduce((acc, project) => {
-    const date = project.work_date
-    if (!acc[date]) {
-      acc[date] = []
-    }
-    acc[date].push(project)
-    return acc
-  }, {} as Record<string, Project[]>)
+      if (!query) return true
 
-  // Get sorted dates (ascending order)
-  const sortedDates = Object.keys(projectsByDate).sort()
+      if (projectSearchMode === 'all') {
+        const clientName = (project.client_name || project.client_name_raw || '').toLowerCase()
+        const workName = (project.work_name || '').toLowerCase()
+        const location = (project.location || '').toLowerCase()
+        const castsStr = project.casts?.map(c => c.cast_name).join(' ').toLowerCase() || ''
+        return clientName.includes(query) || workName.includes(query) || location.includes(query) || castsStr.includes(query)
+      } else {
+        if (projectSearchField === 'client_name_raw') {
+          return (project.client_name || project.client_name_raw || '').toLowerCase().includes(query)
+        } else if (projectSearchField === 'work_name') {
+          return (project.work_name || '').toLowerCase().includes(query)
+        } else if (projectSearchField === 'location') {
+          return (project.location || '').toLowerCase().includes(query)
+        } else if (projectSearchField === 'casts') {
+          const castsStr = project.casts?.map(c => c.cast_name).join(' ').toLowerCase() || ''
+          return castsStr.includes(query)
+        }
+      }
+      return true
+    })
+  }, [sortedProjects, searchDateFrom, searchDateTo, projectSearchQuery, projectSearchMode, projectSearchField])
+
+  // Group projects by date (memoized)
+  const projectsByDate = useMemo(() => {
+    return filteredProjects.reduce((acc, project) => {
+      const date = project.work_date
+      if (!acc[date]) acc[date] = []
+      acc[date].push(project)
+      return acc
+    }, {} as Record<string, Project[]>)
+  }, [filteredProjects])
+
+  // Get sorted dates (ascending order) - memoized
+  const sortedDates = useMemo(() => Object.keys(projectsByDate).sort(), [projectsByDate])
   
-  // Get today's date for highlighting
-  const todayStr = new Date().toISOString().split('T')[0]
-  
+  // Get today's date for highlighting (stable across renders within same day)
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
+
+  // Clients without email (for dashboard alert) - memoized to avoid duplicate filter
+  const clientsWithoutEmail = useMemo(() => clients.filter(c => !c.contact_email && c.is_active), [clients])
+
   // Parse date parts for custom formatting
   const parseDateParts = (dateStr: string) => {
     const datePart = dateStr.split('T')[0]
@@ -875,20 +883,21 @@ function AdminApp() {
     await fetchProjects(oldEndStr, newEndStr, 'after')
   }, [dateRangeEnd, loadingMore])
 
-  // Handle scroll for infinite loading
+  // Handle scroll for infinite loading (throttled via rAF)
   const handleProjectsScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const target = e.target as HTMLDivElement
-    const { scrollTop, scrollHeight, clientHeight } = target
-    
-    // Load more past projects when scrolling near top
-    if (scrollTop < 100 && !loadingMore) {
-      loadMorePastProjects()
-    }
-    
-    // Load more future projects when scrolling near bottom
-    if (scrollHeight - scrollTop - clientHeight < 100 && !loadingMore) {
-      loadMoreFutureProjects()
-    }
+    if (scrollTickingRef.current) return
+    scrollTickingRef.current = true
+    requestAnimationFrame(() => {
+      const { scrollTop, scrollHeight, clientHeight } = target
+      if (scrollTop < 100 && !loadingMore) {
+        loadMorePastProjects()
+      }
+      if (scrollHeight - scrollTop - clientHeight < 100 && !loadingMore) {
+        loadMoreFutureProjects()
+      }
+      scrollTickingRef.current = false
+    })
   }, [loadMorePastProjects, loadMoreFutureProjects, loadingMore])
 
   // Scroll to today on initial load
@@ -1036,7 +1045,7 @@ function AdminApp() {
               <h2 style={styles.pageTitle}>ダッシュボード</h2>
               
               {/* Alert for clients without email */}
-              {clients.filter(c => !c.contact_email && c.is_active).length > 0 && (
+              {clientsWithoutEmail.length > 0 && (
                 <div style={styles.alertBox}>
                   <span style={styles.alertIcon}>&#9888;</span>
                   <div style={styles.alertContent}>
@@ -1045,7 +1054,7 @@ function AdminApp() {
                       以下の会社にメールアドレスが登録されていないため、報告書を送信できません：
                     </p>
                     <ul style={styles.alertList}>
-                      {clients.filter(c => !c.contact_email && c.is_active).map(c => (
+                      {clientsWithoutEmail.map(c => (
                         <li key={c.id}>
                           <span 
                             style={styles.alertClientLink}
@@ -1277,7 +1286,7 @@ function AdminApp() {
 
                                                 {loading || loadingMore ? (
                                                   <p>読み込み中...</p>
-                                                ) : projects.length === 0 ? (
+                                                ) : filteredProjects.length === 0 ? (
                                                   <p style={styles.emptyMessage}>案件がありません</p>
                                                 ) : isMobile ? (
                           <div 
