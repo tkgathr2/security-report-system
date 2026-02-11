@@ -670,4 +670,95 @@ router.get('/notification-config', requireAdmin, (_req: Request, res: Response) 
   });
 });
 
+router.get('/projects/:projectId/casts', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.params;
+    const result = await pool.query(
+      `SELECT pc.id, pc.staff_no, pc.cast_name, pc.row_index
+       FROM project_casts pc
+       WHERE pc.project_id = $1
+       ORDER BY pc.row_index`,
+      [projectId]
+    );
+    res.json({ casts: result.rows });
+  } catch (error) {
+    handleDbError(res, error, 'Get project casts');
+  }
+});
+
+router.post('/projects/:projectId/casts', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.params;
+    const { staff_no, cast_name } = req.body;
+
+    if (!staff_no || !cast_name) {
+      sendBadRequest(res, 'staff_no と cast_name は必須です');
+      return;
+    }
+
+    const projectCheck = await pool.query('SELECT id FROM projects WHERE id = $1', [projectId]);
+    if (projectCheck.rows.length === 0) {
+      sendNotFound(res, '案件が見つかりません');
+      return;
+    }
+
+    const maxRowResult = await pool.query(
+      'SELECT COALESCE(MAX(row_index), 0) as max_row FROM project_casts WHERE project_id = $1',
+      [projectId]
+    );
+    const nextRow = maxRowResult.rows[0].max_row + 1;
+
+    const result = await pool.query(
+      `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (project_id, staff_no) DO NOTHING
+       RETURNING id, staff_no, cast_name, row_index`,
+      [projectId, staff_no, cast_name, nextRow]
+    );
+
+    if (result.rows.length === 0) {
+      sendBadRequest(res, 'このキャストは既に割り当て済みです');
+      return;
+    }
+
+    res.status(201).json({ cast: result.rows[0] });
+  } catch (error) {
+    handleDbError(res, error, 'Add project cast');
+  }
+});
+
+router.delete('/projects/:projectId/casts/:castId', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { projectId, castId } = req.params;
+    const result = await pool.query(
+      'DELETE FROM project_casts WHERE id = $1 AND project_id = $2 RETURNING id',
+      [castId, projectId]
+    );
+    if (result.rows.length === 0) {
+      sendNotFound(res, 'キャスト割り当てが見つかりません');
+      return;
+    }
+    res.json({ deleted: true });
+  } catch (error) {
+    handleDbError(res, error, 'Delete project cast');
+  }
+});
+
+router.delete('/reports/:reportId', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { reportId } = req.params;
+    const result = await pool.query(
+      'DELETE FROM reports WHERE id = $1 RETURNING id, project_id',
+      [reportId]
+    );
+    if (result.rows.length === 0) {
+      sendNotFound(res, '報告書が見つかりません');
+      return;
+    }
+    res.json({ deleted: true, report: result.rows[0] });
+  } catch (error) {
+    handleDbError(res, error, 'Delete report');
+  }
+});
+
 export default router;
