@@ -6,6 +6,47 @@ import { sendVerificationEmail, sendMagicLinkEmail, sendWelcomeEmail } from '../
 
 const router = Router();
 
+const KANJI_VARIANTS: Record<string, string> = {
+  '\u9AD9': '\u9AD8', // 髙 → 高
+  '\uFA30': '\u4FAE', // 侮 variant
+  '\uFA31': '\u4FBB', // 併 variant
+  '\u5861': '\u5D0E', // 埼 → 崎
+  '\uFA11': '\u5D0E', // 﨑 → 崎
+  '\u7E41': '\u7E4B', // 繁 variant
+  '\u6FF3': '\u6FA4', // 濃 → 澤
+  '\u6FA4': '\u6CA2', // 澤 → 沢
+  '\u9DB4': '\u9DB4', // 鶴
+  '\u5FB3': '\u5FB3', // 徳
+  '\u6589': '\u658E', // 斉 → 斎
+  '\u9F4B': '\u658E', // 齋 → 斎
+  '\u9F4A': '\u6589', // 齊 → 斉
+  '\u5EE3': '\u5E83', // 廣 → 広
+  '\u6AFB': '\u685C', // 櫻 → 桜
+  '\u6B1D': '\u6B63', // 歝 → 正
+  '\u6E0A': '\u6DF5', // 渊 → 淵
+  '\u7027': '\u6EDD', // 瀧 → 滝
+  '\u702C': '\u6E2C', // 瀬 variant
+  '\u5CF0': '\u5CEF', // 峰 → 峯
+  '\u5CEF': '\u5CF0', // 峯 → 峰
+  '\u9FD4': '\u9F8D', // 龍 variant
+  '\u9F8D': '\u7ADC', // 龍 → 竜
+  '\u9130': '\u90CE', // 郎 variant
+  '\u90DE': '\u90CE', // 郞 → 郎
+  '\u83EF': '\u82B1', // 華 → 花
+  '\u5B78': '\u5B66', // 學 → 学
+  '\u6B78': '\u5E30', // 歸 → 帰
+  '\u4E98': '\u4E99', // 亘 → 亙
+  '\u4E99': '\u4E98', // 亙 → 亘
+};
+
+function normalizeKanjiVariants(name: string): string {
+  let normalized = name;
+  for (const [variant, standard] of Object.entries(KANJI_VARIANTS)) {
+    normalized = normalized.split(variant).join(standard);
+  }
+  return normalized.replace(/[\s\u3000]/g, '');
+}
+
 function generateToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -358,6 +399,8 @@ router.get('/today', async (req: Request, res: Response) => {
     // Use staff_name from staff_master if available, otherwise use cast_users.name
     const matchName = user.staff_name || user.name;
 
+    const normalizedMatchName = normalizeKanjiVariants(matchName);
+
     const projectsResult = await pool.query(
       `SELECT DISTINCT p.id, p.project_key, p.client_name_raw, p.work_date, p.work_name, 
               p.location, p.status, p.unique_url, p.url_expires_at,
@@ -369,12 +412,11 @@ router.get('/today', async (req: Request, res: Response) => {
          AND p.status = 'active'
          AND (
            pc.cast_name = $2
-           OR REPLACE(pc.cast_name, ' ', '') = REPLACE($2, ' ', '')
-           OR REPLACE(pc.cast_name, '　', '') = REPLACE($2, '　', '')
-           OR REPLACE(REPLACE(pc.cast_name, ' ', ''), '　', '') = REPLACE(REPLACE($2, ' ', ''), '　', '')
+           OR REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($2, ' ', ''), E'\\u3000', '')
+           OR TRANSLATE(REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', ''), E'\\u9AD9\\uFA11\\u5861\\u6FA4\\u9F8D\\u5EE3\\u6AFB\\u7027\\u90DE\\u9F4B\\u83EF\\u5B78', E'\\u9AD8\\u5D0E\\u5D0E\\u6CA2\\u7ADC\\u5E83\\u685C\\u6EDD\\u90CE\\u658E\\u82B1\\u5B66') = $3
          )
        ORDER BY p.work_date, p.work_name`,
-      [today, matchName]
+      [today, matchName, normalizedMatchName]
     );
 
     res.json({ 
