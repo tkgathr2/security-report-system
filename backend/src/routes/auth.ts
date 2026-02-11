@@ -31,7 +31,7 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     const existingUser = await pool.query(
-      'SELECT id FROM cast_users WHERE email = $1',
+      'SELECT id, pin_hash, created_at FROM cast_users WHERE email = $1',
       [email]
     );
 
