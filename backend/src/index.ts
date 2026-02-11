@@ -74,6 +74,62 @@ app.use('/api/admin/csv', adminCsvImportRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/cast', castAuthRouter);
 
+const SETUP_TOKEN = process.env.AUTH_SECRET || '';
+
+app.get('/api/setup/diagnostic', async (req: Request, res: Response) => {
+  if (!SETUP_TOKEN || req.headers.authorization !== `Bearer ${SETUP_TOKEN}`) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const tables = await pool.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename");
+    const projects = await pool.query("SELECT id, project_name, work_date, status FROM projects WHERE work_date >= CURRENT_DATE - INTERVAL '1 day' ORDER BY work_date");
+    const casts = await pool.query(`SELECT pc.id, pc.project_id, pc.staff_no, pc.cast_name, pc.row_index, p.project_name, p.work_date
+       FROM project_casts pc JOIN projects p ON p.id = pc.project_id
+       WHERE p.work_date >= CURRENT_DATE - INTERVAL '1 day' ORDER BY p.work_date, pc.row_index`);
+    const reports = await pool.query("SELECT id, project_id, cast_user_id, work_date, status FROM reports WHERE work_date >= CURRENT_DATE - INTERVAL '1 day' ORDER BY work_date");
+    const castUsers = await pool.query("SELECT id, email, name, staff_id FROM cast_users ORDER BY id");
+    res.json({ tables: tables.rows, projects: projects.rows, casts: casts.rows, reports: reports.rows, castUsers: castUsers.rows });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ error: msg });
+  }
+});
+
+app.post('/api/setup/add-cast', async (req: Request, res: Response) => {
+  if (!SETUP_TOKEN || req.headers.authorization !== `Bearer ${SETUP_TOKEN}`) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const { project_id, staff_no, cast_name } = req.body;
+    const maxRow = await pool.query('SELECT COALESCE(MAX(row_index), 0) as max_row FROM project_casts WHERE project_id = $1', [project_id]);
+    const nextRow = maxRow.rows[0].max_row + 1;
+    const result = await pool.query(
+      `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index) VALUES ($1, $2, $3, $4) ON CONFLICT (project_id, staff_no) DO NOTHING RETURNING id, staff_no, cast_name, row_index`,
+      [project_id, staff_no, cast_name, nextRow]
+    );
+    res.json({ inserted: result.rows });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ error: msg });
+  }
+});
+
+app.delete('/api/setup/report/:reportId', async (req: Request, res: Response) => {
+  if (!SETUP_TOKEN || req.headers.authorization !== `Bearer ${SETUP_TOKEN}`) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const result = await pool.query('DELETE FROM reports WHERE id = $1 RETURNING id', [req.params.reportId]);
+    res.json({ deleted: result.rows });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ error: msg });
+  }
+});
+
 async function ensureSchema(){
   try {
     await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
