@@ -20,6 +20,21 @@ const COLORS = {
   danger: '#E74C3C',
 }
 
+const WEATHER_LABELS: Record<string, string> = {
+  sunny: '晴', cloudy: '曇', rainy: '雨', snowy: '雪'
+}
+
+const GUARD_CONTENT_LABELS: Record<string, string> = {
+  traffic: '①交通誘導',
+  pedestrian: '②歩行者誘導',
+  construction: '③工事関係者、車両の誘導',
+  worker_safety: '④作業員の安全確保',
+  property_safety: '⑤占有物の安全確保',
+  detour: '⑥通行止・迂回案内',
+  alternating: '⑦交互通行',
+  other: '⑧その他'
+}
+
 type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients' | 'cast_users'
 
 interface AdminUser {
@@ -62,6 +77,30 @@ interface Report {
   work_date: string
   work_name: string
   location: string
+}
+
+interface ReportDetail {
+  id: string
+  project_id: string
+  supervisor_name: string
+  writer_name: string
+  weather: string
+  guard_contents: string[]
+  guard_other_text: string | null
+  has_qualifier: boolean
+  qualifier_name: string | null
+  guards_json: string | null
+  status: string
+  approved_at: string
+  created_at: string
+  pdf_generation_status: string
+  pdf_size: number
+  signature_png_base64: string | null
+  client_name_raw: string
+  work_date: string
+  work_name: string
+  location: string
+  work_title_raw: string
 }
 
 interface StaffMember {
@@ -169,6 +208,8 @@ function AdminApp() {
                 const [savingStaff, setSavingStaff] = useState(false)
                 const [staffSearchQuery, setStaffSearchQuery] = useState('')
                 const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
+                const [selectedReportDetail, setSelectedReportDetail] = useState<ReportDetail | null>(null)
+                const [loadingReportDetail, setLoadingReportDetail] = useState(false)
 
                 // MVP: Single date navigation (no infinite scroll)
                 const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -648,6 +689,22 @@ function AdminApp() {
       } else {
         setError('CSVファイルのみアップロードできます')
       }
+    }
+  }
+
+  const fetchReportDetail = async (reportId: string) => {
+    setLoadingReportDetail(true)
+    try {
+      const response = await fetch(`/api/admin/reports/${reportId}/detail`, {
+        credentials: 'include'
+      })
+      if (!response.ok) throw new Error('Failed to fetch report detail')
+      const data = await response.json()
+      setSelectedReportDetail(data.report)
+    } catch {
+      setError('報告書詳細の取得に失敗しました')
+    } finally {
+      setLoadingReportDetail(false)
     }
   }
 
@@ -1308,7 +1365,7 @@ function AdminApp() {
                         ) : isMobile ? (
                           <div style={styles.mobileCardList}>
                             {reports.map(report => (
-                              <div key={report.id} style={styles.mobileCard}>
+                              <div key={report.id} style={{...styles.mobileCard, cursor: 'pointer'}} onClick={() => fetchReportDetail(report.id)}>
                                 <div style={styles.mobileCardHeader}>
                                   <span style={styles.mobileCardDate}>{formatDateTime(report.approved_at)}</span>
                                 </div>
@@ -1338,7 +1395,7 @@ function AdminApp() {
                                   {report.pdf_generation_status === 'success' ? (
                                     <button 
                                       style={styles.mobileActionButtonPrimary}
-                                      onClick={() => handleDownloadPdf(report.id)}
+                                      onClick={(e) => { e.stopPropagation(); handleDownloadPdf(report.id) }}
                                     >
                                       PDFダウンロード ({Math.round(report.pdf_size / 1024)}KB)
                                     </button>
@@ -1368,7 +1425,7 @@ function AdminApp() {
                                 </thead>
                                 <tbody>
                                   {reports.map(report => (
-                                    <tr key={report.id} style={styles.tr}>
+                                    <tr key={report.id} style={{...styles.tr, cursor: 'pointer'}} onClick={() => fetchReportDetail(report.id)}>
                                       <td style={styles.td}>{formatDateTime(report.approved_at)}</td>
                                       <td style={styles.td}>{report.client_name_raw}</td>
                                       <td style={styles.td}>{formatDate(report.work_date)}</td>
@@ -1379,7 +1436,7 @@ function AdminApp() {
                                         {report.pdf_generation_status === 'success' ? (
                                           <button 
                                             style={styles.downloadButton}
-                                            onClick={() => handleDownloadPdf(report.id)}
+                                            onClick={(e) => { e.stopPropagation(); handleDownloadPdf(report.id) }}
                                           >
                                             ダウンロード ({Math.round(report.pdf_size / 1024)}KB)
                                           </button>
@@ -1396,6 +1453,115 @@ function AdminApp() {
                             </div>
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Report Detail Modal */}
+                    {(selectedReportDetail || loadingReportDetail) && (
+                      <div style={styles.modalOverlay} onClick={() => setSelectedReportDetail(null)}>
+                        <div style={{...styles.modalContent, maxWidth: '700px', maxHeight: '90vh', overflow: 'auto'}} onClick={e => e.stopPropagation()}>
+                          <div style={styles.modalHeader}>
+                            <h3 style={styles.modalTitle}>報告書詳細</h3>
+                            <button style={styles.modalClose} onClick={() => setSelectedReportDetail(null)}>×</button>
+                          </div>
+                          {loadingReportDetail ? (
+                            <p style={{padding: '20px'}}>読み込み中...</p>
+                          ) : selectedReportDetail && (
+                            <div style={{padding: '20px'}}>
+                              <div style={{display: 'grid', gridTemplateColumns: '120px 1fr', gap: '8px 16px', marginBottom: '20px'}}>
+                                <span style={{fontWeight: 'bold', color: '#666'}}>会社名</span>
+                                <span>{selectedReportDetail.client_name_raw}</span>
+                                <span style={{fontWeight: 'bold', color: '#666'}}>案件名</span>
+                                <span>{selectedReportDetail.work_title_raw || selectedReportDetail.work_name}</span>
+                                <span style={{fontWeight: 'bold', color: '#666'}}>実施日</span>
+                                <span>{formatDate(selectedReportDetail.work_date)}</span>
+                                <span style={{fontWeight: 'bold', color: '#666'}}>実施場所</span>
+                                <span>{selectedReportDetail.location}</span>
+                                <span style={{fontWeight: 'bold', color: '#666'}}>天気</span>
+                                <span>{WEATHER_LABELS[selectedReportDetail.weather] || selectedReportDetail.weather}</span>
+                                <span style={{fontWeight: 'bold', color: '#666'}}>監督者</span>
+                                <span>{selectedReportDetail.supervisor_name}</span>
+                                <span style={{fontWeight: 'bold', color: '#666'}}>記入者</span>
+                                <span>{selectedReportDetail.writer_name}</span>
+                                <span style={{fontWeight: 'bold', color: '#666'}}>承認日時</span>
+                                <span>{formatDateTime(selectedReportDetail.approved_at)}</span>
+                                <span style={{fontWeight: 'bold', color: '#666'}}>資格者</span>
+                                <span>{selectedReportDetail.has_qualifier ? `有 (${selectedReportDetail.qualifier_name || '未記入'})` : '無'}</span>
+                              </div>
+
+                              <div style={{marginBottom: '20px'}}>
+                                <h4 style={{margin: '0 0 8px', color: '#333'}}>警備内容</h4>
+                                <div style={{display: 'flex', flexWrap: 'wrap', gap: '6px'}}>
+                                  {(selectedReportDetail.guard_contents || []).map(code => (
+                                    <span key={code} style={{background: '#E8F5E9', color: '#2E7D32', padding: '4px 10px', borderRadius: '12px', fontSize: '13px'}}>
+                                      {GUARD_CONTENT_LABELS[code] || code}
+                                    </span>
+                                  ))}
+                                </div>
+                                {selectedReportDetail.guard_other_text && (
+                                  <p style={{margin: '8px 0 0', color: '#555'}}>その他: {selectedReportDetail.guard_other_text}</p>
+                                )}
+                              </div>
+
+                              {selectedReportDetail.guards_json && (() => {
+                                const guards = typeof selectedReportDetail.guards_json === 'string'
+                                  ? JSON.parse(selectedReportDetail.guards_json) as Array<{index?: number; name?: string; start_time?: string; end_time?: string; early_overtime_hours?: number | null}>
+                                  : selectedReportDetail.guards_json as unknown as Array<{index?: number; name?: string; start_time?: string; end_time?: string; early_overtime_hours?: number | null}>;
+                                return guards.length > 0 ? (
+                                  <div style={{marginBottom: '20px'}}>
+                                    <h4 style={{margin: '0 0 8px', color: '#333'}}>警備員一覧</h4>
+                                    <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '13px'}}>
+                                      <thead>
+                                        <tr>
+                                          <th style={{border: '1px solid #ddd', padding: '6px 8px', background: '#f5f5f5', textAlign: 'left'}}>No</th>
+                                          <th style={{border: '1px solid #ddd', padding: '6px 8px', background: '#f5f5f5', textAlign: 'left'}}>氏名</th>
+                                          <th style={{border: '1px solid #ddd', padding: '6px 8px', background: '#f5f5f5', textAlign: 'left'}}>開始</th>
+                                          <th style={{border: '1px solid #ddd', padding: '6px 8px', background: '#f5f5f5', textAlign: 'left'}}>終了</th>
+                                          <th style={{border: '1px solid #ddd', padding: '6px 8px', background: '#f5f5f5', textAlign: 'left'}}>早出残業(h)</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {guards.map((g: {index?: number; name?: string; start_time?: string; end_time?: string; early_overtime_hours?: number | null}, i: number) => (
+                                          <tr key={i}>
+                                            <td style={{border: '1px solid #ddd', padding: '6px 8px'}}>{g.index ?? ''}</td>
+                                            <td style={{border: '1px solid #ddd', padding: '6px 8px'}}>{g.name || ''}</td>
+                                            <td style={{border: '1px solid #ddd', padding: '6px 8px'}}>{g.start_time || ''}</td>
+                                            <td style={{border: '1px solid #ddd', padding: '6px 8px'}}>{g.end_time || ''}</td>
+                                            <td style={{border: '1px solid #ddd', padding: '6px 8px'}}>{g.early_overtime_hours != null ? g.early_overtime_hours : ''}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : null;
+                              })()}
+
+                              {selectedReportDetail.signature_png_base64 && (
+                                <div style={{marginBottom: '20px'}}>
+                                  <h4 style={{margin: '0 0 8px', color: '#333'}}>署名</h4>
+                                  <div style={{border: '1px solid #ddd', borderRadius: '8px', padding: '12px', background: '#fafafa', display: 'inline-block'}}>
+                                    <img
+                                      src={`data:image/png;base64,${selectedReportDetail.signature_png_base64}`}
+                                      alt="署名"
+                                      style={{maxWidth: '300px', maxHeight: '150px'}}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              <div style={{display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px'}}>
+                                {selectedReportDetail.pdf_generation_status === 'success' && (
+                                  <button style={styles.primaryButton} onClick={() => handleDownloadPdf(selectedReportDetail.id)}>
+                                    PDFダウンロード
+                                  </button>
+                                )}
+                                <button style={styles.secondaryButton} onClick={() => setSelectedReportDetail(null)}>
+                                  閉じる
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 

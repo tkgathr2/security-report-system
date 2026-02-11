@@ -117,6 +117,32 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
+router.get('/reports/:id/detail', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT r.id, r.project_id, r.supervisor_name, r.writer_name, r.weather,
+              r.guard_contents, r.guard_other_text, r.has_qualifier, r.qualifier_name,
+              r.guards_json, r.status, r.approved_at, r.created_at,
+              r.pdf_generation_status, length(r.pdf_bytes) as pdf_size,
+              encode(r.signature_png, 'base64') as signature_png_base64,
+              p.client_name_raw, p.work_date, p.work_name, p.location, p.work_title_raw
+       FROM reports r
+       JOIN projects p ON r.project_id = p.id
+       WHERE r.id = $1`,
+      [req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      sendNotFound(res, '報告書が見つかりません');
+      return;
+    }
+
+    res.json({ report: result.rows[0] });
+  } catch (error) {
+    handleDbError(res, error, 'Report detail');
+  }
+});
+
 router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
