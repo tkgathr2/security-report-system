@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Cast.css';
 
@@ -30,15 +30,23 @@ export default function CastToday() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [date, setDate] = useState('');
   const [error, setError] = useState('');
+  const [dateOffset, setDateOffset] = useState(0);
 
-  useEffect(() => {
+  const fetchProjects = useCallback((offset: number) => {
     const token = localStorage.getItem('castToken');
     if (!token) {
       navigate('/cast/login');
       return;
     }
 
-    fetch(`${API_BASE}/api/cast/today`, {
+    setLoading(true);
+    setError('');
+
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + offset);
+    const dateStr = targetDate.toISOString().split('T')[0];
+
+    fetch(`${API_BASE}/api/cast/today?date=${dateStr}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
@@ -67,6 +75,10 @@ export default function CastToday() {
       });
   }, [navigate]);
 
+  useEffect(() => {
+    fetchProjects(dateOffset);
+  }, [dateOffset, fetchProjects]);
+
   const handleLogout = async () => {
     const token = localStorage.getItem('castToken');
     if (token) {
@@ -88,7 +100,21 @@ export default function CastToday() {
     return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${days[d.getDay()]}）`;
   };
 
-  if (loading) {
+  const getDateLabel = () => {
+    if (dateOffset === 0) return '今日の現場';
+    if (dateOffset === -1) return '昨日の現場';
+    if (dateOffset === 1) return '明日の現場';
+    return date ? `${formatDate(date)}の現場` : '現場';
+  };
+
+  const getNoProjectsLabel = () => {
+    if (dateOffset === 0) return '今日の現場はありません';
+    if (dateOffset === -1) return '昨日の現場はありません';
+    if (dateOffset === 1) return '明日の現場はありません';
+    return 'この日の現場はありません';
+  };
+
+  if (loading && !user) {
     return (
       <div className="cast-container">
         <div className="cast-card">
@@ -109,15 +135,38 @@ export default function CastToday() {
           </button>
         </div>
 
-        <h1>今日の現場</h1>
+        <h1>{getDateLabel()}</h1>
         {user && <p className="cast-user-name">{user.name} さん</p>}
-        <p className="cast-date">{date && formatDate(date)}</p>
+
+        <div className="cast-date-nav">
+          <button
+            className="cast-date-nav-btn"
+            onClick={() => setDateOffset(dateOffset - 1)}
+            disabled={loading}
+          >
+            ◀
+          </button>
+          <span className="cast-date-current" onClick={() => setDateOffset(0)}>
+            {date && formatDate(date)}
+          </span>
+          <button
+            className="cast-date-nav-btn"
+            onClick={() => setDateOffset(dateOffset + 1)}
+            disabled={loading}
+          >
+            ▶
+          </button>
+        </div>
 
         {error && <p className="cast-message error">{error}</p>}
 
-        {projects.length === 0 ? (
+        {loading ? (
           <div className="cast-no-projects">
-            <p>今日の現場はありません</p>
+            <p>読み込み中...</p>
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="cast-no-projects">
+            <p>{getNoProjectsLabel()}</p>
           </div>
         ) : (
           <div className="cast-projects">
