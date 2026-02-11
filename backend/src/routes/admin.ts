@@ -23,9 +23,6 @@ router.get('/me', (req: Request, res: Response) => {
 });
 
 router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
-  // #region agent log
-  const __t0_adminProjects = Date.now();
-  // #endregion
   try {
     const { date, start_date, end_date } = req.query;
 
@@ -82,32 +79,13 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
       params = [];
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7253/ingest/f7e4555a-6639-4502-b86d-deba90e7ea4b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'post-change',hypothesisId:'B',location:'backend/src/routes/admin.ts:/admin/projects:before-projects-query',message:'before projects query (single-query)',data:{hasRange:!!(start_date&&end_date),hasDate:!!date},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    // #region agent log
-    const __t0_projectsQuery = Date.now();
-    // #endregion
     const result = await pool.query(query, params);
-    // #region agent log
-    globalThis.fetch ? globalThis.fetch('http://127.0.0.1:7253/ingest/f7e4555a-6639-4502-b86d-deba90e7ea4b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'post-change',hypothesisId:'B2',location:'backend/src/routes/admin.ts:/admin/projects:projects-query-ms',message:'projects query timing (single-query)',data:{projectsQueryMs:Date.now()-__t0_projectsQuery,projectsRows:result.rows.length},timestamp:Date.now()})}).catch(()=>{}) : undefined;
-    // #endregion
-    // #region agent log
-    fetch('http://127.0.0.1:7253/ingest/f7e4555a-6639-4502-b86d-deba90e7ea4b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'post-change',hypothesisId:'B',location:'backend/src/routes/admin.ts:/admin/projects:after-projects-query',message:'after projects query (single-query)',data:{projectsRows:result.rows.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
-    // #region agent log
-    globalThis.fetch ? globalThis.fetch('http://127.0.0.1:7253/ingest/f7e4555a-6639-4502-b86d-deba90e7ea4b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'post-change',hypothesisId:'B2',location:'backend/src/routes/admin.ts:/admin/projects:casts-query-ms',message:'casts query skipped (single-query)',data:{castsQueryMs:0,skipped:true},timestamp:Date.now()})}).catch(()=>{}) : undefined;
-    // #endregion
 
     const projectsWithCasts = result.rows.map(project => ({
       ...project,
       casts: project.casts ?? []
     }));
 
-    // #region agent log
-    fetch('http://127.0.0.1:7253/ingest/f7e4555a-6639-4502-b86d-deba90e7ea4b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({runId:'post-change',hypothesisId:'B',location:'backend/src/routes/admin.ts:/admin/projects:exit',message:'admin projects handler exit (single-query)',data:{durationMs:Date.now()-__t0_adminProjects,returned:projectsWithCasts.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     res.json({
       projects: projectsWithCasts,
       total: projectsWithCasts.length
