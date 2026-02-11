@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
 
 // Company logo URL from kotsuyudo.com
@@ -167,28 +167,12 @@ function AdminApp() {
                 const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null)
                 const [savingStaff, setSavingStaff] = useState(false)
                 const [staffSearchQuery, setStaffSearchQuery] = useState('')
-                const [projectSearchQuery, setProjectSearchQuery] = useState('')
-                const [projectSearchMode, setProjectSearchMode] = useState<'all' | 'field'>('all')
-                const [projectSearchField, setProjectSearchField] = useState<'client_name_raw' | 'work_name' | 'location' | 'casts'>('client_name_raw')
                 const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
-                const [searchDateFrom, setSearchDateFrom] = useState<string>('')
-                const [searchDateTo, setSearchDateTo] = useState<string>('')
-                
-                // Date header design is fixed to Design 1 (Calendar style)
-                
-                // Infinite scroll state for projects (1 month before and after)
-                const [dateRangeStart, setDateRangeStart] = useState<string>(() => {
-                  const d = new Date()
-                  d.setMonth(d.getMonth() - 1)
-                  return d.toISOString().split('T')[0]
+
+                // MVP: Single date navigation (no infinite scroll)
+                const [selectedDate, setSelectedDate] = useState<string>(() => {
+                  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
                 })
-                const [dateRangeEnd, setDateRangeEnd] = useState<string>(() => {
-                  const d = new Date()
-                  d.setMonth(d.getMonth() + 1)
-                  return d.toISOString().split('T')[0]
-                })
-                const [loadingMore, setLoadingMore] = useState(false)
-                const projectsContainerRef = useRef<HTMLDivElement>(null)
 
           useEffect(() => {
       checkAuth()
@@ -266,41 +250,20 @@ function AdminApp() {
     }
   }
 
-    const fetchProjects = async (startDate?: string, endDate?: string, append: 'before' | 'after' | 'replace' = 'replace') => {
-      if (append === 'replace') {
-        setLoading(true)
-      } else {
-        setLoadingMore(true)
-      }
+    const fetchProjectsByDate = async (dateStr: string) => {
+      setLoading(true)
       setError(null)
       try {
-        const startParam = startDate || dateRangeStart
-        const endParam = endDate || dateRangeEnd
-        
-        const response = await fetch(`/api/admin/projects?start_date=${startParam}&end_date=${endParam}`, {
+        const response = await fetch(`/api/admin/projects?date=${dateStr}`, {
           credentials: 'include'
         })
         if (!response.ok) throw new Error('Failed to fetch projects')
         const data = await response.json()
-        
-        if (append === 'before') {
-          // Add older projects, avoiding duplicates
-          const existingIds = new Set(projects.map(p => p.id))
-          const newProjects = data.projects.filter((p: Project) => !existingIds.has(p.id))
-          setProjects([...newProjects, ...projects])
-        } else if (append === 'after') {
-          // Add newer projects, avoiding duplicates
-          const existingIds = new Set(projects.map(p => p.id))
-          const newProjects = data.projects.filter((p: Project) => !existingIds.has(p.id))
-          setProjects([...projects, ...newProjects])
-        } else {
-          setProjects(data.projects)
-        }
+        setProjects(data.projects)
       } catch {
         setError('案件一覧の取得に失敗しました')
       } finally {
         setLoading(false)
-        setLoadingMore(false)
       }
     }
 
@@ -499,7 +462,7 @@ function AdminApp() {
             }
             const data = await response.json()
             alert(data.message)
-            fetchProjects()
+            fetchProjectsByDate(selectedDate)
             fetchDashboardStats()
           } catch (err) {
             setError(err instanceof Error ? err.message : '削除に失敗しました')
@@ -678,7 +641,7 @@ function AdminApp() {
                   setImportedProjects([])
                   if (isMobile) setSidebarOpen(false)
                   if (newScreen === 'dashboard') fetchDashboardStats()
-                  if (newScreen === 'projects') fetchProjects()
+                  if (newScreen === 'projects') fetchProjectsByDate(selectedDate)
                   if (newScreen === 'reports') fetchReports()
                   if (newScreen === 'staff') fetchStaff()
                   if (newScreen === 'import_history') fetchImportHistory()
@@ -748,38 +711,7 @@ function AdminApp() {
     )
   })
 
-  const filteredProjects = sortedProjects.filter(project => {
-    // Date range filter
-    if (searchDateFrom || searchDateTo) {
-      const projectDate = project.work_date.split('T')[0]
-      if (searchDateFrom && projectDate < searchDateFrom) return false
-      if (searchDateTo && projectDate > searchDateTo) return false
-    }
-    
-    // Text search filter
-    if (!projectSearchQuery.trim()) return true
-    const query = projectSearchQuery.toLowerCase()
-    
-    if (projectSearchMode === 'all') {
-      const clientName = (project.client_name || project.client_name_raw || '').toLowerCase()
-      const workName = (project.work_name || '').toLowerCase()
-      const location = (project.location || '').toLowerCase()
-      const castsStr = project.casts?.map(c => c.cast_name).join(' ').toLowerCase() || ''
-      return clientName.includes(query) || workName.includes(query) || location.includes(query) || castsStr.includes(query)
-    } else {
-      if (projectSearchField === 'client_name_raw') {
-        return (project.client_name || project.client_name_raw || '').toLowerCase().includes(query)
-      } else if (projectSearchField === 'work_name') {
-        return (project.work_name || '').toLowerCase().includes(query)
-      } else if (projectSearchField === 'location') {
-        return (project.location || '').toLowerCase().includes(query)
-      } else if (projectSearchField === 'casts') {
-        const castsStr = project.casts?.map(c => c.cast_name).join(' ').toLowerCase() || ''
-        return castsStr.includes(query)
-      }
-    }
-    return true
-  })
+  const filteredProjects = sortedProjects
 
   // Group projects by date
   const projectsByDate = filteredProjects.reduce((acc, project) => {
@@ -794,8 +726,8 @@ function AdminApp() {
   // Get sorted dates (ascending order)
   const sortedDates = Object.keys(projectsByDate).sort()
   
-  // Get today's date for highlighting
-  const todayStr = new Date().toISOString().split('T')[0]
+  // Get today's date in JST for highlighting
+  const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
   
   // Parse date parts for custom formatting
   const parseDateParts = (dateStr: string) => {
@@ -853,55 +785,14 @@ function AdminApp() {
     )
   }
 
-  // Load more past projects (scroll up) - 1 month at a time
-  const loadMorePastProjects = useCallback(async () => {
-    if (loadingMore) return
-    const newStart = new Date(dateRangeStart)
-    newStart.setMonth(newStart.getMonth() - 1)
-    const newStartStr = newStart.toISOString().split('T')[0]
-    const oldStartStr = dateRangeStart
-    setDateRangeStart(newStartStr)
-    await fetchProjects(newStartStr, oldStartStr, 'before')
-  }, [dateRangeStart, loadingMore])
-
-  // Load more future projects (scroll down) - 1 month at a time
-  const loadMoreFutureProjects = useCallback(async () => {
-    if (loadingMore) return
-    const newEnd = new Date(dateRangeEnd)
-    newEnd.setMonth(newEnd.getMonth() + 1)
-    const newEndStr = newEnd.toISOString().split('T')[0]
-    const oldEndStr = dateRangeEnd
-    setDateRangeEnd(newEndStr)
-    await fetchProjects(oldEndStr, newEndStr, 'after')
-  }, [dateRangeEnd, loadingMore])
-
-  // Handle scroll for infinite loading
-  const handleProjectsScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLDivElement
-    const { scrollTop, scrollHeight, clientHeight } = target
-    
-    // Load more past projects when scrolling near top
-    if (scrollTop < 100 && !loadingMore) {
-      loadMorePastProjects()
-    }
-    
-    // Load more future projects when scrolling near bottom
-    if (scrollHeight - scrollTop - clientHeight < 100 && !loadingMore) {
-      loadMoreFutureProjects()
-    }
-  }, [loadMorePastProjects, loadMoreFutureProjects, loadingMore])
-
-  // Scroll to today on initial load
-  useEffect(() => {
-    if (screen === 'projects' && sortedDates.length > 0) {
-      const todayElement = document.getElementById(`date-${todayStr}`)
-      if (todayElement) {
-        setTimeout(() => {
-          todayElement.scrollIntoView({ behavior: 'auto', block: 'start' })
-        }, 100)
-      }
-    }
-  }, [screen, sortedDates.length, todayStr])
+  // Date navigation helpers
+  const navigateDate = (offset: number) => {
+    const d = new Date(selectedDate + 'T12:00:00')
+    d.setDate(d.getDate() + offset)
+    const newDate = d.toISOString().split('T')[0]
+    setSelectedDate(newDate)
+    fetchProjectsByDate(newDate)
+  }
 
   if (loading && !admin) {
     return (
@@ -1191,102 +1082,57 @@ function AdminApp() {
                     {screen === 'projects' && (
                       <div>
                         <h2 style={styles.pageTitle}>案件一覧</h2>
-                        
-                        {/* Search Box */}
-                        <div style={styles.searchContainer}>
-                          <div style={styles.searchModeToggle}>
+
+                        {/* Date Navigation */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                          <button
+                            style={{ padding: '8px 16px', backgroundColor: COLORS.white, border: `1px solid ${COLORS.primary}`, color: COLORS.primary, borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
+                            onClick={() => navigateDate(-1)}
+                            disabled={loading}
+                          >
+                            &#9664; 前日
+                          </button>
+                          <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                setSelectedDate(e.target.value)
+                                fetchProjectsByDate(e.target.value)
+                              }
+                            }}
+                            disabled={loading}
+                            style={{ padding: '8px 12px', border: `1px solid ${COLORS.primary}`, borderRadius: '6px', fontSize: '16px', fontWeight: 'bold', color: COLORS.text, textAlign: 'center' }}
+                          />
+                          <button
+                            style={{ padding: '8px 16px', backgroundColor: COLORS.white, border: `1px solid ${COLORS.primary}`, color: COLORS.primary, borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
+                            onClick={() => navigateDate(1)}
+                            disabled={loading}
+                          >
+                            翌日 &#9654;
+                          </button>
+                          {selectedDate !== todayStr && (
                             <button
-                              style={projectSearchMode === 'all' ? styles.searchModeButtonActive : styles.searchModeButton}
-                              onClick={() => setProjectSearchMode('all')}
+                              style={{ padding: '8px 16px', backgroundColor: COLORS.primary, border: 'none', color: COLORS.white, borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
+                              onClick={() => {
+                                setSelectedDate(todayStr)
+                                fetchProjectsByDate(todayStr)
+                              }}
+                              disabled={loading}
                             >
-                              全文検索
+                              今日
                             </button>
-                            <button
-                              style={projectSearchMode === 'field' ? styles.searchModeButtonActive : styles.searchModeButton}
-                              onClick={() => setProjectSearchMode('field')}
-                            >
-                              項目別検索
-                            </button>
-                          </div>
-                          <div style={styles.searchInputRow}>
-                            {projectSearchMode === 'field' && (
-                              <select
-                                style={styles.searchFieldSelect}
-                                value={projectSearchField}
-                                onChange={(e) => setProjectSearchField(e.target.value as 'client_name_raw' | 'work_name' | 'location' | 'casts')}
-                              >
-                                <option value="client_name_raw">会社名</option>
-                                <option value="work_name">作業名</option>
-                                <option value="location">場所</option>
-                                <option value="casts">キャスト</option>
-                              </select>
-                            )}
-                            <input
-                              type="text"
-                              placeholder={projectSearchMode === 'all' ? '会社名、作業名、場所、キャストで検索...' : `${projectSearchField === 'client_name_raw' ? '会社名' : projectSearchField === 'work_name' ? '作業名' : projectSearchField === 'location' ? '場所' : 'キャスト'}で検索...`}
-                              value={projectSearchQuery}
-                              onChange={(e) => setProjectSearchQuery(e.target.value)}
-                              style={styles.projectSearchInput}
-                            />
-                            {projectSearchQuery && (
-                              <button
-                                style={styles.searchClearButton}
-                                onClick={() => setProjectSearchQuery('')}
-                              >
-                                クリア
-                              </button>
-                            )}
-                          </div>
-                          {/* Date Range Filter */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '14px', color: COLORS.darkGray }}>期間:</span>
-                            <input
-                              type="date"
-                              value={searchDateFrom}
-                              onChange={(e) => setSearchDateFrom(e.target.value)}
-                              style={{ padding: '6px 10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '14px' }}
-                            />
-                            <span style={{ color: COLORS.darkGray }}>〜</span>
-                            <input
-                              type="date"
-                              value={searchDateTo}
-                              onChange={(e) => setSearchDateTo(e.target.value)}
-                              style={{ padding: '6px 10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '14px' }}
-                            />
-                            {(searchDateFrom || searchDateTo) && (
-                              <button
-                                style={{ padding: '6px 12px', backgroundColor: '#f0f0f0', border: '1px solid #ddd', borderRadius: '4px', cursor: 'pointer', fontSize: '14px' }}
-                                onClick={() => { setSearchDateFrom(''); setSearchDateTo(''); }}
-                              >
-                                期間クリア
-                              </button>
-                            )}
-                          </div>
-                          {(projectSearchQuery || searchDateFrom || searchDateTo) && (
-                            <div style={styles.searchResultCount}>
-                              {filteredProjects.length}件 / {sortedProjects.length}件
-                            </div>
                           )}
                         </div>
 
-                        {/* Date info and loading indicator */}
-                        <div style={{ marginBottom: '16px', color: COLORS.darkGray, fontSize: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                          <span>スクロールで前後の日付を表示 ({sortedDates.length > 0 ? `${sortedDates[0].split('T')[0].replace(/-/g, '/')} 〜 ${sortedDates[sortedDates.length - 1].split('T')[0].replace(/-/g, '/')}` : '-'})</span>
-                          {loadingMore && <span style={{ color: COLORS.primary }}>読み込み中...</span>}
-                        </div>
-
-                                                {loading || loadingMore ? (
-                                                  <p>読み込み中...</p>
-                                                ) : projects.length === 0 ? (
-                                                  <p style={styles.emptyMessage}>案件がありません</p>
-                                                ) : isMobile ? (
-                          <div 
-                            ref={projectsContainerRef}
-                            style={{...styles.mobileCardList, maxHeight: '70vh', overflowY: 'auto'}}
-                            onScroll={handleProjectsScroll}
-                          >
+                        {loading ? (
+                          <p>読み込み中...</p>
+                        ) : projects.length === 0 ? (
+                          <p style={styles.emptyMessage}>案件がありません</p>
+                        ) : isMobile ? (
+                          <div style={styles.mobileCardList}>
                             {sortedDates.map(date => (
-                              <div key={date} id={`date-${date}`}>
+                              <div key={date}>
                                 {renderDateHeader(date, projectsByDate[date].length)}
                                 {projectsByDate[date].map(project => (
                               <div key={project.id} style={styles.mobileCard}>
@@ -1315,11 +1161,11 @@ function AdminApp() {
                                   {project.casts && project.casts.length > 0 && (
                                     <div style={styles.mobileCardRow}>
                                       <span style={styles.mobileCardLabel}>キャスト</span>
-                                      <span 
+                                      <span
                                         style={{...styles.mobileCardValue, cursor: 'pointer', color: COLORS.primary, textDecoration: 'underline'}}
                                         onClick={() => setCastsModalProject(project)}
                                       >
-                                        {project.casts.length === 1 
+                                        {project.casts.length === 1
                                           ? project.casts[0].cast_name
                                           : `${project.casts[0].cast_name} 他${project.casts.length - 1}人`}
                                       </span>
@@ -1327,7 +1173,7 @@ function AdminApp() {
                                   )}
                                 </div>
                                 <div style={styles.mobileCardActions}>
-                                  <button 
+                                  <button
                                     style={styles.mobileActionButton}
                                     onClick={() => {
                                       const url = `${window.location.origin}/report/${project.unique_url}`
@@ -1337,7 +1183,7 @@ function AdminApp() {
                                   >
                                     URLコピー
                                   </button>
-                                  <button 
+                                  <button
                                     style={styles.mobileActionButtonPrimary}
                                     onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
                                   >
@@ -1350,13 +1196,9 @@ function AdminApp() {
                             ))}
                           </div>
                         ) : (
-                          <div 
-                            ref={projectsContainerRef}
-                            style={{ maxHeight: '70vh', overflowY: 'auto' }}
-                            onScroll={handleProjectsScroll}
-                          >
+                          <div>
                             {sortedDates.map(date => (
-                              <div key={date} id={`date-${date}`} style={{ marginBottom: '24px' }}>
+                              <div key={date} style={{ marginBottom: '24px' }}>
                                 {renderDateHeader(date, projectsByDate[date].length)}
                                 <div style={styles.card}>
                                   <div style={styles.tableContainer}>
@@ -1378,13 +1220,13 @@ function AdminApp() {
                                             <td style={styles.td}>{project.work_name}</td>
                                             <td style={styles.td}>{project.location}</td>
                                             <td style={styles.td}>
-                                              {project.casts && project.casts.length > 0 
+                                              {project.casts && project.casts.length > 0
                                                 ? (
-                                                  <span 
+                                                  <span
                                                     style={{ cursor: 'pointer', color: COLORS.primary, textDecoration: 'underline' }}
                                                     onClick={() => setCastsModalProject(project)}
                                                   >
-                                                    {project.casts.length === 1 
+                                                    {project.casts.length === 1
                                                       ? project.casts[0].cast_name
                                                       : `${project.casts[0].cast_name} 他${project.casts.length - 1}人`}
                                                   </span>
@@ -1398,7 +1240,7 @@ function AdminApp() {
                                             </td>
                                             <td style={styles.td}>
                                               <div style={{ display: 'flex', gap: '8px' }}>
-                                                <button 
+                                                <button
                                                   style={styles.smallButton}
                                                   onClick={() => {
                                                     const url = `${window.location.origin}/report/${project.unique_url}`
@@ -1408,7 +1250,7 @@ function AdminApp() {
                                                 >
                                                   URLコピー
                                                 </button>
-                                                <button 
+                                                <button
                                                   style={styles.linkButton}
                                                   onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
                                                 >
