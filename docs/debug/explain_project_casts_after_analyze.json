@@ -1,0 +1,78 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Sort",
+      "Parallel Aware": false,
+      "Async Capable": false,
+      "Startup Cost": 3.22,
+      "Total Cost": 3.33,
+      "Plan Rows": 43,
+      "Plan Width": 36,
+      "Actual Startup Time": 0.038,
+      "Actual Total Time": 0.04,
+      "Actual Rows": 43,
+      "Actual Loops": 1,
+      "Sort Key": [
+        "row_index"
+      ],
+      "Sort Method": "quicksort",
+      "Sort Space Used": 27,
+      "Sort Space Type": "Memory",
+      "Shared Hit Blocks": 4,
+      "Shared Read Blocks": 0,
+      "Shared Dirtied Blocks": 0,
+      "Shared Written Blocks": 0,
+      "Local Hit Blocks": 0,
+      "Local Read Blocks": 0,
+      "Local Dirtied Blocks": 0,
+      "Local Written Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0,
+      "Plans": [
+        {
+          "Node Type": "Seq Scan",
+          "Parent Relationship": "Outer",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Relation Name": "project_casts",
+          "Alias": "project_casts",
+          "Startup Cost": 0.11,
+          "Total Cost": 2.05,
+          "Plan Rows": 43,
+          "Plan Width": 36,
+          "Actual Startup Time": 0.017,
+          "Actual Total Time": 0.022,
+          "Actual Rows": 43,
+          "Actual Loops": 1,
+          "Filter": "(project_id = ANY ('{841e9f04-1181-4d45-b0df-a99655afae97,f9f18887-b704-4d1e-a99c-ff37f8cda525,e60d1508-c20d-4728-9c3d-0b3bddcf62c1,8fa56aa0-91b6-48c7-bbbf-cdd7fc0b1364,561bc4b4-111d-4f44-ad2c-810395b997f7,66be2379-d7f5-4daf-b0b6-ecf5e8123361,dae495ab-0563-4690-a1a4-8a6c1975f353,3a947427-7395-4b26-b457-221aeed16762,3ecfd10b-733c-4948-8b26-6ab852134a66,d7c49ec0-6983-4e23-9d55-9e9e116477e7,d1b62588-f36a-44dd-94ac-ad25662d5658,61120cf2-7512-4bed-8ae5-10e5c98fdc6d,f5cfd7ce-f3c1-44a4-950c-94efc3b29285,16c22ef5-f4a9-4084-804f-88ac4d48cbd6,dcdc42ff-f540-4780-b69e-e0f18ed7ca35,c46cdb06-caa4-42ce-9c72-f328b9ab1242,2c116c63-50fa-4ded-b95e-0f60b04609cb,54f9f1d2-5cc4-4283-b5fe-b8dd1d321a84,562ef457-1607-4211-9c56-3d3e972d5a32,26fc7ddd-391f-4951-aef8-624804910ddc,3f1bbded-3328-4054-a2b6-2871825a6b89,803c8cff-ba0f-4636-9a83-4b33805b974d,8f51002f-9fee-4395-b07e-c1f6272cef39,44253720-17a7-44fe-93f8-f78cb93dc2fe,7cef308f-cc2e-4f52-a7a7-77672fc5a462,84607e0d-3fbd-4924-9aec-9b8ce258d262,af500b64-ec05-4f58-b218-60ed4017b685,3a71d106-809a-44f0-9b81-f04987f6e294,12e470b3-42e4-42fc-8d08-4027e49a5474,9e5f002e-f38b-4623-829d-091c84521761,18d510ee-832b-4dd9-a17f-4b9c8baad684,97da9fef-521a-43ad-a9c4-fb9d9d4595b9,67e5a18a-02de-4f07-82f0-8307ccd47783,4a2f9509-44b4-4191-978c-f95786d3fe0b,a3f7b1a6-6798-4627-b6dc-193fabde4e29,299fc305-d2e4-4b1c-bdac-1564bd28939d,3017bc3d-8516-41c1-bffe-ef43968a18f8,8fec2111-9d23-4d71-be8a-fd658fd742d0,ff90c196-086b-4217-8469-b6c2001a1d22,5a0ea020-64af-4a10-8497-b02e98acc1c7,994f1f7f-521d-4b25-b182-8f416a57b738,34fbcdbd-38c7-4c98-bac3-63f9791e11f5,3abde7c6-2025-433c-9b65-216673dc8f6d}'::uuid[]))",
+          "Rows Removed by Filter": 20,
+          "Shared Hit Blocks": 1,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        }
+      ]
+    },
+    "Planning": {
+      "Shared Hit Blocks": 71,
+      "Shared Read Blocks": 0,
+      "Shared Dirtied Blocks": 0,
+      "Shared Written Blocks": 0,
+      "Local Hit Blocks": 0,
+      "Local Read Blocks": 0,
+      "Local Dirtied Blocks": 0,
+      "Local Written Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    "Planning Time": 0.243,
+    "Triggers": [],
+    "Execution Time": 0.078
+  }
+]
