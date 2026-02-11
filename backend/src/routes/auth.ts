@@ -36,6 +36,31 @@ router.post('/register', async (req: Request, res: Response) => {
     );
 
     if (existingUser.rows.length > 0) {
+      const existing = existingUser.rows[0];
+      if (!existing.pin_hash) {
+        const pinHash = await bcrypt.hash(pin, 10);
+        await pool.query(
+          'UPDATE cast_users SET pin_hash = $1, updated_at = NOW() WHERE id = $2',
+          [pinHash, existing.id]
+        );
+
+        const token = jwt.sign(
+          { userId: existing.id, email },
+          AUTH_SECRET,
+          { expiresIn: JWT_EXPIRES_IN }
+        );
+
+        res.status(200).json({
+          user: {
+            id: existing.id,
+            email,
+            created_at: existing.created_at
+          },
+          token
+        });
+        return;
+      }
+
       res.status(400).json({
         error: 'INVALID_PAYLOAD',
         message: 'このメールアドレスは既に登録されています',
@@ -105,6 +130,16 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const user = result.rows[0];
+
+    if (!user.pin_hash) {
+      res.status(401).json({
+        error: 'UNAUTHORIZED',
+        message: 'メールアドレスまたはPINが正しくありません',
+        details: {}
+      });
+      return;
+    }
+
     const isValidPin = await bcrypt.compare(pin, user.pin_hash);
 
     if (!isValidPin) {

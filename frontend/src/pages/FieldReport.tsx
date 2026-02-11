@@ -175,6 +175,8 @@ export default function FieldReport() {
       
         const data = await response.json()
         setToken(data.token)
+
+        localStorage.setItem(`writer_email_${uniqueUrl}`, email)
       
         initializeFormFromProject(projectData)
       
@@ -236,7 +238,6 @@ export default function FieldReport() {
     setEmailError('')
     
     try {
-      localStorage.setItem(`writer_email_${uniqueUrl}`, emailInput)
       setWriterEmail(emailInput)
       setWriterName(emailInput)
       
