@@ -132,7 +132,7 @@ export default function CastToday() {
                 <p className="cast-project-location">{project.location}</p>
                 {project.unique_url && (
                   <a 
-                    href={`/report/${project.unique_url}`}
+                    href={`/report/${project.unique_url}?email=${encodeURIComponent(user?.email || '')}`}
                     className="cast-project-link"
                     target="_blank"
                     rel="noopener noreferrer"

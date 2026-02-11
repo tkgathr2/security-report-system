@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import SignatureModal from '../components/SignatureModal'
 import './FieldReport.css'
 
@@ -67,6 +67,7 @@ const GUARD_CONTENTS = [
 
 export default function FieldReport() {
   const { uniqueUrl } = useParams<{ uniqueUrl: string }>()
+  const [searchParams] = useSearchParams()
   const [pageState, setPageState] = useState<PageState>('loading')
   const [project, setProject] = useState<Project | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
@@ -138,10 +139,12 @@ export default function FieldReport() {
       setProject(data.project)
       
       const savedEmail = localStorage.getItem(`writer_email_${uniqueUrl}`)
-      if (savedEmail) {
-        setWriterEmail(savedEmail)
-        setWriterName(savedEmail)
-        await authenticateWithEmail(savedEmail, data.project)
+      const queryEmail = searchParams.get('email')
+      const emailToUse = savedEmail || queryEmail
+      if (emailToUse) {
+        setWriterEmail(emailToUse)
+        setWriterName(emailToUse)
+        await authenticateWithEmail(emailToUse, data.project)
       } else {
         setPageState('email_registration')
       }
