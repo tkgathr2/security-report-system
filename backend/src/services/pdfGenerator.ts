@@ -1,6 +1,24 @@
 import PDFDocument from 'pdfkit';
+import * as fs from 'fs';
 
-const FONT_PATH = '/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf';
+const FONT_PATHS = [
+  '/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf',
+  '/usr/share/fonts/truetype/ipafont-gothic/ipag.ttf',
+  '/usr/share/fonts/opentype/ipafont/ipag.ttf',
+  '/usr/share/fonts/truetype/fonts-japanese-gothic.ttf',
+];
+
+function findJapaneseFont(): string | null {
+  for (const p of FONT_PATHS) {
+    try {
+      fs.accessSync(p, fs.constants.R_OK);
+      return p;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
 
 interface ReportData {
   companyName: string;
@@ -46,8 +64,14 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      doc.registerFont('IPAGothic', FONT_PATH);
-      doc.font('IPAGothic');
+      const fontPath = findJapaneseFont();
+      if (fontPath) {
+        doc.registerFont('IPAGothic', fontPath);
+        doc.font('IPAGothic');
+      } else {
+        console.warn('[PDF] No Japanese font found, using default Helvetica');
+        doc.font('Helvetica');
+      }
 
       doc.fontSize(20).text('デジタル警備報告書システム【ほうこちゃん】', { align: 'center' });
       doc.moveDown(2);

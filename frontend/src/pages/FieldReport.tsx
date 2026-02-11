@@ -523,8 +523,8 @@ export default function FieldReport() {
       <div style={styles.container}>
         <div style={styles.successBox}>
           <div style={styles.successIcon}>&#10003;</div>
-          <h2>報告書を送信しました</h2>
-          <p>ご協力ありがとうございました。</p>
+          <h2>お仕事お疲れ様でした</h2>
+          <p>すぐメールが行くので確認してください</p>
         </div>
       </div>
     )
