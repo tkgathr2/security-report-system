@@ -155,6 +155,18 @@ export async function sendReportApprovalNotifications(params: {
     }] : [])
   ];
 
+  // Slack通知を最優先で送信（メール処理でブロックされないように先に実行）
+  const slackResult = await sendSlackNotification({
+    companyName: params.companyName,
+    workDate: params.workDate,
+    projectName: params.projectName,
+    reportId: params.reportId
+  });
+
+  if (!slackResult.success) {
+    warnings.push(`Slack通知失敗: ${slackResult.error}`);
+  }
+
   const emailResult = await sendEmail({
     to: params.clientEmails,
     subject: `【デジタル警備報告書システム ほうこちゃん】警備報告書 ${params.projectName} (${params.workDate})`,
@@ -241,17 +253,6 @@ export async function sendReportApprovalNotifications(params: {
     if (!adminResult.success) {
       warnings.push(`管理者メール送信失敗: ${adminResult.error}`);
     }
-  }
-
-  const slackResult = await sendSlackNotification({
-    companyName: params.companyName,
-    workDate: params.workDate,
-    projectName: params.projectName,
-    reportId: params.reportId
-  });
-
-  if (!slackResult.success) {
-    warnings.push(`Slack通知失敗: ${slackResult.error}`);
   }
 
   return {
