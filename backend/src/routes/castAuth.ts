@@ -392,9 +392,10 @@ router.get('/today', async (req: Request, res: Response) => {
 
     const user = userResult.rows[0];
 
-    // Get today's projects where this cast is assigned
-    // Match by comparing names with spaces removed for flexibility
-    const today = new Date().toISOString().split('T')[0];
+    const dateParam = req.query.date as string | undefined;
+    const today = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+      ? dateParam
+      : new Date().toISOString().split('T')[0];
 
     // Use staff_name from staff_master if available, otherwise use cast_users.name
     const matchName = user.staff_name || user.name;

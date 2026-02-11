@@ -199,6 +199,51 @@
   color: white;
 }
 
+.cast-date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 10px 0 20px 0;
+}
+
+.cast-date-nav-btn {
+  background: none;
+  border: 1px solid #E67E22;
+  color: #E67E22;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.cast-date-nav-btn:hover {
+  background: #E67E22;
+  color: white;
+}
+
+.cast-date-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cast-date-current {
+  font-size: 16px;
+  color: #666;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.cast-date-current:hover {
+  background: #f0f0f0;
+}
+
 .cast-no-projects {
   text-align: center;
   padding: 40px 20px;
