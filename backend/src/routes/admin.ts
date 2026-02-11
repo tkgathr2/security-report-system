@@ -659,4 +659,15 @@ router.delete('/projects/without-casts', requireAdmin, async (req: Request, res:
   }
 });
 
+router.get('/notification-config', requireAdmin, (_req: Request, res: Response) => {
+  res.json({
+    slack_webhook: process.env.SLACK_WEBHOOK_URL ? 'SET' : 'NOT SET',
+    smtp_host: process.env.SMTP_HOST ? 'SET' : 'NOT SET',
+    smtp_user: process.env.SMTP_USER ? 'SET' : 'NOT SET',
+    smtp_pass: process.env.SMTP_PASS ? 'SET' : 'NOT SET',
+    smtp_from: process.env.SMTP_FROM || 'NOT SET',
+    admin_emails: process.env.ADMIN_NOTIFICATION_EMAILS || 'NOT SET',
+  });
+});
+
 export default router;
