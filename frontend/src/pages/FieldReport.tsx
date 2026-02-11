@@ -186,10 +186,15 @@ export default function FieldReport() {
         const savedStaffId = localStorage.getItem(`selected_staff_id_${uniqueUrl}`)
         const savedStaffName = localStorage.getItem(`selected_staff_name_${uniqueUrl}`)
       
-        if (savedStaffId && savedStaffName) {
+        const staffId = savedStaffId || data.user?.staff_id
+        const staffName = savedStaffName || data.user?.staff_name
+
+        if (staffId && staffName) {
+          localStorage.setItem(`selected_staff_id_${uniqueUrl}`, staffId)
+          localStorage.setItem(`selected_staff_name_${uniqueUrl}`, staffName)
           setSelectedStaff({
-            id: savedStaffId,
-            displayNameKanji: savedStaffName,
+            id: staffId,
+            displayNameKanji: staffName,
             displayNameKana: ''
           })
           await fetchDraft(data.token)

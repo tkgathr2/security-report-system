@@ -116,7 +116,11 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      'SELECT id, email, pin_hash, created_at FROM cast_users WHERE email = $1',
+      `SELECT cu.id, cu.email, cu.pin_hash, cu.created_at, cu.staff_id,
+              sm.display_name_kanji as staff_name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.email = $1`,
       [email]
     );
 
@@ -161,7 +165,9 @@ router.post('/login', async (req: Request, res: Response) => {
       user: {
         id: user.id,
         email: user.email,
-        created_at: user.created_at
+        created_at: user.created_at,
+        staff_id: user.staff_id || null,
+        staff_name: user.staff_name || null
       },
       token
     });
