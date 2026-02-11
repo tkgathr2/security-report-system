@@ -93,6 +93,7 @@ export default function FieldReport() {
   const [guardContents, setGuardContents] = useState<string[]>([])
   const [guardContentsOther, setGuardContentsOther] = useState('')
   const [guards, setGuards] = useState<{ index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[]>([])
+  const [dbCastCount, setDbCastCount] = useState(0)
   const [hasQualifier, setHasQualifier] = useState(false)
   const [qualifierName, setQualifierName] = useState('')
   const [notes, setNotes] = useState('')
@@ -219,6 +220,7 @@ export default function FieldReport() {
     }
     
     if (projectData.casts && projectData.casts.length > 0) {
+      setDbCastCount(projectData.casts.length)
       const initialGuards = projectData.casts.map((cast, idx) => ({
         index: idx + 1,
         name: cast.name,
@@ -767,7 +769,14 @@ export default function FieldReport() {
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.label}>警備員（最大8名）</label>
+            <label style={styles.label}>
+              警備員（最大8名）
+              {dbCastCount > 1 && (
+                <span style={styles.multiCastBadge}>
+                  {dbCastCount}人分の報告書（DB連携済み）
+                </span>
+              )}
+            </label>
             <div>
               {guards.map((g, idx) => (
                 <div key={g.index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '8px', marginBottom: '8px' }}>
@@ -781,7 +790,8 @@ export default function FieldReport() {
                       setGuards(v);
                     }}
                     onBlur={saveDraft}
-                    style={styles.input}
+                    style={idx < dbCastCount ? styles.inputDbLinked : styles.input}
+                    readOnly={idx < dbCastCount}
                   />
                   <input
                     type="time"
@@ -1564,5 +1574,26 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '4px',
     fontSize: '13px',
     cursor: 'pointer'
+  },
+  multiCastBadge: {
+    display: 'inline-block',
+    backgroundColor: '#e3f2fd',
+    color: '#1565c0',
+    padding: '2px 8px',
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: 'normal',
+    marginLeft: '8px'
+  },
+  inputDbLinked: {
+    width: '100%',
+    padding: '12px',
+    fontSize: '16px',
+    border: '1px solid #90caf9',
+    borderRadius: '4px',
+    boxSizing: 'border-box',
+    backgroundColor: '#e3f2fd',
+    color: '#333',
+    WebkitAppearance: 'none'
   }
 }
