@@ -182,7 +182,7 @@ export default function CastVerify() {
         <h1>登録を完了する</h1>
         <p className="cast-subtitle">{email}</p>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleSubmit(e); } }}>
           <div className="cast-input-group" ref={suggestionsRef}>
             <label htmlFor="nameKana">お名前（カナで検索）</label>
             <input

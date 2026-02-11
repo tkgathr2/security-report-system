@@ -111,7 +111,7 @@ export default function CastLogin() {
           <h1>メールでログイン</h1>
           <p className="cast-subtitle">メールアドレスにログインリンクを送信します</p>
 
-          <form onSubmit={handleMagicLink}>
+          <form onSubmit={handleMagicLink} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleMagicLink(e); } }}>
             <div className="cast-input-group">
               <label htmlFor="email">メールアドレス</label>
               <input
@@ -152,7 +152,7 @@ export default function CastLogin() {
         <div className="cast-logo">ほうこちゃん</div>
         <h1>スタッフログイン</h1>
 
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleLogin} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleLogin(e); } }}>
           <div className="cast-input-group">
             <label htmlFor="email">メールアドレス</label>
             <input
