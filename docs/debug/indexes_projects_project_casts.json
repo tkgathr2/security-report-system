@@ -1,0 +1,37 @@
+[
+  {
+    "tablename": "project_casts",
+    "indexname": "idx_project_casts_project_id_row_index",
+    "indexdef": "CREATE INDEX idx_project_casts_project_id_row_index ON public.project_casts USING btree (project_id, row_index)"
+  },
+  {
+    "tablename": "project_casts",
+    "indexname": "project_casts_pkey",
+    "indexdef": "CREATE UNIQUE INDEX project_casts_pkey ON public.project_casts USING btree (id)"
+  },
+  {
+    "tablename": "project_casts",
+    "indexname": "project_casts_project_id_staff_no_unique",
+    "indexdef": "CREATE UNIQUE INDEX project_casts_project_id_staff_no_unique ON public.project_casts USING btree (project_id, staff_no)"
+  },
+  {
+    "tablename": "projects",
+    "indexname": "idx_projects_work_date_created_at",
+    "indexdef": "CREATE INDEX idx_projects_work_date_created_at ON public.projects USING btree (work_date, created_at DESC)"
+  },
+  {
+    "tablename": "projects",
+    "indexname": "projects_pkey",
+    "indexdef": "CREATE UNIQUE INDEX projects_pkey ON public.projects USING btree (id)"
+  },
+  {
+    "tablename": "projects",
+    "indexname": "projects_project_key_key",
+    "indexdef": "CREATE UNIQUE INDEX projects_project_key_key ON public.projects USING btree (project_key)"
+  },
+  {
+    "tablename": "projects",
+    "indexname": "projects_unique_url_key",
+    "indexdef": "CREATE UNIQUE INDEX projects_unique_url_key ON public.projects USING btree (unique_url)"
+  }
+]
