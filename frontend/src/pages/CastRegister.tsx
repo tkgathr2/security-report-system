@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import './Cast.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -10,7 +10,20 @@ export default function CastRegister() {
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleCtrlEnter = useCallback((e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      const form = document.querySelector('form') as HTMLFormElement | null;
+      if (form) form.requestSubmit();
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleCtrlEnter);
+    return () => document.removeEventListener('keydown', handleCtrlEnter);
+  }, [handleCtrlEnter]);
+
+  const handleSubmit= async (e: React.FormEvent) => {
     e.preventDefault();
 
     setLoading(true);
@@ -74,7 +87,7 @@ export default function CastRegister() {
         <h1>スタッフ登録</h1>
         <p className="cast-subtitle">メールアドレスを入力してください</p>
 
-        <form onSubmit={handleSubmit} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleSubmit(e); } }}>
+        <form onSubmit={handleSubmit}>
           <div className="cast-input-group">
             <label htmlFor="email">メールアドレス</label>
             <input
