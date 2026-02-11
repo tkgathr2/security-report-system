@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import SignatureModal from '../components/SignatureModal'
 import './FieldReport.css'
@@ -451,6 +451,22 @@ export default function FieldReport() {
       setPageState('name_selection')
     }
 
+    const handleCtrlEnterSubmit = useCallback((e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        if (pageState === 'email_registration' && !registering) {
+          handleEmailRegistration()
+        } else if (pageState === 'form' && !submitting) {
+          handleSubmit()
+        }
+      }
+    }, [pageState, registering, submitting])
+
+    useEffect(() => {
+      document.addEventListener('keydown', handleCtrlEnterSubmit)
+      return () => document.removeEventListener('keydown', handleCtrlEnterSubmit)
+    }, [handleCtrlEnterSubmit])
+
     if (pageState === 'loading') {
     return (
       <div style={styles.container}>
@@ -612,15 +628,8 @@ export default function FieldReport() {
     setShowTutorial(false)
   }
 
-  const handleCtrlEnterSubmit = (e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isFormValid && !submitting) {
-      e.preventDefault()
-      handleSubmit()
-    }
-  }
-
   return (
-    <div style={styles.page} onKeyDown={handleCtrlEnterSubmit}>
+    <div style={styles.page}>
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div>

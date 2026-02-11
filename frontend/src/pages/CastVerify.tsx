@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import './Cast.css';
 
@@ -28,6 +28,19 @@ export default function CastVerify() {
   const [error, setError] = useState('');
   const [valid, setValid] = useState(false);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  const handleCtrlEnter = useCallback((e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      const form = document.querySelector('form') as HTMLFormElement | null;
+      if (form) form.requestSubmit();
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleCtrlEnter);
+    return () => document.removeEventListener('keydown', handleCtrlEnter);
+  }, [handleCtrlEnter]);
 
   useEffect(() => {
     if (!token) {
@@ -182,7 +195,7 @@ export default function CastVerify() {
         <h1>登録を完了する</h1>
         <p className="cast-subtitle">{email}</p>
 
-        <form onSubmit={handleSubmit} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleSubmit(e); } }}>
+        <form onSubmit={handleSubmit}>
           <div className="cast-input-group" ref={suggestionsRef}>
             <label htmlFor="nameKana">お名前（カナで検索）</label>
             <input

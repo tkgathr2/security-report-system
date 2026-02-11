@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import './App.css'
 
 // Company logo URL from kotsuyudo.com
@@ -189,6 +189,26 @@ function AdminApp() {
       window.addEventListener('resize', handleResize)
       return () => window.removeEventListener('resize', handleResize)
     }, [sidebarOpen])
+
+    const handleCtrlEnter = useCallback((e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        if (showStaffModal && !creating) {
+          handleCreateStaff()
+        } else if (editingStaff && !savingStaff) {
+          handleUpdateStaff()
+        } else if (editingClient && !savingClient) {
+          handleUpdateClient()
+        } else if (editingCastUser && !savingCastUser) {
+          handleUpdateCastUser()
+        }
+      }
+    }, [showStaffModal, creating, editingStaff, savingStaff, editingClient, savingClient, editingCastUser, savingCastUser])
+
+    useEffect(() => {
+      document.addEventListener('keydown', handleCtrlEnter)
+      return () => document.removeEventListener('keydown', handleCtrlEnter)
+    }, [handleCtrlEnter])
 
   const checkAuth = async () => {
     try {
@@ -1504,7 +1524,7 @@ function AdminApp() {
                             {/* New Staff Modal */}
               {showStaffModal && (
                 <div style={styles.modalOverlay} onClick={() => setShowStaffModal(false)}>
-                  <div style={styles.modal} onClick={e => e.stopPropagation()} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !creating) { e.preventDefault(); handleCreateStaff(); } }}>
+                  <div style={styles.modal} onClick={e => e.stopPropagation()}>
                     <h3 style={styles.modalTitle}>スタッフ新規登録</h3>
                     <div style={styles.formGroup}>
                       <label style={styles.label}>氏名（漢字）</label>
@@ -1549,7 +1569,7 @@ function AdminApp() {
                         {/* Edit Staff Modal */}
                         {editingStaff && (
                           <div style={styles.modalOverlay} onClick={() => setEditingStaff(null)}>
-                            <div style={styles.modal} onClick={e => e.stopPropagation()} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !savingStaff) { e.preventDefault(); handleUpdateStaff(); } }}>
+                            <div style={styles.modal} onClick={e => e.stopPropagation()}>
                               <h3 style={styles.modalTitle}>スタッフ編集</h3>
                               <div style={styles.formGroup}>
                                 <label style={styles.label}>氏名（漢字）</label>
@@ -1871,7 +1891,7 @@ function AdminApp() {
                         {/* Edit Client Modal */}
                         {editingClient && (
                           <div style={styles.modalOverlay}>
-                            <div style={styles.modal} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !savingClient) { e.preventDefault(); handleUpdateClient(); } }}>
+                            <div style={styles.modal}>
                               <h3 style={styles.modalTitle}>会社情報編集</h3>
                               <div style={styles.formGroup}>
                                 <label style={styles.label}>会社名</label>
@@ -2022,7 +2042,7 @@ function AdminApp() {
               {/* Edit Cast User Modal */}
               {editingCastUser && (
                 <div style={styles.modalOverlay}>
-                  <div style={styles.modal} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !savingCastUser) { e.preventDefault(); handleUpdateCastUser(); } }}>
+                  <div style={styles.modal}>
                     <h3 style={styles.modalTitle}>キャスト編集</h3>
                     <div style={styles.formGroup}>
                       <label style={styles.label}>メールアドレス</label>
