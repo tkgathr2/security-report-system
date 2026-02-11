@@ -1504,7 +1504,7 @@ function AdminApp() {
                             {/* New Staff Modal */}
               {showStaffModal && (
                 <div style={styles.modalOverlay} onClick={() => setShowStaffModal(false)}>
-                  <div style={styles.modal} onClick={e => e.stopPropagation()}>
+                  <div style={styles.modal} onClick={e => e.stopPropagation()} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !creating) { e.preventDefault(); handleCreateStaff(); } }}>
                     <h3 style={styles.modalTitle}>スタッフ新規登録</h3>
                     <div style={styles.formGroup}>
                       <label style={styles.label}>氏名（漢字）</label>
@@ -1549,7 +1549,7 @@ function AdminApp() {
                         {/* Edit Staff Modal */}
                         {editingStaff && (
                           <div style={styles.modalOverlay} onClick={() => setEditingStaff(null)}>
-                            <div style={styles.modal} onClick={e => e.stopPropagation()}>
+                            <div style={styles.modal} onClick={e => e.stopPropagation()} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !savingStaff) { e.preventDefault(); handleUpdateStaff(); } }}>
                               <h3 style={styles.modalTitle}>スタッフ編集</h3>
                               <div style={styles.formGroup}>
                                 <label style={styles.label}>氏名（漢字）</label>
@@ -1871,7 +1871,7 @@ function AdminApp() {
                         {/* Edit Client Modal */}
                         {editingClient && (
                           <div style={styles.modalOverlay}>
-                            <div style={styles.modal}>
+                            <div style={styles.modal} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !savingClient) { e.preventDefault(); handleUpdateClient(); } }}>
                               <h3 style={styles.modalTitle}>会社情報編集</h3>
                               <div style={styles.formGroup}>
                                 <label style={styles.label}>会社名</label>
@@ -2022,7 +2022,7 @@ function AdminApp() {
               {/* Edit Cast User Modal */}
               {editingCastUser && (
                 <div style={styles.modalOverlay}>
-                  <div style={styles.modal}>
+                  <div style={styles.modal} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !savingCastUser) { e.preventDefault(); handleUpdateCastUser(); } }}>
                     <h3 style={styles.modalTitle}>キャスト編集</h3>
                     <div style={styles.formGroup}>
                       <label style={styles.label}>メールアドレス</label>

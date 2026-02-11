@@ -74,7 +74,7 @@ export default function CastRegister() {
         <h1>スタッフ登録</h1>
         <p className="cast-subtitle">メールアドレスを入力してください</p>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleSubmit(e); } }}>
           <div className="cast-input-group">
             <label htmlFor="email">メールアドレス</label>
             <input

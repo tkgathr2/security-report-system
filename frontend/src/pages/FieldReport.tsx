@@ -521,6 +521,7 @@ export default function FieldReport() {
                 style={styles.emailInput}
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
+                onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleEmailRegistration() }}
                 placeholder="example@email.com"
                 disabled={registering}
               />
@@ -611,8 +612,15 @@ export default function FieldReport() {
     setShowTutorial(false)
   }
 
+  const handleCtrlEnterSubmit = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isFormValid && !submitting) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
   return (
-    <div style={styles.page}>
+    <div style={styles.page} onKeyDown={handleCtrlEnterSubmit}>
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div>
@@ -882,6 +890,7 @@ export default function FieldReport() {
           <button
             style={isFormValid ? styles.submitButton : styles.submitButtonDisabled}
             onClick={handleSubmit}
+            onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isFormValid && !submitting) handleSubmit() }}
             disabled={!isFormValid || submitting}
           >
             {submitting ? '送信中...' : '報告書を送信'}
