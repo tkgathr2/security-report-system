@@ -279,10 +279,12 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   let skippedRowsCount = 0;
   let pendingClientRowsCount = 0;
   let staffAutoAddedCount = 0;
+  let duplicateCastAssignments = 0;
 
   const projectMap = new Map<string, { projectId: string; casts: Set<string> }>();
   const processedStaffKana = new Set<string>();
   const processedWorkDates = new Map<string, Set<string>>();
+  const castDateAssignments = new Map<string, string>();
 
   for (let i = 0; i < records.length; i++) {
     const row = records[i];
@@ -429,14 +431,38 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
             const projectInfo = projectMap.get(projectKey)!;
             const castIdentifier = staffNo || castName;
 
-            if (!projectInfo.casts.has(castIdentifier)) {
-              await pool.query(
-                `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index)
-                 VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (project_id, staff_no) DO NOTHING`,
-                [projectInfo.projectId, castIdentifier, castName, i]
-              );
-              projectInfo.casts.add(castIdentifier);
+            const castDateKey = `${castName}::${dateKey}`;
+            if (castDateAssignments.has(castDateKey)) {
+              const existingWork = castDateAssignments.get(castDateKey)!;
+              errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingWork}」に割り当て済みです（1日1現場まで）` });
+              duplicateCastAssignments++;
+            } else {
+              castDateAssignments.set(castDateKey, workName);
+            }
+
+            if (!castDateAssignments.has(castDateKey) || castDateAssignments.get(castDateKey) === workName) {
+              if (!projectInfo.casts.has(castIdentifier)) {
+                const existingAssignment = await pool.query(
+                  `SELECT p.work_name FROM project_casts pc
+                   JOIN projects p ON pc.project_id = p.id
+                   WHERE REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
+                     AND p.work_date = $2
+                     AND p.id != $3`,
+                  [castName, workDate, projectInfo.projectId]
+                );
+                if (existingAssignment.rows.length > 0) {
+                  errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingAssignment.rows[0].work_name}」に割り当て済みです（1日1現場まで）` });
+                  duplicateCastAssignments++;
+                } else {
+                  await pool.query(
+                    `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index)
+                     VALUES ($1, $2, $3, $4)
+                     ON CONFLICT (project_id, staff_no) DO NOTHING`,
+                    [projectInfo.projectId, castIdentifier, castName, i]
+                  );
+                  projectInfo.casts.add(castIdentifier);
+                }
+              }
             }
             const staffKanaKey = castNameKana || castName;
 
@@ -545,6 +571,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     skipped_rows_count: skippedRowsCount,
     pending_client_rows_count: pendingClientRowsCount,
     staff_auto_added_count: staffAutoAddedCount,
+    duplicate_cast_assignments: duplicateCastAssignments,
     errors: errors.slice(0, 10)
   });
 });

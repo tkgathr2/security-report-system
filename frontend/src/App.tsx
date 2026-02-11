@@ -83,6 +83,7 @@ interface ImportResult {
   skipped_rows_count: number
   pending_client_rows_count: number
   staff_auto_added_count: number
+  duplicate_cast_assignments: number
   errors: Array<{ row: number; reason: string }>
 }
 
@@ -1087,6 +1088,11 @@ function AdminApp() {
                         <span style={styles.resultValue}>{importResult.pending_client_rows_count ?? 0}件</span>
                       </div>
                     </div>
+                    {(importResult.duplicate_cast_assignments ?? 0) > 0 && (
+                      <div style={{ ...styles.warningBox, backgroundColor: '#fff3cd', color: '#856404', border: '1px solid #ffc107' }}>
+                        1日2箇所以上の割り当てが {importResult.duplicate_cast_assignments} 件あります（1日1現場まで）。該当するキャストは登録されませんでした。
+                      </div>
+                    )}
                     {importResult.errors && importResult.errors.length > 0 && (
                       <div style={styles.warningBox}>
                         エラー: {importResult.errors.map((e: { row: number; reason: string }) => `行${e.row}: ${e.reason}`).join(', ')}
