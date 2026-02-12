@@ -32,6 +32,7 @@ interface HeaderMapping {
   breakTime?: string;
   staffNo?: string;
   staffName?: string;
+  supervisorName?: string;
 }
 
 const STAFF_ASSIGNMENT_HEADERS = ['No.', 'スタッフNo.', '氏名', '実施日', 'クライアント名', '案件名', '実施場所'];
@@ -44,6 +45,7 @@ const HEADER_ALIASES: Record<string, string[]> = {
   '実施日': ['実施日', '日付', '作業日', '勤務日', 'date', 'work_date'],
   '氏名': ['氏名', 'キャスト', 'スタッフ名', '名前', 'name', 'cast_name', 'staff_name'],
   'スタッフNo.': ['スタッフNo.', 'スタッフNo', 'スタッフ番号', 'staff_no', 'No.'],
+  '監督者名': ['監督者名', '監督者', '現場監督', '責任者', 'supervisor_name', 'supervisor'],
 };
 
 function normalizeForComparison(str: string): string {
@@ -69,6 +71,7 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
   const headerSet = new Set(headers);
   
   if (STAFF_ASSIGNMENT_HEADERS.every(h => headerSet.has(h))) {
+    const supervisorHeader = findHeaderMatch(headers, '監督者名');
     return {
       format: 'staff_assignment',
       mapping: {
@@ -81,7 +84,8 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
         endTime: '終了時間',
         breakTime: '休憩時間',
         staffNo: 'スタッフNo.',
-        staffName: '氏名'
+        staffName: '氏名',
+        supervisorName: supervisorHeader || undefined
       }
     };
   }
@@ -92,6 +96,7 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
     const staffNoHeader = findHeaderMatch(headers, 'スタッフNo.');
     const hasStaffInfo = staffNameHeader !== null;
     
+    const supervisorHeader = findHeaderMatch(headers, '監督者名');
     return {
       format: hasStaffInfo ? 'staff_assignment' : 'job_export',
       mapping: {
@@ -104,7 +109,8 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
         endTime: '終了時間',
         breakTime: '休憩時間',
         staffNo: staffNoHeader || undefined,
-        staffName: staffNameHeader || undefined
+        staffName: staffNameHeader || undefined,
+        supervisorName: supervisorHeader || undefined
       }
     };
   }
@@ -115,6 +121,7 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
   const workDateHeader = findHeaderMatch(headers, '実施日');
   const staffNameHeader = findHeaderMatch(headers, '氏名');
   const staffNoHeader = findHeaderMatch(headers, 'スタッフNo.');
+  const supervisorHeader = findHeaderMatch(headers, '監督者名');
   
   if (projectNameHeader && clientNameHeader && locationHeader && workDateHeader) {
     const hasStaffInfo = staffNameHeader !== null;
@@ -126,7 +133,8 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
         location: locationHeader,
         workDate: workDateHeader,
         staffNo: staffNoHeader || undefined,
-        staffName: staffNameHeader || undefined
+        staffName: staffNameHeader || undefined,
+        supervisorName: supervisorHeader || undefined
       }
     };
   }
@@ -346,6 +354,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
       const startTime = (mapping.startTime && row[mapping.startTime]?.trim()) || null;
       const endTime = (mapping.endTime && row[mapping.endTime]?.trim()) || null;
       const breakTime = (mapping.breakTime && row[mapping.breakTime]?.trim()) || null;
+      const supervisorName = (mapping.supervisorName && row[mapping.supervisorName]?.trim()) || null;
       const qualifierHint = extractQualifierHint(validProjectName);
 
       // Check required time fields
@@ -395,13 +404,13 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
               `INSERT INTO projects (
                 project_key, client_id, client_name_raw, work_date, work_name, location,
                 start_time, end_time, break_time, work_title_raw, qualifier_hint,
-                unique_url, url_expires_at, status
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                unique_url, url_expires_at, status, supervisor_name
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
               RETURNING id`,
               [
                 projectKey, clientId, validClientNameRaw, workDate, workName, validLocation,
                 startTime, endTime, breakTime, validProjectName, qualifierHint,
-                uniqueUrl, urlExpiresAt, status
+                uniqueUrl, urlExpiresAt, status, supervisorName
               ]
             );
 

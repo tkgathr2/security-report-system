@@ -20,6 +20,7 @@ interface Project {
   status: string
   unique_url: string
   staff_name: string
+  supervisor_name: string | null
   has_qualifier: boolean
   casts: ProjectCast[]
 }
@@ -231,6 +232,10 @@ export default function FieldReport() {
   const initializeFormFromProject = (projectData: Project) => {
     if (projectData.has_qualifier) {
       setHasQualifier(true)
+    }
+
+    if (projectData.supervisor_name) {
+      setSupervisorName(projectData.supervisor_name)
     }
     
     if (projectData.casts && projectData.casts.length > 0) {

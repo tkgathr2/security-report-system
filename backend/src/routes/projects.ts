@@ -21,6 +21,7 @@ interface Project {
   unique_url: string;
   url_expires_at: Date;
   status: string;
+  supervisor_name: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -32,7 +33,7 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT id, project_key, client_id, client_name_raw, work_date, work_name, 
               location, start_time, end_time, break_time, work_title_raw, 
-              qualifier_hint, unique_url, url_expires_at, status, created_at, updated_at
+              qualifier_hint, unique_url, url_expires_at, status, supervisor_name, created_at, updated_at
        FROM projects 
        WHERE unique_url = $1`,
       [unique_url]
@@ -90,6 +91,7 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
         qualifier_hint: project.qualifier_hint,
         unique_url: project.unique_url,
         status: project.status,
+        supervisor_name: project.supervisor_name || null,
         has_qualifier: hasQualifier,
         casts: casts.map(c => ({ staff_no: c.staff_no, name: c.cast_name }))
       }
