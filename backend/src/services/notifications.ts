@@ -143,6 +143,7 @@ export async function sendReportApprovalNotifications(params: {
   location: string;
   pdfBytes: Buffer;
   csvBytes?: Buffer;
+  skipSlack?: boolean;
 }): Promise<{ emailSent: boolean; slackSent: boolean; castEmailSent: boolean; adminEmailSent: boolean; warnings: string[] }> {
   const warnings: string[] = [];
 
@@ -159,18 +160,22 @@ export async function sendReportApprovalNotifications(params: {
     }] : [])
   ];
 
-  // Slack通知を最優先で送信（メール処理でブロックされないように先に実行）
-  const slackResult = await sendSlackNotification({
-    companyName: params.companyName,
-    workDate: params.workDate,
-    projectName: params.projectName,
-    reportId: params.reportId,
-    writerName: params.writerName,
-    location: params.location
-  });
-
-  if (!slackResult.success) {
-    warnings.push(`Slack通知失敗: ${slackResult.error}`);
+  let slackSent = false;
+  if (!params.skipSlack) {
+    const slackResult = await sendSlackNotification({
+      companyName: params.companyName,
+      workDate: params.workDate,
+      projectName: params.projectName,
+      reportId: params.reportId,
+      writerName: params.writerName,
+      location: params.location
+    });
+    slackSent = slackResult.success;
+    if (!slackResult.success) {
+      warnings.push(`Slack通知失敗: ${slackResult.error}`);
+    }
+  } else {
+    slackSent = true;
   }
 
   const emailResult = await sendEmail({
@@ -263,7 +268,7 @@ export async function sendReportApprovalNotifications(params: {
 
   return {
     emailSent: emailResult.success,
-    slackSent: slackResult.success,
+    slackSent,
     castEmailSent,
     adminEmailSent,
     warnings

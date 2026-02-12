@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
-import { sendReportApprovalNotifications } from '../services/notifications';
+import { sendReportApprovalNotifications, sendSlackNotification } from '../services/notifications';
 import { generateReportPdf } from '../services/pdfGenerator';
 import { authenticateCast } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
@@ -192,47 +192,65 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     // 以下は非同期で実行（レスポンス後にバックグラウンドで処理）
     setImmediate(async () => {
-      try {
-        console.log(`[ASYNC] Starting background processing for report ${reportId}`);
-        
-        // PDF生成
-        let pdfBuffer: Buffer;
-        let pdfGenerationStatus = 'success';
-        try {
-          pdfBuffer = await generateReportPdf({
-            companyName: project.client_name_raw,
-            workDate: workDateStr,
-            location: project.location,
-            workName: project.work_name || project.work_title_raw,
-            supervisorName: supervisor_name || '',
-            writerName: resolvedWriterName,
-            guardContents: guard_contents,
-            guardOtherText: guard_other_text,
-            guards: Array.isArray(guards) ? guards : [],
-            hasQualifier: has_qualifier || false,
-            qualifierName: qualifier_name,
-            signaturePng: signaturePngBuffer
-          });
-          console.log(`[ASYNC] Generated PDF: ${pdfBuffer.length} bytes`);
-        } catch (pdfError) {
-          console.error('[ASYNC] PDF generation failed, using dummy PDF:', pdfError);
-          pdfBuffer = generateDummyPdf();
-          pdfGenerationStatus = 'failed';
-        }
+      console.log(`[ASYNC] Starting background processing for report ${reportId}`);
 
-        // PDFをDBに保存
+      // Slack通知を最優先で送信（PDF生成・メール送信に依存しない）
+      try {
+        const slackResult = await sendSlackNotification({
+          companyName: project.client_name_raw,
+          workDate: workDateStr,
+          projectName: project.work_title_raw || project.work_name || '',
+          reportId,
+          writerName: resolvedWriterName,
+          location: project.location || ''
+        });
+        console.log(`[ASYNC] Slack notification result for report ${reportId}:`, slackResult);
+      } catch (slackError) {
+        console.error(`[ASYNC] Slack notification failed for report ${reportId}:`, slackError);
+      }
+
+      // PDF生成（独立したtry-catch）
+      let pdfBuffer: Buffer;
+      let pdfGenerationStatus = 'success';
+      try {
+        pdfBuffer = await generateReportPdf({
+          companyName: project.client_name_raw,
+          workDate: workDateStr,
+          location: project.location,
+          workName: project.work_name || project.work_title_raw,
+          supervisorName: supervisor_name || '',
+          writerName: resolvedWriterName,
+          guardContents: guard_contents,
+          guardOtherText: guard_other_text,
+          guards: Array.isArray(guards) ? guards : [],
+          hasQualifier: has_qualifier || false,
+          qualifierName: qualifier_name,
+          signaturePng: signaturePngBuffer
+        });
+        console.log(`[ASYNC] Generated PDF: ${pdfBuffer.length} bytes`);
+      } catch (pdfError) {
+        console.error('[ASYNC] PDF generation failed, using dummy PDF:', pdfError);
+        pdfBuffer = generateDummyPdf();
+        pdfGenerationStatus = 'failed';
+      }
+
+      // PDFをDBに保存（独立したtry-catch：失敗してもメール送信は続行）
+      try {
         await pool.query(
           `UPDATE reports SET pdf_bytes = $1, pdf_generation_status = $2, pdf_generated_at = $3 WHERE id = $4`,
           [pdfBuffer, pdfGenerationStatus, new Date(), reportId]
         );
         console.log(`[ASYNC] PDF saved to database for report ${reportId}`);
+      } catch (dbError) {
+        console.error(`[ASYNC] PDF save to DB failed for report ${reportId}:`, dbError);
+      }
 
-        // 通知送信
+      // メール通知（独立したtry-catch）
+      try {
         const clientEmails = project.client_emails || [];
         const castEmail = castUser.email;
         const displayWriterName = resolvedWriterName;
 
-        // CSV生成
         const rows: string[] = [];
         const headers = [
           '記入者','報告日','天気','案件名','案件住所','作業内容','協力会社名',
@@ -266,19 +284,20 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           reportId,
           companyName: project.client_name_raw,
           workDate: workDateStr,
-          projectName: project.work_title_raw,
+          projectName: project.work_title_raw || project.work_name || '',
           clientEmails,
           writerEmail: castEmail,
           writerName: displayWriterName,
           supervisorName: supervisor_name || '',
           location: project.location || '',
           pdfBytes: pdfBuffer,
-          csvBytes: Buffer.from(csvContent, 'utf-8')
+          csvBytes: Buffer.from(csvContent, 'utf-8'),
+          skipSlack: true
         });
 
-        console.log(`[ASYNC] Notifications sent for report ${reportId}:`, notificationResult);
-      } catch (asyncError) {
-        console.error(`[ASYNC] Background processing failed for report ${reportId}:`, asyncError);
+        console.log(`[ASYNC] Email notifications sent for report ${reportId}:`, notificationResult);
+      } catch (emailError) {
+        console.error(`[ASYNC] Email notification failed for report ${reportId}:`, emailError);
       }
     });
 
