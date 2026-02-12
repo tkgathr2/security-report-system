@@ -124,21 +124,22 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
         doc.moveDown(1);
         doc.text('警備員一覧:', startX);
         doc.moveDown(0.3);
-        const colXs = [startX, startX + 60, startX + 220, startX + 320, startX + 420];
+        const colXs = [startX, startX + 40, startX + 200, startX + 300, startX + 400];
         const headers = ['No', '氏名', '開始', '終了', '早出残業(h)'];
-        headers.forEach((h, i) => doc.text(h, colXs[i], doc.y, { continued: i < headers.length - 1 }));
-        doc.moveDown(0.5);
+        const headerY = doc.y;
+        headers.forEach((h, i) => doc.text(h, colXs[i], headerY, { width: colXs[i + 1] ? colXs[i + 1] - colXs[i] - 5 : 100 }));
+        doc.y = headerY + 18;
         data.guards.forEach(g => {
-          const y = doc.y;
-          doc.text(String(g.index ?? ''), colXs[0], y);
-          doc.text(g.name || '', colXs[1], y);
-          doc.text(g.start_time || '', colXs[2], y);
-          doc.text(g.end_time || '', colXs[3], y);
+          const rowY = doc.y;
+          doc.text(String(g.index ?? ''), colXs[0], rowY, { width: 35 });
+          doc.text(g.name || '', colXs[1], rowY, { width: 155 });
+          doc.text(g.start_time || '', colXs[2], rowY, { width: 95 });
+          doc.text(g.end_time || '', colXs[3], rowY, { width: 95 });
           doc.text(
             g.early_overtime_hours !== undefined && g.early_overtime_hours !== null ? String(g.early_overtime_hours) : '',
-            colXs[4], y
+            colXs[4], rowY, { width: 60 }
           );
-          doc.moveDown(0.3);
+          doc.y = rowY + 18;
         });
       }
 
