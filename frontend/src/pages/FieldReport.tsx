@@ -157,22 +157,34 @@ export default function FieldReport() {
 
     const authenticateWithEmail = async (email: string, projectData: Project) => {
       try {
-        const pin = '0000'
-      
-        let response = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, pin })
-        })
-      
-        if (response.status === 401) {
-          response = await fetch('/api/auth/register', {
+        const castToken = localStorage.getItem('castToken')
+        let response: Response | null = null
+
+        if (castToken) {
+          response = await fetch('/api/auth/exchange-cast-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cast_token: castToken })
+          })
+        }
+
+        if (!response || !response.ok) {
+          const pin = '0000'
+          response = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, pin })
           })
+
+          if (response.status === 401) {
+            response = await fetch('/api/auth/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, pin })
+            })
+          }
         }
-      
+
         if (!response.ok) {
           throw new Error('Authentication failed')
         }
