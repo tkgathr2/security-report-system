@@ -25,6 +25,8 @@ interface SlackNotification {
   workDate: string;
   projectName: string;
   reportId: string;
+  writerName?: string;
+  location?: string;
 }
 
 export async function sendEmail(options: EmailOptions): Promise<{ success: boolean; error?: string }> {
@@ -99,6 +101,8 @@ export async function sendSlackNotification(notification: SlackNotification): Pr
               `*会社名:* ${notification.companyName}\n` +
               `*実施日:* ${notification.workDate}\n` +
               `*案件名:* ${notification.projectName}\n` +
+              (notification.location ? `*実施場所:* ${notification.location}\n` : '') +
+              (notification.writerName ? `*報告者:* ${notification.writerName}\n` : '') +
               `*報告書ID:* ${notification.reportId}`
           }
         }
@@ -160,7 +164,9 @@ export async function sendReportApprovalNotifications(params: {
     companyName: params.companyName,
     workDate: params.workDate,
     projectName: params.projectName,
-    reportId: params.reportId
+    reportId: params.reportId,
+    writerName: params.writerName,
+    location: params.location
   });
 
   if (!slackResult.success) {
