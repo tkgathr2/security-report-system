@@ -198,6 +198,7 @@ export default function FieldReport() {
             displayNameKanji: staffName,
             displayNameKana: ''
           })
+          setWriterName(staffName)
           await fetchDraft(data.token)
           setPageState('form')
         
@@ -431,6 +432,7 @@ export default function FieldReport() {
       
         localStorage.setItem(`selected_staff_id_${uniqueUrl}`, selectedStaff.id)
         localStorage.setItem(`selected_staff_name_${uniqueUrl}`, selectedStaff.displayNameKanji)
+        setWriterName(selectedStaff.displayNameKanji)
       
         await fetchDraft(token)
         setPageState('form')
