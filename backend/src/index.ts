@@ -74,6 +74,65 @@ app.use('/api/admin/csv', adminCsvImportRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/cast', castAuthRouter);
 
+const SETUP_TOKEN = process.env.AUTH_SECRET || '';
+
+app.get('/api/setup/diag-staff', async (req: Request, res: Response) => {
+  if (!SETUP_TOKEN || req.headers.authorization !== `Bearer ${SETUP_TOKEN}`) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const staff = await pool.query('SELECT id, display_name_kanji, display_name_kana FROM staff_master ORDER BY display_name_kanji');
+    const today = new Date().toISOString().split('T')[0];
+    const projects = await pool.query(
+      `SELECT p.id, p.work_name, p.work_date, p.location, p.client_name_raw,
+              json_agg(json_build_object('staff_no', pc.staff_no, 'cast_name', pc.cast_name, 'row_index', pc.row_index)) as casts
+       FROM projects p
+       LEFT JOIN project_casts pc ON p.id = pc.project_id
+       WHERE p.work_date >= $1::date - interval '1 day'
+       GROUP BY p.id ORDER BY p.work_date`,
+      [today]
+    );
+    res.json({ staff: staff.rows, projects: projects.rows });
+  } catch (e: unknown) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+app.post('/api/setup/add-cast-to-projects', async (req: Request, res: Response) => {
+  if (!SETUP_TOKEN || req.headers.authorization !== `Bearer ${SETUP_TOKEN}`) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const { kanji, kana, staff_no, project_ids } = req.body;
+    const existing = await pool.query('SELECT id FROM staff_master WHERE display_name_kanji = $1', [kanji]);
+    let staffId: string;
+    if (existing.rows.length > 0) {
+      staffId = existing.rows[0].id;
+    } else {
+      const ins = await pool.query(
+        'INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by) VALUES ($1, $2, NOW(), NOW(), $3) RETURNING id',
+        [kanji, kana, 'setup-api']
+      );
+      staffId = ins.rows[0].id;
+    }
+    let castsAdded = 0;
+    for (const pid of project_ids || []) {
+      const maxIdx = await pool.query('SELECT COALESCE(MAX(row_index), -1) as max_idx FROM project_casts WHERE project_id = $1', [pid]);
+      const nextIdx = (maxIdx.rows[0].max_idx as number) + 1;
+      await pool.query(
+        'INSERT INTO project_casts (project_id, staff_no, cast_name, row_index) VALUES ($1, $2, $3, $4) ON CONFLICT (project_id, staff_no) DO NOTHING',
+        [pid, staff_no || staffId, kanji, nextIdx]
+      );
+      castsAdded++;
+    }
+    res.json({ ok: true, staffId, castsAdded });
+  } catch (e: unknown) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 async function ensureSchema(){
   try {
     await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
