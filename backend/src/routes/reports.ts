@@ -72,9 +72,13 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       return;
     }
 
-    if (has_qualifier === true && (!qualifier_name || qualifier_name.trim() === '')) {
-      sendBadRequest(res, '資格者有の場合、資格者氏名は必須です');
-      return;
+    if (has_qualifier === true) {
+      const qNames = Array.isArray(qualifier_name) ? qualifier_name : (qualifier_name ? [qualifier_name] : []);
+      const validQNames = qNames.filter((n: string) => n && n.trim() !== '');
+      if (validQNames.length === 0) {
+        sendBadRequest(res, '資格者有の場合、資格者氏名は必須です');
+        return;
+      }
     }
 
     if (!project_unique_url) {
@@ -143,7 +147,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         guard_other_text || null,
         null,
         has_qualifier || false,
-        qualifier_name || null,
+        Array.isArray(qualifier_name) ? JSON.stringify(qualifier_name) : (qualifier_name || null),
         signaturePngBuffer,
         initialPdfBuffer, // ダミーPDF（後で実際のPDFに更新）
         'approved',
@@ -228,7 +232,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
             (writer_name || castUser.email), workDateStr, weatherMap[weather] || weather,
             (project.work_name || project.work_title_raw || ''), project.location || '', project.work_name || project.work_title_raw || '', project.client_name_raw || '',
             ...guardFlags,
-            '', '', '', '', '', (has_qualifier ? '有' : '無'), (qualifier_name || ''), ''
+            '', '', '', '', '', (has_qualifier ? '有' : '無'), (Array.isArray(qualifier_name) ? qualifier_name.join('、') : (qualifier_name || '')), ''
           ].map(v => typeof v === 'string' ? `"${v.replace(/"/g,'""')}"` : String(v)).join(','));
         } else {
           for (const g of guardsArr) {
@@ -236,7 +240,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
               (writer_name || castUser.email), workDateStr, weatherMap[weather] || weather,
               (project.work_name || project.work_title_raw || ''), project.location || '', project.work_name || project.work_title_raw || '', project.client_name_raw || '',
               ...guardFlags,
-              g.index ?? '', g.name || '', g.start_time || '', g.end_time || '', (g.early_overtime_hours ?? ''), (has_qualifier ? '有' : '無'), (qualifier_name || ''), ''
+              g.index ?? '', g.name || '', g.start_time || '', g.end_time || '', (g.early_overtime_hours ?? ''), (has_qualifier ? '有' : '無'), (Array.isArray(qualifier_name) ? qualifier_name.join('、') : (qualifier_name || '')), ''
             ].map(v => typeof v === 'string' ? `"${v.replace(/"/g,'""')}"` : String(v)).join(','));
           }
         }
