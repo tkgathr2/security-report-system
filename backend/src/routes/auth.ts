@@ -181,4 +181,49 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/exchange-cast-token', async (req: Request, res: Response) => {
+  try {
+    const { cast_token } = req.body;
+    if (!cast_token) {
+      res.status(400).json({ error: 'INVALID_PAYLOAD', message: 'cast_tokenは必須です', details: {} });
+      return;
+    }
+
+    const result = await pool.query(
+      `SELECT cu.id, cu.email, cu.created_at, cu.staff_id,
+              sm.display_name_kanji as staff_name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW()`,
+      [cast_token]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(401).json({ error: 'UNAUTHORIZED', message: 'キャストトークンが無効です', details: {} });
+      return;
+    }
+
+    const user = result.rows[0];
+    const token = jwt.sign(
+      { userId: user.id, email: user.email },
+      AUTH_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    res.status(200).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        created_at: user.created_at,
+        staff_id: user.staff_id || null,
+        staff_name: user.staff_name || null
+      },
+      token
+    });
+  } catch (error) {
+    console.error('Exchange cast token error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: 'トークン交換に失敗しました', details: {} });
+  }
+});
+
 export default router;
