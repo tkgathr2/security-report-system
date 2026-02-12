@@ -83,8 +83,8 @@ app.get('/api/setup/diagnostic', async (req: Request, res: Response) => {
   }
   try {
     const tables = await pool.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename");
-    const projects = await pool.query("SELECT id, project_name, work_date, status FROM projects WHERE work_date >= CURRENT_DATE - INTERVAL '1 day' ORDER BY work_date");
-    const casts = await pool.query(`SELECT pc.id, pc.project_id, pc.staff_no, pc.cast_name, pc.row_index, p.project_name, p.work_date
+    const projects = await pool.query("SELECT id, work_name, work_date, status, client_name_raw, location FROM projects WHERE work_date >= CURRENT_DATE - INTERVAL '1 day' ORDER BY work_date");
+    const casts = await pool.query(`SELECT pc.id, pc.project_id, pc.staff_no, pc.cast_name, pc.row_index, p.work_name, p.work_date
        FROM project_casts pc JOIN projects p ON p.id = pc.project_id
        WHERE p.work_date >= CURRENT_DATE - INTERVAL '1 day' ORDER BY p.work_date, pc.row_index`);
     const reports = await pool.query("SELECT id, project_id, cast_user_id, work_date, status FROM reports WHERE work_date >= CURRENT_DATE - INTERVAL '1 day' ORDER BY work_date");
