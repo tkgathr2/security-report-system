@@ -74,6 +74,43 @@ app.use('/api/admin/csv', adminCsvImportRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/cast', castAuthRouter);
 
+const TEST_TOKEN = process.env.AUTH_SECRET || '';
+
+app.post('/api/test-notification', async (req: Request, res: Response) => {
+  if (!TEST_TOKEN || req.headers.authorization !== `Bearer ${TEST_TOKEN}`) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const { sendSlackNotification, sendEmail } = await import('./services/notifications');
+    const testReportId = 'test-' + Date.now();
+
+    const slackResult = await sendSlackNotification({
+      companyName: 'テスト株式会社',
+      workDate: new Date().toISOString().split('T')[0],
+      projectName: 'テスト警備業務',
+      reportId: testReportId,
+      writerName: 'Devin テスト',
+      location: '東京都渋谷区テストビル'
+    });
+
+    const emailResult = await sendEmail({
+      to: ['atsuhiro@takagi.bz'],
+      subject: `【テスト】ほうこちゃん通知テスト ${new Date().toISOString()}`,
+      text: 'これはDevinによる通知テストです。Slack通知とメール通知が正常に動作するか確認しています。',
+      html: '<p>これはDevinによる通知テストです。</p><p>Slack通知とメール通知が正常に動作するか確認しています。</p>'
+    });
+
+    res.json({
+      slack: slackResult,
+      email: emailResult,
+      testReportId
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 async function ensureSchema(){
   try {
     await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
