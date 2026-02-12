@@ -77,6 +77,7 @@ app.use('/api/cast', castAuthRouter);
 async function ensureSchema(){
   try {
     await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
+    await pool.query('ALTER TABLE projects ADD COLUMN IF NOT EXISTS supervisor_name TEXT');
   } catch (e) {
     console.error('[DB] ensureSchema failed:', e);
   }
