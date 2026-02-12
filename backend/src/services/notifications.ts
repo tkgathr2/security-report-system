@@ -1,10 +1,7 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-const SMTP_HOST = process.env.SMTP_HOST || '';
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
-const SMTP_USER = process.env.SMTP_USER || '';
-const SMTP_PASS = process.env.SMTP_PASS || '';
-const SMTP_FROM = process.env.SMTP_FROM || 'noreply@example.com';
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const EMAIL_FROM = process.env.SMTP_FROM || 'noreply@takagi.bz';
 
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || '';
 
@@ -30,10 +27,8 @@ interface SlackNotification {
 }
 
 export async function sendEmail(options: EmailOptions): Promise<{ success: boolean; error?: string }> {
-  console.log('[EMAIL] SMTP Config check - HOST:', SMTP_HOST ? 'SET' : 'NOT SET');
-  console.log('[EMAIL] SMTP Config check - USER:', SMTP_USER ? 'SET' : 'NOT SET');
-  console.log('[EMAIL] SMTP Config check - PASS:', SMTP_PASS ? 'SET' : 'NOT SET');
-  console.log('[EMAIL] SMTP Config check - FROM:', SMTP_FROM);
+  console.log('[EMAIL] Resend API check:', resend ? 'CONFIGURED' : 'NOT SET');
+  console.log('[EMAIL] FROM:', EMAIL_FROM);
   console.log('[EMAIL] Recipients:', options.to.length > 0 ? options.to.join(', ') : 'EMPTY');
   
   if (options.to.length === 0) {
@@ -41,40 +36,33 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
     return { success: false, error: 'No recipients' };
   }
   
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    console.log('[EMAIL] SMTP not configured, skipping email send');
+  if (!resend) {
+    console.log('[EMAIL] RESEND_API_KEY not configured, skipping email send');
     console.log('[EMAIL] Would send to:', options.to.join(', '));
     console.log('[EMAIL] Subject:', options.subject);
-    return { success: false, error: 'SMTP not configured' };
+    return { success: false, error: 'Resend API not configured' };
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_PORT === 465,
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS
-      }
-    });
-
-    const mailOptions = {
-      from: SMTP_FROM,
-      to: options.to.join(', '),
+    console.log('[EMAIL] Sending email via Resend to:', options.to.join(', '));
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: options.to,
       subject: options.subject,
       text: options.text,
-      html: options.html,
+      html: options.html || undefined,
       attachments: options.attachments?.map(att => ({
         filename: att.filename,
-        content: att.content,
-        contentType: att.contentType
+        content: att.content.toString('base64'),
       }))
-    };
+    });
 
-    console.log('[EMAIL] Sending email to:', options.to.join(', '));
-    await transporter.sendMail(mailOptions);
-    console.log('[EMAIL] Email sent successfully');
+    if (error) {
+      console.error('[EMAIL] Resend API error:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('[EMAIL] Email sent successfully via Resend:', data);
     return { success: true };
   } catch (error) {
     console.error('[EMAIL] Failed to send email:', error);
