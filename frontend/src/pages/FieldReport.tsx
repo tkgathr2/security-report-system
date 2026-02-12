@@ -864,14 +864,26 @@ export default function FieldReport() {
               有資格者による作業あり
             </label>
             {hasQualifier && (
-              <input
-                type="text"
-                style={{ ...styles.input, marginTop: '8px' }}
-                value={qualifierName}
-                onChange={(e) => setQualifierName(e.target.value)}
-                onBlur={saveDraft}
-                placeholder="資格者氏名を入力してください"
-              />
+              <div style={{ marginTop: '8px' }}>
+                <select
+                  style={styles.input}
+                  value={qualifierName}
+                  onChange={(e) => { setQualifierName(e.target.value); setTimeout(saveDraft, 0); }}
+                >
+                  <option value="">-- 資格者を選択 --</option>
+                  {guards.filter(g => g.name.trim() !== '').map((g, idx) => (
+                    <option key={idx} value={g.name}>{g.name}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  style={{ ...styles.input, marginTop: '8px' }}
+                  value={qualifierName}
+                  onChange={(e) => setQualifierName(e.target.value)}
+                  onBlur={saveDraft}
+                  placeholder="上記にない場合は直接入力"
+                />
+              </div>
             )}
           </div>
 
