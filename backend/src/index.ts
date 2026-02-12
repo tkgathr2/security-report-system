@@ -74,6 +74,40 @@ app.use('/api/admin/csv', adminCsvImportRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/cast', castAuthRouter);
 
+const SETUP_TOKEN = process.env.AUTH_SECRET || '';
+
+app.get('/api/setup/reports', async (req: Request, res: Response) => {
+  if (!SETUP_TOKEN || req.headers.authorization !== `Bearer ${SETUP_TOKEN}`) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const result = await pool.query(
+      `SELECT r.id, r.project_id, r.supervisor_name, r.writer_name, r.created_at, p.work_date, p.work_name
+       FROM reports r JOIN projects p ON r.project_id = p.id
+       ORDER BY r.created_at DESC LIMIT 20`
+    );
+    res.json({ reports: result.rows });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ error: msg });
+  }
+});
+
+app.delete('/api/setup/reports/:reportId', async (req: Request, res: Response) => {
+  if (!SETUP_TOKEN || req.headers.authorization !== `Bearer ${SETUP_TOKEN}`) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  try {
+    const result = await pool.query('DELETE FROM reports WHERE id = $1 RETURNING id', [req.params.reportId]);
+    res.json({ deleted: result.rows });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ error: msg });
+  }
+});
+
 async function ensureSchema(){
   try {
     await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
