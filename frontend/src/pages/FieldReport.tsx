@@ -95,7 +95,7 @@ export default function FieldReport() {
   const [guards, setGuards] = useState<{ index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[]>([])
   const [dbCastCount, setDbCastCount] = useState(0)
   const [hasQualifier, setHasQualifier] = useState(false)
-  const [qualifierName, setQualifierName] = useState('')
+  const [qualifierNames, setQualifierNames] = useState<string[]>([])
   const [notes, setNotes] = useState('')
   
   const [submitting, setSubmitting] = useState(false)
@@ -198,9 +198,10 @@ export default function FieldReport() {
             displayNameKanji: staffName,
             displayNameKana: ''
           })
-          setWriterName(staffName)
-          await fetchDraft(data.token)
-          setPageState('form')
+            setWriterName(staffName)
+            await fetchDraft(data.token)
+            setWriterName(staffName)
+            setPageState('form')
         
           if (!localStorage.getItem('tutorial_shown')) {
             setShowTutorial(true)
@@ -277,7 +278,14 @@ export default function FieldReport() {
           setGuardContentsOther(data.payload_json.guard_other_text || '')
           setGuards(data.payload_json.guards || [])
           setHasQualifier(data.payload_json.has_qualifier || false)
-          setQualifierName(data.payload_json.qualifier_name || '')
+          const qn = data.payload_json.qualifier_name
+          if (Array.isArray(qn)) {
+            setQualifierNames(qn)
+          } else if (qn) {
+            setQualifierNames([qn])
+          } else {
+            setQualifierNames([])
+          }
           setNotes(data.payload_json.notes || '')
         }
       }
@@ -305,7 +313,7 @@ export default function FieldReport() {
             guard_other_text: guardContentsOther,
             guards,
             has_qualifier: hasQualifier,
-            qualifier_name: qualifierName,
+            qualifier_name: qualifierNames,
             notes
           },
           client_updated_at: new Date().toISOString()
@@ -353,7 +361,7 @@ export default function FieldReport() {
           guard_other_text: guardContentsOther,
           guards,
           has_qualifier: hasQualifier,
-          qualifier_name: hasQualifier ? qualifierName : null,
+          qualifier_name: hasQualifier ? qualifierNames : [],
           notes,
           signature_png_base64: base64Data
         })
@@ -435,6 +443,7 @@ export default function FieldReport() {
         setWriterName(selectedStaff.displayNameKanji)
       
         await fetchDraft(token)
+        setWriterName(selectedStaff.displayNameKanji)
         setPageState('form')
       
         if (!localStorage.getItem('tutorial_shown')) {
@@ -844,14 +853,39 @@ export default function FieldReport() {
                   >削除</button>
                 </div>
               ))}
-              <button
-                type="button"
-                onClick={() => {
-                  if (guards.length >= 8) return;
-                  setGuards([...guards, { index: guards.length + 1, name: '', start_time: '', end_time: '', early_overtime_hours: null }]);
-                }}
-                style={{ marginTop: '8px' }}
-              >+ 警備員を追加</button>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (guards.length >= 8) return;
+                    setGuards([...guards, { index: guards.length + 1, name: '', start_time: '', end_time: '', early_overtime_hours: null }]);
+                  }}
+                >+ 警備員を追加</button>
+                {project && project.casts && project.casts.filter(c => !guards.some(g => g.name === c.name)).length > 0 && (
+                  <select
+                    style={{ ...styles.input, flex: '1', minWidth: '180px' }}
+                    value=""
+                    onChange={(e) => {
+                      if (!e.target.value || guards.length >= 8) return;
+                      const cast = project.casts.find(c => c.name === e.target.value);
+                      if (!cast) return;
+                      setGuards([...guards, {
+                        index: guards.length + 1,
+                        name: cast.name,
+                        start_time: project.start_time || '',
+                        end_time: project.end_time || '',
+                        early_overtime_hours: null
+                      }]);
+                      setTimeout(saveDraft, 0);
+                    }}
+                  >
+                    <option value="">-- キャストから追加 --</option>
+                    {project.casts.filter(c => !guards.some(g => g.name === c.name)).map((c, i) => (
+                      <option key={i} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
             </div>
           </div>
 
@@ -867,24 +901,52 @@ export default function FieldReport() {
             </label>
             {hasQualifier && (
               <div style={{ marginTop: '8px' }}>
-                <select
-                  style={styles.input}
-                  value={qualifierName}
-                  onChange={(e) => { setQualifierName(e.target.value); setTimeout(saveDraft, 0); }}
-                >
-                  <option value="">-- 資格者を選択 --</option>
-                  {guards.filter(g => g.name.trim() !== '').map((g, idx) => (
-                    <option key={idx} value={g.name}>{g.name}</option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  style={{ ...styles.input, marginTop: '8px' }}
-                  value={qualifierName}
-                  onChange={(e) => setQualifierName(e.target.value)}
-                  onBlur={saveDraft}
-                  placeholder="上記にない場合は直接入力"
-                />
+                {qualifierNames.map((qn, qi) => (
+                  <div key={qi} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                    <select
+                      style={{ ...styles.input, flex: '1' }}
+                      value={guards.some(g => g.name === qn) ? qn : ''}
+                      onChange={(e) => {
+                        const updated = [...qualifierNames];
+                        updated[qi] = e.target.value;
+                        setQualifierNames(updated);
+                        setTimeout(saveDraft, 0);
+                      }}
+                    >
+                      <option value="">-- 資格者を選択 --</option>
+                      {guards.filter(g => g.name.trim() !== '').map((g, idx) => (
+                        <option key={idx} value={g.name}>{g.name}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      style={{ ...styles.input, flex: '1' }}
+                      value={qn}
+                      onChange={(e) => {
+                        const updated = [...qualifierNames];
+                        updated[qi] = e.target.value;
+                        setQualifierNames(updated);
+                      }}
+                      onBlur={saveDraft}
+                      placeholder="直接入力も可"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQualifierNames(qualifierNames.filter((_, i) => i !== qi));
+                        setTimeout(saveDraft, 0);
+                      }}
+                      style={{ padding: '8px 10px' }}
+                    >削除</button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQualifierNames([...qualifierNames, '']);
+                  }}
+                  style={{ marginTop: '4px' }}
+                >+ 資格者を追加</button>
               </div>
             )}
           </div>

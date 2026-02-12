@@ -31,7 +31,7 @@ interface ReportData {
   guardOtherText?: string | null;
   guards?: { index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[];
   hasQualifier: boolean;
-  qualifierName?: string | null;
+  qualifierName?: string | string[] | null;
   signaturePng?: Buffer | null;
 }
 
@@ -114,8 +114,9 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
       }
       doc.moveDown(1);
 
+      const qNames = Array.isArray(data.qualifierName) ? data.qualifierName.filter(n => n && n.trim() !== '') : (data.qualifierName ? [data.qualifierName] : []);
       const qualifierText = data.hasQualifier 
-        ? `有 (${data.qualifierName || '氏名未記入'})`
+        ? `有 (${qNames.length > 0 ? qNames.join('、') : '氏名未記入'})`
         : '無';
       addRow('資格者:', qualifierText);
 
