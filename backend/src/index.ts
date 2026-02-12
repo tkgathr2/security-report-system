@@ -16,7 +16,6 @@ import reportsRouter from './routes/reports';
 import adminCsvImportRouter from './routes/adminCsvImport';
 import staffRouter from './routes/staff';
 import castAuthRouter from './routes/castAuth';
-import crypto from 'crypto';
 import pool from './db/pool';
 
 dotenv.config();
@@ -74,70 +73,6 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/admin/csv', adminCsvImportRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/cast', castAuthRouter);
-
-const SETUP_TOKEN = process.env.AUTH_SECRET || '';
-
-app.post('/api/setup/bulk-import', express.json({limit: '5mb'}), async (req: Request, res: Response) => {
-  if (!SETUP_TOKEN || req.headers.authorization !== `Bearer ${SETUP_TOKEN}`) {
-    res.status(401).json({ error: 'unauthorized' });
-    return;
-  }
-  try {
-    const { staff, projects } = req.body;
-    let staffAdded = 0;
-    let projectsCreated = 0;
-    let castsAdded = 0;
-
-    for (const s of staff || []) {
-      const existing = await pool.query('SELECT id FROM staff_master WHERE display_name_kana = $1', [s.kana]);
-      if (existing.rows.length === 0) {
-        await pool.query(
-          'INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by) VALUES ($1, $2, NOW(), NOW(), $3)',
-          [s.kanji, s.kana, 'setup-api']
-        );
-        staffAdded++;
-      }
-    }
-
-    for (const p of projects || []) {
-      const projectKey = crypto.createHash('sha256').update(`${p.work_date}|${p.work_name}|${p.location}|${p.client_name}`).digest('hex').substring(0, 16);
-      const existing = await pool.query('SELECT id FROM projects WHERE project_key = $1', [projectKey]);
-      let projectId: string;
-      if (existing.rows.length > 0) {
-        projectId = existing.rows[0].id;
-      } else {
-        const uniqueUrl = crypto.randomUUID();
-        const urlExpires = new Date(p.work_date);
-        urlExpires.setDate(urlExpires.getDate() + 3);
-        urlExpires.setHours(23, 59, 59, 999);
-        const clientResult = await pool.query(
-          "SELECT id FROM clients WHERE name_normalized = LOWER(TRIM(REPLACE(REPLACE(REPLACE(REPLACE($1, '（', ''), '）', ''), '(', ''), ')', ''))) AND is_active = true",
-          [p.client_name]
-        );
-        const clientId = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
-        const ins = await pool.query(
-          `INSERT INTO projects (project_key, client_id, client_name_raw, work_date, work_name, location, start_time, end_time, work_title_raw, unique_url, url_expires_at, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
-          [projectKey, clientId, p.client_name, p.work_date, p.work_name, p.location, p.start_time, p.end_time, p.work_name, uniqueUrl, urlExpires, clientId ? 'active' : 'pending_client']
-        );
-        projectId = ins.rows[0].id;
-        projectsCreated++;
-      }
-      for (let ci = 0; ci < (p.casts || []).length; ci++) {
-        const c = p.casts[ci];
-        await pool.query(
-          'INSERT INTO project_casts (project_id, staff_no, cast_name, row_index) VALUES ($1, $2, $3, $4) ON CONFLICT (project_id, staff_no) DO NOTHING',
-          [projectId, c.staff_no, c.name, ci]
-        );
-        castsAdded++;
-      }
-    }
-    res.json({ ok: true, staffAdded, projectsCreated, castsAdded });
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    res.status(500).json({ error: msg });
-  }
-});
 
 async function ensureSchema(){
   try {
