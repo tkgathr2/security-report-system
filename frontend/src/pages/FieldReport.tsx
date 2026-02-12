@@ -779,7 +779,7 @@ export default function FieldReport() {
             </label>
             <div>
               {guards.map((g, idx) => (
-                <div key={g.index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '8px', marginBottom: '8px' }}>
+                <div key={g.index} style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1.2fr 1.2fr auto', gap: '8px', marginBottom: '8px' }}>
                   <input
                     type="text"
                     placeholder={`氏名 #${g.index}`}
@@ -1156,11 +1156,12 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '10px'
   },
   numberInput: {
-    width: '80px',
+    width: '100%',
     padding: '12px',
     fontSize: '16px',
     border: '1px solid #ddd',
     borderRadius: '4px',
+    boxSizing: 'border-box',
     textAlign: 'center'
   },
   numberUnit: {
