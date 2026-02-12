@@ -97,16 +97,32 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
 
 router.get('/reports', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      `SELECT r.id, r.project_id, r.supervisor_name, r.writer_name, r.weather,
-              r.status, r.approved_at, r.created_at, r.pdf_generation_status,
-              length(r.pdf_bytes) as pdf_size,
-              p.client_name_raw, p.work_date, p.work_name, p.location
-       FROM reports r
-       JOIN projects p ON r.project_id = p.id
-       ORDER BY r.approved_at DESC, r.created_at DESC
-       LIMIT 100`
-    );
+    const dateFilter = req.query.date as string | undefined;
+    let result;
+    if (dateFilter) {
+      result = await pool.query(
+        `SELECT r.id, r.project_id, r.supervisor_name, r.writer_name, r.weather,
+                r.status, r.approved_at, r.created_at, r.pdf_generation_status,
+                length(r.pdf_bytes) as pdf_size,
+                p.client_name_raw, p.work_date, p.work_name, p.location
+         FROM reports r
+         JOIN projects p ON r.project_id = p.id
+         WHERE p.work_date = $1
+         ORDER BY r.approved_at DESC, r.created_at DESC`,
+        [dateFilter]
+      );
+    } else {
+      result = await pool.query(
+        `SELECT r.id, r.project_id, r.supervisor_name, r.writer_name, r.weather,
+                r.status, r.approved_at, r.created_at, r.pdf_generation_status,
+                length(r.pdf_bytes) as pdf_size,
+                p.client_name_raw, p.work_date, p.work_name, p.location
+         FROM reports r
+         JOIN projects p ON r.project_id = p.id
+         ORDER BY r.approved_at DESC, r.created_at DESC
+         LIMIT 100`
+      );
+    }
 
     res.json({
       reports: result.rows,

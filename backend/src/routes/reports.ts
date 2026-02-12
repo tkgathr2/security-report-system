@@ -121,6 +121,22 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     }
 
     const signaturePngBuffer = Buffer.from(signature_png_base64, 'base64');
+
+    let resolvedWriterName = writer_name || '';
+    if (!resolvedWriterName) {
+      const castUserResult = await pool.query(
+        `SELECT cu.selected_name_kanji, sm.display_name_kanji
+         FROM cast_users cu
+         LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+         WHERE cu.id = $1`,
+        [castUser.userId]
+      );
+      if (castUserResult.rows.length > 0) {
+        resolvedWriterName = castUserResult.rows[0].selected_name_kanji || castUserResult.rows[0].display_name_kanji || castUser.email;
+      } else {
+        resolvedWriterName = castUser.email;
+      }
+    }
     
     const workDateStr = project.work_date instanceof Date 
       ? project.work_date.toISOString().split('T')[0]
@@ -141,7 +157,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         project.id,
         castUser.userId,
         supervisor_name || '',
-        writer_name || castUser.email,
+        resolvedWriterName,
         weather || 'sunny',
         guard_contents,
         guard_other_text || null,
@@ -189,7 +205,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
             location: project.location,
             workName: project.work_name || project.work_title_raw,
             supervisorName: supervisor_name || '',
-            writerName: writer_name || castUser.email,
+            writerName: resolvedWriterName,
             guardContents: guard_contents,
             guardOtherText: guard_other_text,
             guards: Array.isArray(guards) ? guards : [],
@@ -214,7 +230,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         // 通知送信
         const clientEmails = project.client_emails || [];
         const castEmail = castUser.email;
-        const displayWriterName = writer_name || castUser.email;
+        const displayWriterName = resolvedWriterName;
 
         // CSV生成
         const rows: string[] = [];
@@ -229,7 +245,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         const guardsArr = Array.isArray(guards) ? guards : [];
         if (guardsArr.length === 0) {
           rows.push([
-            (writer_name || castUser.email), workDateStr, weatherMap[weather] || weather,
+            resolvedWriterName, workDateStr, weatherMap[weather] || weather,
             (project.work_name || project.work_title_raw || ''), project.location || '', project.work_name || project.work_title_raw || '', project.client_name_raw || '',
             ...guardFlags,
             '', '', '', '', '', (has_qualifier ? '有' : '無'), (Array.isArray(qualifier_name) ? qualifier_name.join('、') : (qualifier_name || '')), ''
@@ -237,7 +253,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         } else {
           for (const g of guardsArr) {
             rows.push([
-              (writer_name || castUser.email), workDateStr, weatherMap[weather] || weather,
+              resolvedWriterName, workDateStr, weatherMap[weather] || weather,
               (project.work_name || project.work_title_raw || ''), project.location || '', project.work_name || project.work_title_raw || '', project.client_name_raw || '',
               ...guardFlags,
               g.index ?? '', g.name || '', g.start_time || '', g.end_time || '', (g.early_overtime_hours ?? ''), (has_qualifier ? '有' : '無'), (Array.isArray(qualifier_name) ? qualifier_name.join('、') : (qualifier_name || '')), ''

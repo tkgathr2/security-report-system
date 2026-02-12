@@ -215,6 +215,9 @@ function AdminApp() {
                 const [selectedDate, setSelectedDate] = useState<string>(() => {
                   return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
                 })
+                const [reportDate, setReportDate] = useState<string>(() => {
+                  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
+                })
 
           useEffect(() => {
       checkAuth()
@@ -329,11 +332,12 @@ function AdminApp() {
       }
     }
 
-  const fetchReports= async () => {
+  const fetchReports = async (dateStr?: string) => {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/admin/reports', {
+      const url = dateStr ? `/api/admin/reports?date=${dateStr}` : '/api/admin/reports'
+      const response = await fetch(url, {
         credentials: 'include'
       })
       if (!response.ok) throw new Error('Failed to fetch reports')
@@ -720,11 +724,10 @@ function AdminApp() {
                   if (isMobile) setSidebarOpen(false)
                   if (newScreen === 'dashboard') fetchDashboardStats()
                   if (newScreen === 'projects') fetchProjectsByDate(selectedDate)
-                  if (newScreen === 'reports') fetchReports()
-                  if (newScreen === 'staff') fetchStaff()
+                  if (newScreen === 'reports') fetchReports(reportDate)
+                  if (newScreen === 'staff') { fetchStaff(); fetchCastUsers() }
                   if (newScreen === 'import_history') fetchImportHistory()
                   if (newScreen === 'clients') fetchClients()
-                  if (newScreen === 'cast_users') fetchCastUsers()
                 }
 
   const formatDate = (dateStr: string) => {
@@ -863,13 +866,26 @@ function AdminApp() {
     )
   }
 
-  // Date navigation helpers
   const navigateDate = (offset: number) => {
     const d = new Date(selectedDate + 'T12:00:00')
     d.setDate(d.getDate() + offset)
     const newDate = d.toISOString().split('T')[0]
     setSelectedDate(newDate)
     fetchProjectsByDate(newDate)
+  }
+
+  const navigateReportDate = (offset: number) => {
+    const d = new Date(reportDate + 'T12:00:00')
+    d.setDate(d.getDate() + offset)
+    const newDate = d.toISOString().split('T')[0]
+    setReportDate(newDate)
+    fetchReports(newDate)
+  }
+
+  const goToReportToday = () => {
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
+    setReportDate(today)
+    fetchReports(today)
   }
 
   if (loading && !admin) {
@@ -984,13 +1000,6 @@ function AdminApp() {
                                       >
                                         <span style={styles.sidebarIcon}>&#127970;</span>
                                         <span style={styles.sidebarText}>会社管理</span>
-                                      </button>
-                                      <button 
-                                        style={screen === 'cast_users' ? styles.sidebarItemActive : styles.sidebarItem}
-                                        onClick={() => navigateTo('cast_users')}
-                                      >
-                                        <span style={styles.sidebarIcon}>&#128100;</span>
-                                        <span style={styles.sidebarText}>キャスト</span>
                                       </button>
                                     </nav>
                 </aside>
@@ -1358,10 +1367,36 @@ function AdminApp() {
                     {screen === 'reports' && (
                       <div>
                         <h2 style={styles.pageTitle}>報告書一覧</h2>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap'}}>
+                          <button
+                            style={{...styles.secondaryButton, padding: '8px 16px', fontSize: '16px'}}
+                            onClick={() => navigateReportDate(-1)}
+                          >
+                            ◀ 前日
+                          </button>
+                          <button
+                            style={{...styles.primaryButton, padding: '8px 20px'}}
+                            onClick={goToReportToday}
+                          >
+                            今日
+                          </button>
+                          <button
+                            style={{...styles.secondaryButton, padding: '8px 16px', fontSize: '16px'}}
+                            onClick={() => navigateReportDate(1)}
+                          >
+                            翌日 ▶
+                          </button>
+                          <span style={{fontSize: '18px', fontWeight: 'bold', color: COLORS.darkGray}}>
+                            {(() => {
+                              const p = parseDateParts(reportDate)
+                              return `${p.year}年${parseInt(p.month)}月${parseInt(p.day)}日（${p.dayOfWeek}）${p.isToday ? ' - 今日' : ''}`
+                            })()}
+                          </span>
+                        </div>
                         {loading ? (
                           <p>読み込み中...</p>
                         ) : reports.length === 0 ? (
-                          <p style={styles.emptyMessage}>報告書がありません</p>
+                          <p style={styles.emptyMessage}>この日の報告書はありません</p>
                         ) : isMobile ? (
                           <div style={styles.mobileCardList}>
                             {reports.map(report => (
@@ -1736,6 +1771,95 @@ function AdminApp() {
                     </div>
                   </div>
                 </div>
+                        )}
+
+                        {/* Cast Users (Registered) */}
+                        <h3 style={{...styles.sectionTitle, marginTop: '32px', paddingTop: '24px', borderTop: `1px solid ${COLORS.lightGray}`}}>登録済みキャスト一覧</h3>
+                        <p style={{color: COLORS.darkGray, fontSize: '13px', margin: '0 0 12px'}}>メール認証済みのキャスト一覧です。名前を編集してCSVの氏名と紐づけできます。</p>
+                        {castUsers.length === 0 ? (
+                          <p style={styles.emptyMessage}>キャストが登録されていません</p>
+                        ) : (
+                          <div style={styles.card}>
+                            <div style={styles.tableContainer}>
+                              <table style={styles.table}>
+                                <thead>
+                                  <tr>
+                                    <th style={styles.th}>メールアドレス</th>
+                                    <th style={styles.th}>名前</th>
+                                    <th style={styles.th}>登録日</th>
+                                    <th style={styles.th}>操作</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {castUsers.map(user => (
+                                    <tr key={user.id} style={styles.tr}>
+                                      <td style={styles.td}>{user.email}</td>
+                                      <td style={styles.td}>{user.name || user.selected_name_kanji || '-'}</td>
+                                      <td style={styles.td}>{formatDate(user.created_at)}</td>
+                                      <td style={styles.td}>
+                                        <button 
+                                          style={styles.primaryButton}
+                                          onClick={() => setEditingCastUser(user)}
+                                        >
+                                          編集
+                                        </button>
+                                        <button 
+                                          style={{...styles.secondaryButton, backgroundColor: COLORS.danger, color: 'white', marginLeft: '8px'}}
+                                          onClick={() => handleDeleteCastUser(user.id, user.email)}
+                                        >
+                                          削除
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Edit Cast User Modal */}
+                        {editingCastUser && (
+                          <div style={styles.modalOverlay}>
+                            <div style={styles.modal}>
+                              <h3 style={styles.modalTitle}>キャスト編集</h3>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>メールアドレス</label>
+                                <input
+                                  type="text"
+                                  style={{...styles.input, backgroundColor: '#f0f0f0'}}
+                                  value={editingCastUser.email}
+                                  disabled
+                                />
+                              </div>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>名前（CSVの氏名と一致させてください）</label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={editingCastUser.name || ''}
+                                  onChange={(e) => setEditingCastUser({...editingCastUser, name: e.target.value || null})}
+                                  placeholder="例：山田 太郎"
+                                />
+                              </div>
+                              <div style={styles.modalActions}>
+                                <button 
+                                  style={styles.secondaryButton}
+                                  onClick={() => setEditingCastUser(null)}
+                                  disabled={savingCastUser}
+                                >
+                                  キャンセル
+                                </button>
+                                <button 
+                                  style={styles.primaryButton}
+                                  onClick={handleUpdateCastUser}
+                                  disabled={savingCastUser}
+                                >
+                                  {savingCastUser ? '保存中...' : '保存'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
                         )}
 
                         {/* Edit Staff Modal */}
@@ -2125,137 +2249,6 @@ function AdminApp() {
                         )}
                       </div>
                     )}
-
-          {/* Cast Users Management */}
-          {screen === 'cast_users' && (
-            <div>
-                            <h2 style={styles.pageTitle}>キャスト管理</h2>
-                            <p style={styles.pageDescription}>登録済みのキャスト一覧です。名前を編集してCSVの氏名と紐づけできます。</p>
-              
-              {loading ? (
-                <p>読み込み中...</p>
-              ) : castUsers.length === 0 ? (
-                <p style={styles.emptyMessage}>キャストが登録されていません</p>
-              ) : isMobile ? (
-                <div style={styles.mobileCardList}>
-                  {castUsers.map(user => (
-                    <div key={user.id} style={styles.mobileCard}>
-                      <div style={styles.mobileCardBody}>
-                        <div style={styles.mobileCardRow}>
-                          <span style={styles.mobileCardLabel}>メールアドレス</span>
-                          <span style={styles.mobileCardValue}>{user.email}</span>
-                        </div>
-                        <div style={styles.mobileCardRow}>
-                          <span style={styles.mobileCardLabel}>名前</span>
-                          <span style={styles.mobileCardValue}>{user.name || user.selected_name_kanji || '-'}</span>
-                        </div>
-                        <div style={styles.mobileCardRow}>
-                          <span style={styles.mobileCardLabel}>登録日</span>
-                          <span style={styles.mobileCardValue}>{formatDate(user.created_at)}</span>
-                        </div>
-                        <div style={styles.mobileCardRow}>
-                          <button 
-                            style={styles.primaryButton}
-                            onClick={() => setEditingCastUser(user)}
-                          >
-                            編集
-                          </button>
-                          <button 
-                            style={{...styles.secondaryButton, backgroundColor: COLORS.danger, color: 'white', marginLeft: '8px'}}
-                            onClick={() => handleDeleteCastUser(user.id, user.email)}
-                          >
-                            削除
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={styles.card}>
-                  <div style={styles.tableContainer}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>メールアドレス</th>
-                          <th style={styles.th}>名前</th>
-                          <th style={styles.th}>登録日</th>
-                          <th style={styles.th}>操作</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {castUsers.map(user => (
-                          <tr key={user.id} style={styles.tr}>
-                            <td style={styles.td}>{user.email}</td>
-                            <td style={styles.td}>{user.name || user.selected_name_kanji || '-'}</td>
-                            <td style={styles.td}>{formatDate(user.created_at)}</td>
-                            <td style={styles.td}>
-                              <button 
-                                style={styles.primaryButton}
-                                onClick={() => setEditingCastUser(user)}
-                              >
-                                編集
-                              </button>
-                              <button 
-                                style={{...styles.secondaryButton, backgroundColor: COLORS.danger, color: 'white', marginLeft: '8px'}}
-                                onClick={() => handleDeleteCastUser(user.id, user.email)}
-                              >
-                                削除
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Edit Cast User Modal */}
-              {editingCastUser && (
-                <div style={styles.modalOverlay}>
-                  <div style={styles.modal}>
-                    <h3 style={styles.modalTitle}>キャスト編集</h3>
-                    <div style={styles.formGroup}>
-                      <label style={styles.label}>メールアドレス</label>
-                      <input
-                        type="text"
-                        style={{...styles.input, backgroundColor: '#f0f0f0'}}
-                        value={editingCastUser.email}
-                        disabled
-                      />
-                    </div>
-                    <div style={styles.formGroup}>
-                      <label style={styles.label}>名前（CSVの氏名と一致させてください）</label>
-                      <input
-                        type="text"
-                        style={styles.input}
-                        value={editingCastUser.name || ''}
-                        onChange={(e) => setEditingCastUser({...editingCastUser, name: e.target.value || null})}
-                        placeholder="例: 高木豊大"
-                      />
-                    </div>
-                    <div style={styles.modalActions}>
-                      <button 
-                        style={styles.secondaryButton}
-                        onClick={() => setEditingCastUser(null)}
-                        disabled={savingCastUser}
-                      >
-                        キャンセル
-                      </button>
-                      <button 
-                        style={styles.primaryButton}
-                        onClick={handleUpdateCastUser}
-                        disabled={savingCastUser}
-                      >
-                        {savingCastUser ? '保存中...' : '保存'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Casts List Modal - moved outside screen conditions */}
           {castsModalProject && (
