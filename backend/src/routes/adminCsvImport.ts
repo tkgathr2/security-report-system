@@ -572,6 +572,22 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     );
   }
 
+  const staffWithoutEmail: string[] = [];
+  if (processedStaffKana.size > 0) {
+    const kanaList = Array.from(processedStaffKana);
+    const placeholders = kanaList.map((_, i) => `$${i + 1}`).join(', ');
+    const noEmailResult = await pool.query(
+      `SELECT sm.display_name_kanji FROM staff_master sm
+       LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true
+       WHERE sm.display_name_kana IN (${placeholders})
+         AND cu.id IS NULL`,
+      kanaList
+    );
+    for (const row of noEmailResult.rows) {
+      staffWithoutEmail.push(row.display_name_kanji);
+    }
+  }
+
   res.status(200).json({
     ok: true,
     status: importStatus,
@@ -581,6 +597,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     pending_client_rows_count: pendingClientRowsCount,
     staff_auto_added_count: staffAutoAddedCount,
     duplicate_cast_assignments: duplicateCastAssignments,
+    staff_without_email: staffWithoutEmail,
     errors: errors.slice(0, 10)
   });
 });

@@ -142,6 +142,7 @@ interface ImportResult {
   pending_client_rows_count: number
   staff_auto_added_count: number
   duplicate_cast_assignments: number
+  staff_without_email: string[]
   errors: Array<{ row: number; reason: string }>
 }
 
@@ -1407,6 +1408,12 @@ function AdminApp() {
                         <span style={styles.resultValue}>{importResult.pending_client_rows_count ?? 0}件</span>
                       </div>
                     </div>
+                    {importResult.staff_without_email && importResult.staff_without_email.length > 0 && (
+                      <div style={{ ...styles.warningBox, backgroundColor: '#fff3cd', color: '#856404', border: '1px solid #ffc107', padding: '12px 16px' }}>
+                        <strong>メールアドレス未登録のスタッフ（{importResult.staff_without_email.length}名）:</strong>
+                        <div style={{ marginTop: '4px' }}>{importResult.staff_without_email.join('、')}</div>
+                      </div>
+                    )}
                     {(importResult.duplicate_cast_assignments ?? 0) > 0 && (
                       <div style={{ ...styles.warningBox, backgroundColor: '#fff3cd', color: '#856404', border: '1px solid #ffc107' }}>
                         1日2箇所以上の割り当てが {importResult.duplicate_cast_assignments} 件あります（1日1現場まで）。該当するキャストは登録されませんでした。
