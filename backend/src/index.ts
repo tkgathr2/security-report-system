@@ -58,8 +58,17 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+app.get('/api/status-check', async (_req: Request, res: Response) => {
+  try {
+    const counts = await pool.query(`SELECT status, COUNT(*)::int as count FROM projects GROUP BY status ORDER BY status`);
+    res.json({ statuses: counts.rows });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-13-v72' });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-13-v73' });
 });
 
 app.use('/api/auth', authRouter);
@@ -91,8 +100,8 @@ async function ensureSchema(){
         reviewed_at TIMESTAMPTZ
       )
     `);
-    const activated = await pool.query(`UPDATE projects SET status = 'active' WHERE status = 'pending_client' RETURNING id`);
-    console.log(`[DB] Activated ${activated.rows.length} pending_client projects`);
+    const activated = await pool.query(`UPDATE projects SET status = 'active' WHERE status IN ('pending_client', 'pending') RETURNING id, status`);
+    console.log(`[DB] Activated ${activated.rows.length} pending projects`);
   } catch (e) {
     console.error('[DB] ensureSchema failed:', e);
   }
