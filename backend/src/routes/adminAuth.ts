@@ -365,7 +365,7 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
     if (existingAdmin.rows.length > 0) {
       await pool.query('UPDATE admin_allowlist SET is_active = true, role = $1 WHERE LOWER(email) = LOWER($2)', [assignRole, request.email]);
     } else {
-      await pool.query('INSERT INTO admin_allowlist (email, is_active, role) VALUES ($1, true, $2)', [request.email, assignRole]);
+      await pool.query('INSERT INTO admin_allowlist (email, is_active, role, created_by_admin_email) VALUES ($1, true, $2, $3)', [request.email, assignRole, adminUser.email]);
     }
 
     await pool.query(
