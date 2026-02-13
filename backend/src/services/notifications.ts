@@ -4,6 +4,8 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 const EMAIL_FROM = process.env.SMTP_FROM || 'noreply@takagi.bz';
 
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || '';
+const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || '';
+const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID || '';
 
 interface EmailOptions {
   to: string[];
@@ -115,6 +117,76 @@ export async function sendSlackNotification(notification: SlackNotification): Pr
     return { success: true };
   } catch (error) {
     console.error('[SLACK] Failed to send notification:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function uploadPdfToSlack(params: {
+  pdfBuffer: Buffer;
+  filename: string;
+  reportId: string;
+  title: string;
+}): Promise<{ success: boolean; error?: string }> {
+  if (!SLACK_BOT_TOKEN) {
+    console.log('[SLACK-PDF] Bot token not configured, skipping PDF upload');
+    return { success: false, error: 'Slack bot token not configured' };
+  }
+  if (!SLACK_CHANNEL_ID) {
+    console.log('[SLACK-PDF] Channel ID not configured, skipping PDF upload');
+    return { success: false, error: 'Slack channel ID not configured' };
+  }
+
+  try {
+    console.log(`[SLACK-PDF] Starting PDF upload for report ${params.reportId} (${params.pdfBuffer.length} bytes)`);
+
+    const urlRes = await fetch('https://slack.com/api/files.getUploadURLExternal', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        filename: params.filename,
+        length: String(params.pdfBuffer.length)
+      })
+    });
+    const urlData = await urlRes.json() as { ok: boolean; upload_url: string; file_id: string; error?: string };
+    if (!urlData.ok) {
+      throw new Error(`getUploadURLExternal failed: ${urlData.error}`);
+    }
+    console.log(`[SLACK-PDF] Got upload URL, file_id: ${urlData.file_id}`);
+
+    const uploadRes = await fetch(urlData.upload_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: params.pdfBuffer
+    });
+    if (!uploadRes.ok) {
+      throw new Error(`File upload failed: ${uploadRes.status}`);
+    }
+    console.log('[SLACK-PDF] File uploaded successfully');
+
+    const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        files: [{ id: urlData.file_id, title: params.title }],
+        channel_id: SLACK_CHANNEL_ID,
+        initial_comment: `📄 報告書PDF（報告書ID: ${params.reportId}）`
+      })
+    });
+    const completeData = await completeRes.json() as { ok: boolean; error?: string };
+    if (!completeData.ok) {
+      throw new Error(`completeUploadExternal failed: ${completeData.error}`);
+    }
+
+    console.log(`[SLACK-PDF] PDF shared to channel successfully`);
+    return { success: true };
+  } catch (error) {
+    console.error('[SLACK-PDF] Failed to upload PDF to Slack:', error);
     return { success: false, error: String(error) };
   }
 }

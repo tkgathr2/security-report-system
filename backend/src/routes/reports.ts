@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
-import { sendReportApprovalNotifications, sendSlackNotification } from '../services/notifications';
+import { sendReportApprovalNotifications, sendSlackNotification, uploadPdfToSlack } from '../services/notifications';
 import { generateReportPdf } from '../services/pdfGenerator';
 import { authenticateCast } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
@@ -248,6 +248,21 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         console.log(`[ASYNC] Slack notification result for report ${reportId}:`, slackResult);
       } catch (slackError) {
         console.error(`[ASYNC] Slack notification failed for report ${reportId}:`, slackError);
+      }
+
+      // Slack PDF添付（Bot Token設定時のみ、独立したtry-catch）
+      if (pdfGenerationStatus === 'success') {
+        try {
+          const pdfUploadResult = await uploadPdfToSlack({
+            pdfBuffer,
+            filename: `report_${workDateStr}.pdf`,
+            reportId,
+            title: `警備報告書 ${project.work_title_raw || project.work_name || ''} (${workDateStr})`
+          });
+          console.log(`[ASYNC] Slack PDF upload result for report ${reportId}:`, pdfUploadResult);
+        } catch (pdfUploadError) {
+          console.error(`[ASYNC] Slack PDF upload failed for report ${reportId}:`, pdfUploadError);
+        }
       }
 
       // メール通知（独立したtry-catch）
