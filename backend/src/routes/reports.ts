@@ -315,25 +315,31 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
 router.get('/:reportId/pdf', async (req: Request, res: Response) => {
   const { reportId } = req.params;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(reportId)) {
+    res.status(400).json({ error: 'INVALID_ID', message: '報告書IDの形式が不正です' });
+    return;
+  }
   try {
     const result = await pool.query(
       'SELECT pdf_bytes, pdf_generation_status FROM reports WHERE id = $1',
       [reportId]
     );
     if (result.rows.length === 0) {
-      res.status(404).json({ error: 'NOT_FOUND' });
+      res.status(404).json({ error: 'NOT_FOUND', message: '報告書が見つかりません' });
       return;
     }
     const { pdf_bytes, pdf_generation_status } = result.rows[0];
     if (!pdf_bytes || pdf_bytes.length === 0 || pdf_generation_status !== 'success') {
-      res.status(404).json({ error: 'PDF_NOT_READY' });
+      res.status(404).json({ error: 'PDF_NOT_READY', message: 'PDFがまだ生成されていません' });
       return;
     }
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="report-${reportId}.pdf"`);
     res.send(pdf_bytes);
   } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR' });
+    console.error('[PDF] Download error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: 'サーバーエラーが発生しました' });
   }
 });
 
