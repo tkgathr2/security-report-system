@@ -3,6 +3,7 @@ import passport from 'passport';
 import { Strategy as GoogleStrategy, Profile } from 'passport-google-oauth20';
 import crypto from 'crypto';
 import pool from '../db/pool';
+import { sendEmail } from '../services/notifications';
 
 const router = Router();
 
@@ -15,11 +16,14 @@ interface AdminUser {
   email: string;
   google_sub: string;
   is_active: boolean;
+  role: string;
 }
 
 declare module 'express-session' {
   interface SessionData {
     oauthState?: string;
+    pendingEmail?: string;
+    pendingDisplayName?: string;
   }
 }
 
@@ -29,6 +33,7 @@ declare global {
       id: string;
       email: string;
       is_active: boolean;
+      role: string;
     }
   }
 }
@@ -41,7 +46,7 @@ passport.serializeUser((user: Express.User, done) => {
 passport.deserializeUser(async (email: string, done) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, is_active FROM admin_allowlist WHERE email = $1 AND is_active = true',
+      'SELECT id, email, is_active, COALESCE(role, \'admin\') as role FROM admin_allowlist WHERE email = $1 AND is_active = true',
       [email]
     );
 
@@ -63,7 +68,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
     scope: ['email', 'profile'],
     state: false,  // Changed from true - avoid conflict with manual state management
     passReqToCallback: true
-  }, async (req: Request, accessToken: string, refreshToken: string, profile: Profile, done: (error: Error | null, user?: AdminUser | false) => void) => {
+  }, async (req: Request, accessToken: string, refreshToken: string, _params: any, profile: Profile, done: (error: Error | null, user?: AdminUser | false) => void) => {
     try {
       const email = profile.emails?.[0]?.value;
       const googleSub = profile.id;
@@ -74,23 +79,28 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
 
       // Use case-insensitive email comparison
       const result = await pool.query(
-        'SELECT id, email, is_active FROM admin_allowlist WHERE LOWER(email) = LOWER($1)',
+        'SELECT id, email, is_active, COALESCE(role, \'admin\') as role FROM admin_allowlist WHERE LOWER(email) = LOWER($1)',
         [email]
       );
 
       if (result.rows.length === 0) {
+        req.session.pendingEmail = email;
+        req.session.pendingDisplayName = profile.displayName || '';
         return done(null, false);
       }
 
       const admin = result.rows[0];
       if (!admin.is_active) {
+        req.session.pendingEmail = email;
+        req.session.pendingDisplayName = profile.displayName || '';
         return done(null, false);
       }
       return done(null, {
         id: admin.id,
         email: admin.email,
         google_sub: googleSub,
-        is_active: admin.is_active
+        is_active: admin.is_active,
+        role: admin.role
       });
     } catch (error) {
       return done(error as Error);
@@ -174,11 +184,11 @@ router.get('/google/callback',
       }
 
       if (!user) {
-        res.status(403).json({
-          error: 'FORBIDDEN',
-          message: '許可リストに登録されていないか、無効化されています',
-          details: {}
-        });
+        const pendingEmail = req.session.pendingEmail || '';
+        const pendingName = req.session.pendingDisplayName || '';
+        delete req.session.pendingEmail;
+        delete req.session.pendingDisplayName;
+        res.redirect(`/?access_denied=1&email=${encodeURIComponent(pendingEmail)}&name=${encodeURIComponent(pendingName)}`);
         return;
       }
 
@@ -199,5 +209,218 @@ router.get('/google/callback',
     })(req, res, next);
   }
 );
+
+// --- Access Request API (no auth required) ---
+router.post('/request-access', async (req: Request, res: Response) => {
+  try {
+    const { email, display_name } = req.body;
+    if (!email) {
+      res.status(400).json({ error: 'INVALID_PAYLOAD', message: 'メールアドレスは必須です' });
+      return;
+    }
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS access_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL,
+        display_name TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        reviewed_at TIMESTAMPTZ
+      )
+    `);
+
+    const existing = await pool.query(
+      'SELECT id, status FROM access_requests WHERE LOWER(email) = LOWER($1) AND status = $2',
+      [email, 'pending']
+    );
+    if (existing.rows.length > 0) {
+      res.json({ ok: true, message: '申請済みです。承認をお待ちください。' });
+      return;
+    }
+
+    const alreadyAdmin = await pool.query(
+      'SELECT id FROM admin_allowlist WHERE LOWER(email) = LOWER($1) AND is_active = true',
+      [email]
+    );
+    if (alreadyAdmin.rows.length > 0) {
+      res.json({ ok: true, message: '既にアクセス権があります。ログインしてください。' });
+      return;
+    }
+
+    await pool.query(
+      'INSERT INTO access_requests (email, display_name) VALUES ($1, $2)',
+      [email, display_name || null]
+    );
+
+    const OWNER_EMAIL = process.env.ADMIN_NOTIFICATION_EMAILS || 'atsuhiro@takagi.bz';
+    const ownerEmails = OWNER_EMAIL.split(',').map(e => e.trim()).filter(Boolean);
+
+    await sendEmail({
+      to: ownerEmails,
+      subject: '【ほうこちゃん】管理画面アクセス申請',
+      text: `管理画面へのアクセス申請がありました。\n\nメール: ${email}\n名前: ${display_name || '未設定'}\n\n管理画面のアカウント管理ページから承認・拒否してください。`,
+      html: `<h3>管理画面アクセス申請</h3><p><strong>メール:</strong> ${email}</p><p><strong>名前:</strong> ${display_name || '未設定'}</p><p>管理画面のアカウント管理ページから承認・拒否してください。</p>`
+    });
+
+    res.json({ ok: true, message: '申請を送信しました。管理者の承認をお待ちください。' });
+  } catch (error) {
+    console.error('[ACCESS_REQUEST] Error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: '申請の送信に失敗しました' });
+  }
+});
+
+// --- Admin Management API (requires super_admin) ---
+function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!req.isAuthenticated || !req.isAuthenticated() || !req.user) {
+    res.status(401).json({ error: 'UNAUTHORIZED', message: '管理者セッションがありません' });
+    return;
+  }
+  const user = req.user as Express.User;
+  if (user.role !== 'super_admin') {
+    res.status(403).json({ error: 'FORBIDDEN', message: 'スーパー管理者権限が必要です' });
+    return;
+  }
+  next();
+}
+
+function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!req.isAuthenticated || !req.isAuthenticated() || !req.user) {
+    res.status(401).json({ error: 'UNAUTHORIZED', message: '管理者セッションがありません' });
+    return;
+  }
+  next();
+}
+
+router.get('/access-requests',requireSuperAdmin, async (_req: Request, res: Response) => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS access_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL,
+        display_name TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        reviewed_at TIMESTAMPTZ
+      )
+    `);
+    const result = await pool.query('SELECT * FROM access_requests ORDER BY created_at DESC');
+    res.json({ requests: result.rows });
+  } catch (error) {
+    console.error('[ACCESS_REQUESTS] Error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: '申請一覧の取得に失敗しました' });
+  }
+});
+
+router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const requestId = req.params.requestId as string;
+    const { role } = req.body;
+    const assignRole = role || 'viewer';
+    const adminUser = req.user as Express.User;
+
+    const requestResult = await pool.query('SELECT * FROM access_requests WHERE id = $1', [requestId]);
+    if (requestResult.rows.length === 0) {
+      res.status(404).json({ error: 'NOT_FOUND', message: '申請が見つかりません' });
+      return;
+    }
+
+    const request = requestResult.rows[0];
+
+    await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
+
+    await pool.query(
+      `INSERT INTO admin_allowlist (email, is_active, role) VALUES ($1, true, $2)
+       ON CONFLICT (email) DO UPDATE SET is_active = true, role = $2`,
+      [request.email, assignRole]
+    );
+
+    await pool.query(
+      'UPDATE access_requests SET status = $1, reviewed_by = $2, reviewed_at = NOW() WHERE id = $3',
+      ['approved', adminUser.email, requestId]
+    );
+
+    await sendEmail({
+      to: [request.email],
+      subject: '【ほうこちゃん】アクセスが承認されました',
+      text: `管理画面へのアクセスが承認されました。\n\n権限: ${assignRole}\n\nログインしてご利用ください。`,
+      html: `<h3>アクセスが承認されました</h3><p>管理画面へのアクセスが承認されました。</p><p><strong>権限:</strong> ${assignRole}</p><p>ログインしてご利用ください。</p>`
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[APPROVE] Error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: '承認処理に失敗しました' });
+  }
+});
+
+router.post('/access-requests/:requestId/reject', requireSuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const requestId = req.params.requestId as string;
+    const adminUser = req.user as Express.User;
+
+    await pool.query(
+      'UPDATE access_requests SET status = $1, reviewed_by = $2, reviewed_at = NOW() WHERE id = $3',
+      ['rejected', adminUser.email, requestId]
+    );
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[REJECT] Error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: '拒否処理に失敗しました' });
+  }
+});
+
+router.get('/admins', requireSuperAdmin, async (_req: Request, res: Response) => {
+  try {
+    await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
+    const result = await pool.query(
+      `SELECT id, email, is_active, COALESCE(role, 'admin') as role, created_at FROM admin_allowlist ORDER BY created_at`
+    );
+    res.json({ admins: result.rows });
+  } catch (error) {
+    console.error('[ADMINS] Error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: '管理者一覧の取得に失敗しました' });
+  }
+});
+
+router.put('/admins/:adminId/role', requireSuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const adminId = req.params.adminId as string;
+    const { role } = req.body;
+    const validRoles = ['super_admin', 'admin', 'viewer'];
+    if (!role || !validRoles.includes(role)) {
+      res.status(400).json({ error: 'INVALID_PAYLOAD', message: '権限はsuper_admin, admin, viewerから選択してください' });
+      return;
+    }
+
+    await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
+    await pool.query('UPDATE admin_allowlist SET role = $1 WHERE id = $2', [role, adminId]);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[ROLE_UPDATE] Error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: '権限の更新に失敗しました' });
+  }
+});
+
+router.delete('/admins/:adminId', requireSuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const adminId = req.params.adminId as string;
+    const adminUser = req.user as Express.User;
+
+    if (adminId === adminUser.id) {
+      res.status(400).json({ error: 'INVALID_PAYLOAD', message: '自分自身は削除できません' });
+      return;
+    }
+
+    await pool.query('UPDATE admin_allowlist SET is_active = false WHERE id = $1', [adminId]);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[ADMIN_DELETE] Error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: '管理者の削除に失敗しました' });
+  }
+});
 
 export default router;

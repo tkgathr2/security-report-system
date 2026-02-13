@@ -14,10 +14,12 @@ router.get('/me', (req: Request, res: Response) => {
     return;
   }
 
+  const user = req.user as Express.User;
   res.json({
     admin: {
-      id: req.user.id,
-      email: req.user.email
+      id: user.id,
+      email: user.email,
+      role: user.role || 'admin'
     }
   });
 });
