@@ -180,17 +180,6 @@ interface Client {
   updated_at: string
 }
 
-interface CastUser {
-  id: string
-  email: string
-  name: string | null
-  selected_staff_id: string | null
-  selected_name_kanji: string | null
-  staff_name_kanji: string | null
-  staff_name_kana: string | null
-  created_at: string
-  updated_at: string
-}
 
 function AdminApp() {
   const [screen, setScreen] = useState<Screen>('dashboard')
@@ -221,9 +210,6 @@ function AdminApp() {
         const [clients, setClients] = useState<Client[]>([])
         const [editingClient, setEditingClient] = useState<Client | null>(null)
         const [savingClient, setSavingClient] = useState(false)
-                const [castUsers, setCastUsers] = useState<CastUser[]>([])
-                const [editingCastUser, setEditingCastUser] = useState<CastUser | null>(null)
-                const [savingCastUser, setSavingCastUser] = useState(false)
                 const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null)
                 const [savingStaff, setSavingStaff] = useState(false)
                 const [staffSearchQuery, setStaffSearchQuery] = useState('')
@@ -285,11 +271,9 @@ function AdminApp() {
           handleUpdateStaff()
         } else if (editingClient && !savingClient) {
           handleUpdateClient()
-        } else if (editingCastUser && !savingCastUser) {
-          handleUpdateCastUser()
         }
       }
-    }, [showStaffModal, creating, editingStaff, savingStaff, editingClient, savingClient, editingCastUser, savingCastUser])
+    }, [showStaffModal, creating, editingStaff, savingStaff, editingClient, savingClient])
 
     useEffect(() => {
       document.addEventListener('keydown', handleCtrlEnter)
@@ -623,67 +607,6 @@ function AdminApp() {
         }
 
 
-        const fetchCastUsers = async () => {
-          setLoading(true)
-          setError(null)
-          try {
-            const response = await fetch('/api/admin/cast-users', {
-              credentials: 'include'
-            })
-            if (!response.ok) throw new Error('Failed to fetch cast users')
-            const data = await response.json()
-            setCastUsers(data.users || [])
-          } catch {
-            setError('キャスト一覧の取得に失敗しました')
-          } finally {
-            setLoading(false)
-          }
-        }
-
-        const handleUpdateCastUser = async () => {
-          if (!editingCastUser) return
-          setSavingCastUser(true)
-          setError(null)
-          try {
-            const response = await fetch(`/api/admin/cast-users/${editingCastUser.id}/name`, {
-              method: 'PUT',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                staff_name_kanji: editingCastUser.name,
-                reason: '管理者による名前変更'
-              })
-            })
-            if (!response.ok) {
-              const data = await response.json()
-              throw new Error(data.message || '更新に失敗しました')
-            }
-            setEditingCastUser(null)
-            fetchCastUsers()
-          } catch (err) {
-            setError(err instanceof Error ? err.message : '更新に失敗しました')
-          } finally {
-            setSavingCastUser(false)
-          }
-        }
-
-        const handleDeleteCastUser = async (userId: string, userEmail: string) => {
-          if (!confirm(`${userEmail} を削除しますか？この操作は取り消せません。`)) return
-          setError(null)
-          try {
-            const response = await fetch(`/api/admin/cast-users/${userId}`, {
-              method: 'DELETE',
-              credentials: 'include'
-            })
-            if (!response.ok) {
-              const data = await response.json()
-              throw new Error(data.message || '削除に失敗しました')
-            }
-            fetchCastUsers()
-          } catch (err) {
-            setError(err instanceof Error ? err.message : '削除に失敗しました')
-          }
-        }
 
         const handleDeleteProjectsWithoutCasts = async () => {
           if (!confirm('キャストがいない案件をすべて削除しますか？この操作は取り消せません。')) return
@@ -945,7 +868,7 @@ function AdminApp() {
                   if (newScreen === 'dashboard') fetchDashboardStats()
                   if (newScreen === 'projects') fetchProjectsByDate(selectedDate)
                   if (newScreen === 'reports') fetchReports(reportDate)
-                  if (newScreen === 'staff') { fetchStaff(); fetchCastUsers() }
+                  if (newScreen === 'staff') { fetchStaff() }
                   if (newScreen === 'import_history') fetchImportHistory()
                   if (newScreen === 'clients') fetchClients()
                   if (newScreen === 'accounts') { setLoadingAccounts(true); Promise.all([fetchAccessRequests(), fetchAdminAccounts()]).finally(() => setLoadingAccounts(false)) }
@@ -961,25 +884,6 @@ function AdminApp() {
     return new Date(dateStr).toLocaleString('ja-JP')
   }
 
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      'active': '有効',
-      'pending_client': '会社未登録',
-      'completed': '完了',
-      'expired': '期限切れ'
-    }
-    return labels[status] || status
-  }
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      'active': COLORS.success,
-      'pending_client': COLORS.warning,
-      'completed': COLORS.primary,
-      'expired': COLORS.darkGray
-    }
-    return colors[status] || COLORS.darkGray
-  }
 
   const handleSort = (column: keyof Project) => {
     if (sortColumn === column) {
