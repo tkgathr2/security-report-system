@@ -74,6 +74,24 @@ app.use('/api/admin/csv', adminCsvImportRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/cast', castAuthRouter);
 
+app.delete('/api/setup/report/:reportId', async (req: Request, res: Response) => {
+  const secret = req.headers['x-auth-secret'] as string;
+  if (!secret || secret !== process.env.AUTH_SECRET) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  try {
+    const result = await pool.query('DELETE FROM reports WHERE id = $1 RETURNING id', [req.params.reportId]);
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    res.json({ deleted: true, id: result.rows[0].id });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 async function ensureSchema(){
   try {
     await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
