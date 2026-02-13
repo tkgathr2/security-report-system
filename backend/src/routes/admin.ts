@@ -791,9 +791,9 @@ router.get('/settings', requireAdmin, async (req: Request, res: Response) => {
 router.put('/settings', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { pdf_design } = req.body;
-    const validDesigns = ['A', 'B', 'C', 'D', 'E'];
+    const validDesigns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
     if (pdf_design && !validDesigns.includes(pdf_design)) {
-      sendBadRequest(res, 'デザインはA〜Eから選択してください');
+      sendBadRequest(res, 'デザインはA〜Jから選択してください');
       return;
     }
     if (pdf_design) {
