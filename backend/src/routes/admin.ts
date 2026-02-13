@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import crypto from 'crypto';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
 import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '../utils/errorHandler';
@@ -777,111 +776,6 @@ router.delete('/reports/:reportId', requireAdmin, async (req: Request, res: Resp
     res.json({ deleted: true, report: result.rows[0] });
   } catch (error) {
     handleDbError(res, error, 'Delete report');
-  }
-});
-
-router.post('/temp-setup-casts-projects', async (req: Request, res: Response) => {
-  const secret = req.headers['x-auth-secret'] || req.query.secret;
-  if (secret !== process.env.AUTH_SECRET && secret !== 'setup-2026') {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-  try {
-    const existingOhno = await pool.query("SELECT id FROM staff_master WHERE display_name_kanji = '大野ないと'");
-    let ohnoId: string;
-    if (existingOhno.rows.length === 0) {
-      const ins = await pool.query(
-        "INSERT INTO staff_master (display_name_kanji, display_name_kana) VALUES ('大野ないと', 'オオノナイト') RETURNING id",
-      );
-      ohnoId = ins.rows[0].id;
-    } else {
-      ohnoId = existingOhno.rows[0].id;
-    }
-
-    const staffResult = await pool.query("SELECT id, display_name_kanji FROM staff_master ORDER BY display_name_kana");
-    const allStaff = staffResult.rows;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const createdProjects: { project_key: string; cast: string }[] = [];
-
-    for (let i = 0; i < allStaff.length; i++) {
-      const staff = allStaff[i];
-      const projectKey = `TEST-${today.replace(/-/g, '')}-${String(i + 1).padStart(3, '0')}`;
-
-      const existingProject = await pool.query("SELECT id FROM projects WHERE project_key = $1", [projectKey]);
-      if (existingProject.rows.length > 0) {
-        createdProjects.push({ project_key: projectKey, cast: staff.display_name_kanji + ' (既存)' });
-        continue;
-      }
-
-      const uniqueUrl = crypto.randomUUID();
-      const urlExpiresAt = new Date();
-      urlExpiresAt.setDate(urlExpiresAt.getDate() + 7);
-
-      const projResult = await pool.query(
-        `INSERT INTO projects (project_key, client_name_raw, work_date, work_name, work_title_raw, location, unique_url, url_expires_at, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
-         RETURNING id`,
-        [projectKey, 'テスト会社', today, `テスト現場 ${staff.display_name_kanji}`, `テスト現場 ${staff.display_name_kanji}`, '東京都', uniqueUrl, urlExpiresAt]
-      );
-      const projectId = projResult.rows[0].id;
-
-      await pool.query(
-        `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index)
-         VALUES ($1, $2, $3, 0)`,
-        [projectId, staff.id, staff.display_name_kanji]
-      );
-
-      createdProjects.push({ project_key: projectKey, cast: staff.display_name_kanji });
-    }
-
-    res.json({
-      ok: true,
-      ohno_staff_id: ohnoId,
-      total_staff: allStaff.length,
-      created_projects: createdProjects
-    });
-  } catch (error) {
-    console.error('[TEMP-SETUP] Error:', error);
-    res.status(500).json({ error: 'Setup failed', details: String(error) });
-  }
-});
-
-router.post('/temp-diag-approve', async (req: Request, res: Response) => {
-  const secret = req.headers['x-auth-secret'] || req.query.secret;
-  if (secret !== process.env.AUTH_SECRET && secret !== 'setup-2026') {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-  try {
-    const cols = await pool.query(
-      `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'admin_allowlist' ORDER BY ordinal_position`
-    );
-    const requests = await pool.query("SELECT id, email, status FROM access_requests ORDER BY created_at DESC LIMIT 5");
-    const admins = await pool.query("SELECT * FROM admin_allowlist LIMIT 10");
-
-    let testApproveError = null;
-    if (requests.rows.length > 0) {
-      const pendingReq = requests.rows.find((r: { status: string }) => r.status === 'pending');
-      if (pendingReq) {
-        try {
-          await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
-          const existing = await pool.query('SELECT id FROM admin_allowlist WHERE LOWER(email) = LOWER($1)', [pendingReq.email]);
-          testApproveError = `existing check ok: ${existing.rows.length} rows`;
-        } catch (e) {
-          testApproveError = String(e);
-        }
-      }
-    }
-
-    res.json({
-      admin_allowlist_columns: cols.rows,
-      access_requests: requests.rows,
-      admin_allowlist_data: admins.rows,
-      test_approve_step: testApproveError
-    });
-  } catch (error) {
-    res.status(500).json({ error: String(error) });
   }
 });
 
