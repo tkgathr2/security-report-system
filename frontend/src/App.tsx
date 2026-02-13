@@ -35,11 +35,30 @@ const GUARD_CONTENT_LABELS: Record<string, string> = {
   other: '⑧その他'
 }
 
-type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients' | 'cast_users'
+type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients' | 'cast_users' | 'accounts'
 
 interface AdminUser {
   id: string
   email: string
+  role: string
+}
+
+interface AccessRequest {
+  id: string
+  email: string
+  display_name: string | null
+  status: string
+  reviewed_by: string | null
+  created_at: string
+  reviewed_at: string | null
+}
+
+interface AdminAccount {
+  id: string
+  email: string
+  is_active: boolean
+  role: string
+  created_at: string
 }
 
 interface ProjectCast {
@@ -213,6 +232,13 @@ function AdminApp() {
                 const [resending, setResending] = useState(false)
                 const [resendResult, setResendResult] = useState<string | null>(null)
                 const [deleting, setDeleting] = useState(false)
+                const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([])
+                const [adminAccounts, setAdminAccounts] = useState<AdminAccount[]>([])
+                const [loadingAccounts, setLoadingAccounts] = useState(false)
+                const [pendingAccessEmail, setPendingAccessEmail] = useState<string | null>(null)
+                const [pendingAccessName, setPendingAccessName] = useState<string | null>(null)
+                const [requestingAccess, setRequestingAccess] = useState(false)
+                const [accessRequestResult, setAccessRequestResult] = useState<string | null>(null)
 
                 // MVP: Single date navigation (no infinite scroll)
                 const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -223,6 +249,16 @@ function AdminApp() {
                 })
 
           useEffect(() => {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('access_denied') === '1') {
+        const email = params.get('email') || ''
+        const name = params.get('name') || ''
+        if (email) {
+          setPendingAccessEmail(email)
+          setPendingAccessName(name || null)
+        }
+        window.history.replaceState({}, '', '/')
+      }
       checkAuth()
     }, [])
 
@@ -291,7 +327,114 @@ function AdminApp() {
     setAdmin(null)
   }
 
-  const fetchDashboardStats = async () => {
+  const handleRequestAccess = async () => {
+    if (!pendingAccessEmail) return
+    setRequestingAccess(true)
+    setAccessRequestResult(null)
+    try {
+      const response = await fetch('/api/admin/auth/request-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: pendingAccessEmail, display_name: pendingAccessName })
+      })
+      const data = await response.json()
+      setAccessRequestResult(data.message || '申請を送信しました')
+    } catch {
+      setAccessRequestResult('申請の送信に失敗しました')
+    } finally {
+      setRequestingAccess(false)
+    }
+  }
+
+  const fetchAccessRequests = async () => {
+    try {
+      const response = await fetch('/api/admin/auth/access-requests', { credentials: 'include' })
+      if (response.ok) {
+        const data = await response.json()
+        setAccessRequests(data.requests || [])
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const fetchAdminAccounts = async () => {
+    try {
+      const response = await fetch('/api/admin/auth/admins', { credentials: 'include' })
+      if (response.ok) {
+        const data = await response.json()
+        setAdminAccounts(data.admins || [])
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleApproveRequest = async (requestId: string, role: string) => {
+    try {
+      const response = await fetch(`/api/admin/auth/access-requests/${requestId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ role })
+      })
+      if (response.ok) {
+        fetchAccessRequests()
+        fetchAdminAccounts()
+      }
+    } catch {
+      alert('承認に失敗しました')
+    }
+  }
+
+  const handleRejectRequest = async (requestId: string) => {
+    if (!confirm('この申請を拒否しますか？')) return
+    try {
+      await fetch(`/api/admin/auth/access-requests/${requestId}/reject`, {
+        method: 'POST',
+        credentials: 'include'
+      })
+      fetchAccessRequests()
+    } catch {
+      alert('拒否に失敗しました')
+    }
+  }
+
+  const handleUpdateAdminRole = async (adminId: string, role: string) => {
+    try {
+      const response = await fetch(`/api/admin/auth/admins/${adminId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ role })
+      })
+      if (response.ok) {
+        fetchAdminAccounts()
+      }
+    } catch {
+      alert('権限の更新に失敗しました')
+    }
+  }
+
+  const handleDeleteAdmin = async (adminId: string) => {
+    if (!confirm('このアカウントを無効化しますか？')) return
+    try {
+      const response = await fetch(`/api/admin/auth/admins/${adminId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      })
+      if (response.ok) {
+        fetchAdminAccounts()
+      } else {
+        const data = await response.json()
+        alert(data.message || '削除に失敗しました')
+      }
+    } catch {
+      alert('削除に失敗しました')
+    }
+  }
+
+  const fetchDashboardStats= async () => {
     try {
       const [projectsRes, reportsRes, staffRes, clientsRes] = await Promise.all([
         fetch('/api/admin/projects', { credentials: 'include' }),
@@ -781,6 +924,7 @@ function AdminApp() {
                   if (newScreen === 'staff') { fetchStaff(); fetchCastUsers() }
                   if (newScreen === 'import_history') fetchImportHistory()
                   if (newScreen === 'clients') fetchClients()
+                  if (newScreen === 'accounts') { setLoadingAccounts(true); Promise.all([fetchAccessRequests(), fetchAdminAccounts()]).finally(() => setLoadingAccounts(false)) }
                 }
 
   const formatDate = (dateStr: string) => {
@@ -950,6 +1094,48 @@ function AdminApp() {
   }
 
   if (!admin) {
+    if (pendingAccessEmail) {
+      return (
+        <div style={styles.loginContainer}>
+          <div style={styles.loginBox}>
+            <div style={styles.loginLogo}>
+              <img src={COMPANY_LOGO_URL} alt="日本交通誘導" style={styles.loginLogoImage} />
+            </div>
+            <h2 style={styles.loginSubtitle}>アクセス権限の申請</h2>
+            <p style={{...styles.loginDesc, marginBottom: '16px'}}>このアカウントは管理画面へのアクセス権がありません。<br/>管理者に申請を送信できます。</p>
+            <div style={{background: COLORS.lightGray, borderRadius: '8px', padding: '16px', marginBottom: '20px', textAlign: 'left' as const}}>
+              <p style={{margin: '0 0 8px', fontSize: '14px', color: COLORS.darkGray}}>メールアドレス</p>
+              <p style={{margin: '0 0 12px', fontSize: '16px', fontWeight: 'bold', color: COLORS.text}}>{pendingAccessEmail}</p>
+              {pendingAccessName && (
+                <>
+                  <p style={{margin: '0 0 8px', fontSize: '14px', color: COLORS.darkGray}}>名前</p>
+                  <p style={{margin: '0', fontSize: '16px', fontWeight: 'bold', color: COLORS.text}}>{pendingAccessName}</p>
+                </>
+              )}
+            </div>
+            {accessRequestResult ? (
+              <div style={{background: '#e8f5e9', borderRadius: '8px', padding: '16px', marginBottom: '16px', color: '#2e7d32', textAlign: 'center' as const}}>
+                {accessRequestResult}
+              </div>
+            ) : (
+              <button
+                style={{...styles.googleButton, background: COLORS.primary, color: '#fff', border: 'none', opacity: requestingAccess ? 0.6 : 1}}
+                onClick={handleRequestAccess}
+                disabled={requestingAccess}
+              >
+                {requestingAccess ? '送信中...' : 'アクセス権限を申請する'}
+              </button>
+            )}
+            <button
+              style={{...styles.googleButton, background: 'transparent', color: COLORS.darkGray, border: `1px solid ${COLORS.gray}`, marginTop: '12px'}}
+              onClick={() => { setPendingAccessEmail(null); setPendingAccessName(null); setAccessRequestResult(null) }}
+            >
+              ログイン画面に戻る
+            </button>
+          </div>
+        </div>
+      )
+    }
     return (
       <div style={styles.loginContainer}>
         <div style={styles.loginBox}>
@@ -1054,6 +1240,15 @@ function AdminApp() {
                                         <span style={styles.sidebarIcon}>&#127970;</span>
                                         <span style={styles.sidebarText}>会社管理</span>
                                       </button>
+                    {admin?.role === 'super_admin' && (
+                      <button 
+                        style={screen === 'accounts' ? styles.sidebarItemActive : styles.sidebarItem}
+                        onClick={() => navigateTo('accounts')}
+                      >
+                        <span style={styles.sidebarIcon}>&#128100;</span>
+                        <span style={styles.sidebarText}>アカウント管理</span>
+                      </button>
+                    )}
                                     </nav>
                 </aside>
 
@@ -2323,6 +2518,123 @@ function AdminApp() {
                       </div>
                     )}
 
+
+          {/* Account Management */}
+          {screen === 'accounts' && admin?.role === 'super_admin' && (
+            <div>
+              <h2 style={styles.pageTitle}>アカウント管理</h2>
+
+              {loadingAccounts ? (
+                <p>読み込み中...</p>
+              ) : (
+                <>
+                  <h3 style={{marginBottom: '12px', color: COLORS.secondary}}>アクセス申請一覧</h3>
+                  {accessRequests.filter(r => r.status === 'pending').length === 0 ? (
+                    <p style={{color: COLORS.darkGray, marginBottom: '24px'}}>保留中の申請はありません</p>
+                  ) : (
+                    <div style={{...styles.tableContainer, marginBottom: '24px'}}>
+                      <table style={styles.table}>
+                        <thead>
+                          <tr>
+                            <th style={styles.th}>メール</th>
+                            <th style={styles.th}>名前</th>
+                            <th style={styles.th}>申請日時</th>
+                            <th style={styles.th}>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accessRequests.filter(r => r.status === 'pending').map(req => (
+                            <tr key={req.id} style={styles.tr}>
+                              <td style={styles.td}>{req.email}</td>
+                              <td style={styles.td}>{req.display_name || '-'}</td>
+                              <td style={styles.td}>{formatDateTime(req.created_at)}</td>
+                              <td style={styles.td}>
+                                <div style={{display: 'flex', gap: '8px'}}>
+                                  <button style={{...styles.primaryButton, background: COLORS.success, fontSize: '12px', padding: '4px 12px'}} onClick={() => handleApproveRequest(req.id, 'viewer')}>viewer承認</button>
+                                  <button style={{...styles.primaryButton, background: COLORS.primary, fontSize: '12px', padding: '4px 12px'}} onClick={() => handleApproveRequest(req.id, 'admin')}>admin承認</button>
+                                  <button style={{...styles.primaryButton, background: COLORS.danger, fontSize: '12px', padding: '4px 12px'}} onClick={() => handleRejectRequest(req.id)}>拒否</button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {accessRequests.filter(r => r.status !== 'pending').length > 0 && (
+                    <>
+                      <h3 style={{marginBottom: '12px', color: COLORS.secondary}}>処理済み申請</h3>
+                      <div style={{...styles.tableContainer, marginBottom: '24px'}}>
+                        <table style={styles.table}>
+                          <thead>
+                            <tr>
+                              <th style={styles.th}>メール</th>
+                              <th style={styles.th}>名前</th>
+                              <th style={styles.th}>ステータス</th>
+                              <th style={styles.th}>処理者</th>
+                              <th style={styles.th}>処理日時</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {accessRequests.filter(r => r.status !== 'pending').map(req => (
+                              <tr key={req.id} style={styles.tr}>
+                                <td style={styles.td}>{req.email}</td>
+                                <td style={styles.td}>{req.display_name || '-'}</td>
+                                <td style={styles.td}>
+                                  <span style={{padding: '2px 8px', borderRadius: '4px', fontSize: '12px', background: req.status === 'approved' ? '#e8f5e9' : '#ffebee', color: req.status === 'approved' ? '#2e7d32' : '#c62828'}}>
+                                    {req.status === 'approved' ? '承認済' : '拒否'}
+                                  </span>
+                                </td>
+                                <td style={styles.td}>{req.reviewed_by || '-'}</td>
+                                <td style={styles.td}>{req.reviewed_at ? formatDateTime(req.reviewed_at) : '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
+                  <h3 style={{marginBottom: '12px', color: COLORS.secondary}}>管理者アカウント一覧</h3>
+                  <div style={styles.tableContainer}>
+                    <table style={styles.table}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}>メール</th>
+                          <th style={styles.th}>権限</th>
+                          <th style={styles.th}>操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adminAccounts.map(acc => (
+                          <tr key={acc.id} style={styles.tr}>
+                            <td style={styles.td}>{acc.email}</td>
+                            <td style={styles.td}>
+                              <select
+                                value={acc.role || 'admin'}
+                                onChange={(e) => handleUpdateAdminRole(acc.id, e.target.value)}
+                                style={{padding: '4px 8px', borderRadius: '4px', border: `1px solid ${COLORS.gray}`}}
+                              >
+                                <option value="super_admin">super_admin</option>
+                                <option value="admin">admin</option>
+                                <option value="viewer">viewer</option>
+                              </select>
+                            </td>
+                            <td style={styles.td}>
+                              {acc.email !== admin.email && (
+                                <button style={{...styles.primaryButton, background: COLORS.danger, fontSize: '12px', padding: '4px 12px'}} onClick={() => handleDeleteAdmin(acc.id)}>無効化</button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Casts List Modal - moved outside screen conditions */}
           {castsModalProject && (

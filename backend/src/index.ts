@@ -78,6 +78,18 @@ async function ensureSchema(){
   try {
     await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
     await pool.query('ALTER TABLE projects ADD COLUMN IF NOT EXISTS supervisor_name TEXT');
+    await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS access_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL,
+        display_name TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        reviewed_at TIMESTAMPTZ
+      )
+    `);
   } catch (e) {
     console.error('[DB] ensureSchema failed:', e);
   }
@@ -138,7 +150,8 @@ if (process.env.NODE_ENV !== 'production') {
     const testAdmin = {
       id: 'test-admin-id',
       email: 'atsuhiro@takagi.bz',
-      is_active: true
+      is_active: true,
+      role: 'super_admin'
     };
     req.login(testAdmin, (err) => {
       if (err) {
