@@ -235,6 +235,7 @@ function AdminApp() {
                 const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([])
                 const [adminAccounts, setAdminAccounts] = useState<AdminAccount[]>([])
                 const [loadingAccounts, setLoadingAccounts] = useState(false)
+                const [approveRoles, setApproveRoles] = useState<Record<string, string>>({})
                 const [pendingAccessEmail, setPendingAccessEmail] = useState<string | null>(null)
                 const [pendingAccessName, setPendingAccessName] = useState<string | null>(null)
                 const [requestingAccess, setRequestingAccess] = useState(false)
@@ -2564,10 +2565,17 @@ function AdminApp() {
                               <td style={styles.td}>{req.display_name || '-'}</td>
                               <td style={styles.td}>{formatDateTime(req.created_at)}</td>
                               <td style={styles.td}>
-                                <div style={{display: 'flex', gap: '8px'}}>
-                                  <button style={{...styles.primaryButton, background: COLORS.success, fontSize: '12px', padding: '4px 12px'}} onClick={() => handleApproveRequest(req.id, 'viewer')}>viewer承認</button>
-                                  <button style={{...styles.primaryButton, background: COLORS.primary, fontSize: '12px', padding: '4px 12px'}} onClick={() => handleApproveRequest(req.id, 'admin')}>admin承認</button>
-                                  <button style={{...styles.primaryButton, background: COLORS.danger, fontSize: '12px', padding: '4px 12px'}} onClick={() => handleRejectRequest(req.id)}>拒否</button>
+                                <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+                                  <select
+                                    value={approveRoles[req.id] || 'viewer'}
+                                    onChange={(e) => setApproveRoles(prev => ({...prev, [req.id]: e.target.value}))}
+                                    style={{padding: '6px 10px', borderRadius: '4px', border: `1px solid ${COLORS.gray}`, fontSize: '13px'}}
+                                  >
+                                    <option value="viewer">閲覧権限</option>
+                                    <option value="admin">管理者権限</option>
+                                  </select>
+                                  <button style={{...styles.primaryButton, background: COLORS.success, fontSize: '13px', padding: '6px 16px'}} onClick={() => handleApproveRequest(req.id, approveRoles[req.id] || 'viewer')}>承認</button>
+                                  <button style={{...styles.primaryButton, background: COLORS.danger, fontSize: '13px', padding: '6px 16px'}} onClick={() => handleRejectRequest(req.id)}>拒否</button>
                                 </div>
                               </td>
                             </tr>
@@ -2631,9 +2639,9 @@ function AdminApp() {
                                 onChange={(e) => handleUpdateAdminRole(acc.id, e.target.value)}
                                 style={{padding: '4px 8px', borderRadius: '4px', border: `1px solid ${COLORS.gray}`}}
                               >
-                                <option value="super_admin">super_admin</option>
-                                <option value="admin">admin</option>
-                                <option value="viewer">viewer</option>
+                                <option value="super_admin">スーパー管理者</option>
+                                <option value="admin">管理者権限</option>
+                                <option value="viewer">閲覧権限</option>
                               </select>
                             </td>
                             <td style={styles.td}>
