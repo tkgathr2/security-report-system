@@ -410,7 +410,7 @@ router.get('/today', async (req: Request, res: Response) => {
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN project_casts pc ON p.id = pc.project_id
        WHERE p.work_date = $1
-         AND p.status IN ('active', 'pending_client')
+         AND p.status = 'active'
          AND (
            pc.cast_name = $2
            OR REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($2, ' ', ''), E'\\u3000', '')
