@@ -24,6 +24,7 @@ interface SlackNotification {
   reportId: string;
   writerName?: string;
   location?: string;
+  pdfUrl?: string;
 }
 
 export async function sendEmail(options: EmailOptions): Promise<{ success: boolean; error?: string }> {
@@ -79,19 +80,20 @@ export async function sendSlackNotification(notification: SlackNotification): Pr
 
   try {
     const message = {
-      text: `【デジタル警備報告書システム ほうこちゃん】報告書が承認されました`,
+      text: `<!channel> 【デジタル警備報告書システム ほうこちゃん】報告書が承認されました`,
       blocks: [
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `*【デジタル警備報告書システム ほうこちゃん】報告書承認通知*\n\n` +
+            text: `<!channel>\n*【デジタル警備報告書システム ほうこちゃん】報告書承認通知*\n\n` +
               `*会社名:* ${notification.companyName}\n` +
               `*実施日:* ${notification.workDate}\n` +
               `*案件名:* ${notification.projectName}\n` +
               (notification.location ? `*実施場所:* ${notification.location}\n` : '') +
               (notification.writerName ? `*報告者:* ${notification.writerName}\n` : '') +
-              `*報告書ID:* ${notification.reportId}`
+              `*報告書ID:* ${notification.reportId}` +
+              (notification.pdfUrl ? `\n\n📄 <${notification.pdfUrl}|報告書PDFをダウンロード>` : '')
           }
         }
       ]
