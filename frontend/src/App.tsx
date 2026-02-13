@@ -210,6 +210,8 @@ function AdminApp() {
                 const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
                 const [selectedReportDetail, setSelectedReportDetail] = useState<ReportDetail | null>(null)
                 const [loadingReportDetail, setLoadingReportDetail] = useState(false)
+                const [resending, setResending] = useState(false)
+                const [resendResult, setResendResult] = useState<string | null>(null)
 
                 // MVP: Single date navigation (no infinite scroll)
                 const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -715,6 +717,33 @@ function AdminApp() {
 
   const handleDownloadPdf = (reportId: string) => {
     window.open(`/api/admin/reports/${reportId}/pdf`, '_blank')
+  }
+
+  const handleResendNotifications = async (reportId: string) => {
+    if (!confirm('通知を再送信しますか？\n（Slack・メールが再度送信されます）')) return
+    setResending(true)
+    setResendResult(null)
+    try {
+      const response = await fetch(`/api/admin/reports/${reportId}/resend`, {
+        method: 'POST',
+        credentials: 'include'
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || '再送信に失敗しました')
+      }
+      const data = await response.json()
+      const parts: string[] = []
+      if (data.slackSent) parts.push('Slack')
+      if (data.emailSent) parts.push('クライアントメール')
+      if (data.castEmailSent) parts.push('キャストメール')
+      if (data.adminEmailSent) parts.push('管理者メール')
+      setResendResult(parts.length > 0 ? `送信完了: ${parts.join('、')}` : '送信対象がありませんでした')
+    } catch (err) {
+      setResendResult(err instanceof Error ? err.message : '再送信に失敗しました')
+    } finally {
+      setResending(false)
+    }
   }
 
                 const navigateTo = (newScreen: Screen) => {
@@ -1585,13 +1614,26 @@ function AdminApp() {
                                 </div>
                               )}
 
+                              {resendResult && (
+                                <div style={{padding: '8px 12px', borderRadius: '6px', marginTop: '12px', background: resendResult.startsWith('送信完了') ? '#E8F5E9' : '#FFF3E0', color: resendResult.startsWith('送信完了') ? '#2E7D32' : '#E65100', fontSize: '13px'}}>
+                                  {resendResult}
+                                </div>
+                              )}
+
                               <div style={{display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px'}}>
+                                <button
+                                  style={{...styles.primaryButton, background: '#1976D2', opacity: resending ? 0.6 : 1}}
+                                  onClick={() => handleResendNotifications(selectedReportDetail.id)}
+                                  disabled={resending}
+                                >
+                                  {resending ? '送信中...' : '再送信'}
+                                </button>
                                 {selectedReportDetail.pdf_generation_status === 'success' && (
                                   <button style={styles.primaryButton} onClick={() => handleDownloadPdf(selectedReportDetail.id)}>
                                     PDFダウンロード
                                   </button>
                                 )}
-                                <button style={styles.secondaryButton} onClick={() => setSelectedReportDetail(null)}>
+                                <button style={styles.secondaryButton} onClick={() => { setSelectedReportDetail(null); setResendResult(null) }}>
                                   閉じる
                                 </button>
                               </div>

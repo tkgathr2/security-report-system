@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import PDFDocument from 'pdfkit';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
+import { sendReportApprovalNotifications, uploadPdfToSlack, sendSlackNotification } from '../services/notifications';
 
 const router = Router();
 
@@ -249,6 +250,99 @@ router.get('/:reportId/pdf', requireAdmin, async (req: Request, res: Response) =
       message: 'データベースエラーが発生しました',
       details: {}
     });
+  }
+});
+
+router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Response) => {
+  const reportId = req.params.reportId as string;
+
+  try {
+    const reportResult = await pool.query(
+      'SELECT r.*, p.client_name_raw, p.work_date, p.work_name, p.work_title_raw, p.location, c.emails as client_emails FROM reports r JOIN projects p ON r.project_id = p.id LEFT JOIN clients c ON p.client_id = c.id WHERE r.id = $1',
+      [reportId]
+    );
+
+    if (reportResult.rows.length === 0) {
+      res.status(404).json({ error: 'NOT_FOUND', message: '報告書が見つかりません' });
+      return;
+    }
+
+    const report = reportResult.rows[0];
+    const workDateStr = report.work_date instanceof Date
+      ? report.work_date.toISOString().split('T')[0]
+      : String(report.work_date).split('T')[0];
+    const projectName = report.work_title_raw || report.work_name || '';
+    const pdfBuffer: Buffer = report.pdf_bytes;
+    const pdfOk = pdfBuffer && pdfBuffer.length > 0 && report.pdf_generation_status === 'success';
+
+    const castResult = await pool.query('SELECT email FROM cast_users WHERE id = $1', [report.cast_user_id]);
+    const writerEmail = castResult.rows.length > 0 ? castResult.rows[0].email : '';
+
+    let slackSent = false;
+    if (pdfOk) {
+      const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+        ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+        : 'https://security-report.up.railway.app';
+      const pdfUrl = `${baseUrl}/api/reports/${reportId}/pdf`;
+      const slackText = `<!channel>\n【デジタル警備報告書システム ほうこちゃん】報告書再送信\n\n` +
+        `会社名: ${report.client_name_raw}\n` +
+        `実施日: ${workDateStr}\n` +
+        `案件名: ${projectName}\n` +
+        (report.location ? `実施場所: ${report.location}\n` : '') +
+        (report.writer_name ? `報告者: ${report.writer_name}\n` : '') +
+        `報告書ID: ${reportId}` +
+        `\n\n:page_facing_up: <${pdfUrl}|報告書PDFをダウンロード>`;
+
+      const pdfUploadResult = await uploadPdfToSlack({
+        pdfBuffer,
+        filename: `report_${workDateStr}.pdf`,
+        reportId,
+        title: `警備報告書 ${projectName} (${workDateStr})`,
+        initialComment: slackText
+      });
+      slackSent = pdfUploadResult.success;
+      if (!pdfUploadResult.success) {
+        const fallback = await sendSlackNotification({
+          companyName: report.client_name_raw,
+          workDate: workDateStr,
+          projectName,
+          reportId,
+          writerName: report.writer_name || '',
+          location: report.location || '',
+          pdfUrl
+        });
+        slackSent = fallback.success;
+      }
+    }
+
+    let emailResult = { emailSent: false, castEmailSent: false, adminEmailSent: false, warnings: [] as string[] };
+    if (pdfOk) {
+      emailResult = await sendReportApprovalNotifications({
+        reportId,
+        companyName: report.client_name_raw,
+        workDate: workDateStr,
+        projectName,
+        clientEmails: report.client_emails || [],
+        writerEmail,
+        writerName: report.writer_name || '',
+        supervisorName: report.supervisor_name || '',
+        location: report.location || '',
+        pdfBytes: pdfBuffer,
+        skipSlack: true
+      });
+    }
+
+    res.json({
+      ok: true,
+      slackSent,
+      emailSent: emailResult.emailSent,
+      castEmailSent: emailResult.castEmailSent,
+      adminEmailSent: emailResult.adminEmailSent,
+      warnings: emailResult.warnings
+    });
+  } catch (error) {
+    console.error('[RESEND] Error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: '再送信に失敗しました' });
   }
 });
 
