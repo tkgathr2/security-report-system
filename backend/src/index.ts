@@ -91,6 +91,44 @@ async function ensureSchema(){
         reviewed_at TIMESTAMPTZ
       )
     `);
+    // Activate all pending_client projects
+    const activated = await pool.query(`UPDATE projects SET status = 'active' WHERE status = 'pending_client' RETURNING id`);
+    if (activated.rows.length > 0) {
+      console.log(`[DB] Activated ${activated.rows.length} pending_client projects`);
+    }
+
+    // Ensure 大野 祢音 and 宮﨑 萌 exist in staff_master and have projects for today
+    const crypto = await import('crypto');
+    const staffToAdd = [
+      { kanji: '大野 祢音', kana: 'オオノ ネオン' },
+      { kanji: '宮﨑 萌', kana: 'ミヤザキ モエ' }
+    ];
+    const todayStr = new Date().toISOString().split('T')[0];
+    for (const staff of staffToAdd) {
+      let staffId: string;
+      const existing = await pool.query(`SELECT id FROM staff_master WHERE display_name_kanji = $1`, [staff.kanji]);
+      if (existing.rows.length > 0) {
+        staffId = existing.rows[0].id;
+      } else {
+        const ins = await pool.query(`INSERT INTO staff_master (display_name_kanji, display_name_kana) VALUES ($1, $2) RETURNING id`, [staff.kanji, staff.kana]);
+        staffId = ins.rows[0].id;
+        console.log(`[DB] Created staff: ${staff.kanji} (${staffId})`);
+      }
+      const existingProject = await pool.query(
+        `SELECT p.id FROM projects p JOIN project_casts pc ON p.id = pc.project_id WHERE p.work_date = $1 AND pc.cast_name = $2 LIMIT 1`,
+        [todayStr, staff.kanji]
+      );
+      if (existingProject.rows.length === 0) {
+        const uniqueUrl = crypto.randomUUID();
+        const urlExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const projResult = await pool.query(
+          `INSERT INTO projects (project_key, client_name_raw, work_date, work_name, location, work_title_raw, unique_url, url_expires_at, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active') RETURNING id`,
+          [`SETUP-${staff.kanji.replace(/\s/g, '')}-${todayStr}`, 'テスト現場', todayStr, `${staff.kanji}テスト現場`, '東京都', `${staff.kanji}テスト`, uniqueUrl, urlExpires]
+        );
+        await pool.query(`INSERT INTO project_casts (project_id, staff_no, cast_name, row_index) VALUES ($1, '001', $2, 0)`, [projResult.rows[0].id, staff.kanji]);
+        console.log(`[DB] Created project for ${staff.kanji}`);
+      }
+    }
   } catch (e) {
     console.error('[DB] ensureSchema failed:', e);
   }
