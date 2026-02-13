@@ -128,12 +128,12 @@ export default function CastVerify() {
     }
 
     if (pin !== confirmPin) {
-      setError('PINコードが一致しません');
+      setError('暗証番号が一致しません');
       return;
     }
 
     if (!/^\d{4}$/.test(pin)) {
-      setError('PINコードは4桁の数字で入力してください');
+      setError('暗証番号は4桁の数字で入力してください');
       return;
     }
 
@@ -243,7 +243,7 @@ export default function CastVerify() {
           )}
 
           <div className="cast-input-group">
-            <label htmlFor="pin">PINコード（4桁の数字）</label>
+            <label htmlFor="pin">暗証番号（4ケタの数字）</label>
             <input
               type="password"
               id="pin"
@@ -259,7 +259,7 @@ export default function CastVerify() {
           </div>
 
           <div className="cast-input-group">
-            <label htmlFor="confirmPin">PINコード（確認）</label>
+            <label htmlFor="confirmPin">暗証番号（確認）</label>
             <input
               type="password"
               id="confirmPin"

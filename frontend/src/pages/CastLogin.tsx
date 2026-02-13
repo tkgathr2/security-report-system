@@ -151,7 +151,7 @@ export default function CastLogin() {
               className="cast-link-button"
               onClick={() => setShowMagicLink(false)}
             >
-              PINコードでログイン
+              暗証番号でログイン
             </button>
           </div>
         </div>
@@ -180,7 +180,7 @@ export default function CastLogin() {
           </div>
 
           <div className="cast-input-group">
-            <label htmlFor="pin">PINコード</label>
+            <label htmlFor="pin">暗証番号</label>
             <input
               type="password"
               id="pin"
@@ -208,7 +208,7 @@ export default function CastLogin() {
             className="cast-link-button"
             onClick={() => setShowMagicLink(true)}
           >
-            PINを忘れた方はこちら
+            暗証番号を忘れた方はこちら
           </button>
           <a href="/cast/register">新規登録</a>
         </div>
