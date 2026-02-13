@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
+import crypto from 'crypto';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
 import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '../utils/errorHandler';
@@ -813,11 +814,15 @@ router.post('/temp-setup-casts-projects', async (req: Request, res: Response) =>
         continue;
       }
 
+      const uniqueUrl = crypto.randomUUID();
+      const urlExpiresAt = new Date();
+      urlExpiresAt.setDate(urlExpiresAt.getDate() + 7);
+
       const projResult = await pool.query(
-        `INSERT INTO projects (project_key, client_name_raw, work_date, work_name, work_title_raw, location, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+        `INSERT INTO projects (project_key, client_name_raw, work_date, work_name, work_title_raw, location, unique_url, url_expires_at, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
          RETURNING id`,
-        [projectKey, 'テスト会社', today, `テスト現場 ${staff.display_name_kanji}`, `テスト現場 ${staff.display_name_kanji}`, '東京都']
+        [projectKey, 'テスト会社', today, `テスト現場 ${staff.display_name_kanji}`, `テスト現場 ${staff.display_name_kanji}`, '東京都', uniqueUrl, urlExpiresAt]
       );
       const projectId = projResult.rows[0].id;
 
