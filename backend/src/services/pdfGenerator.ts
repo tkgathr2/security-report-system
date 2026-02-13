@@ -110,7 +110,7 @@ function drawHeader(
   if (design === 'A') {
     doc.rect(0, 0, W, 90).fill(colors.primary);
     doc.rect(0, 90, W, 5).fill(colors.secondary);
-    if (logoBuffer) doc.image(logoBuffer, 20, 15, { height: 55 });
+    if (logoBuffer) doc.image(logoBuffer, 15, 15, { height: 55 });
     doc.fillColor('#FFFFFF').fontSize(22).text('警備報告書', M, 22, { width: CW, align: 'right' });
     doc.fillColor('#FFFFFF').fontSize(8).text('SECURITY REPORT', M, 50, { width: CW, align: 'right' });
     doc.fillColor('#FFFFFF').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 65, { width: CW, align: 'right' });
