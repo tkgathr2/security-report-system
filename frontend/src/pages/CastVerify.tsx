@@ -204,7 +204,7 @@ export default function CastVerify() {
               value={nameKana}
               onChange={(e) => handleKanaChange(e.target.value)}
               onFocus={() => nameKana.length > 0 && setShowSuggestions(true)}
-              placeholder="カナで入力してください（例：ヤマダ）"
+              placeholder="カナで入力（例：ヤマダタロウ）"
               required
               disabled={verifying}
               autoComplete="off"
