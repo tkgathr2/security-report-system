@@ -194,22 +194,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     setImmediate(async () => {
       console.log(`[ASYNC] Starting background processing for report ${reportId}`);
 
-      // Slack通知を最優先で送信（PDF生成・メール送信に依存しない）
-      try {
-        const slackResult = await sendSlackNotification({
-          companyName: project.client_name_raw,
-          workDate: workDateStr,
-          projectName: project.work_title_raw || project.work_name || '',
-          reportId,
-          writerName: resolvedWriterName,
-          location: project.location || ''
-        });
-        console.log(`[ASYNC] Slack notification result for report ${reportId}:`, slackResult);
-      } catch (slackError) {
-        console.error(`[ASYNC] Slack notification failed for report ${reportId}:`, slackError);
-      }
-
-      // PDF生成（独立したtry-catch）
+      // PDF生成を最初に実行（Slack通知にPDFリンクを含めるため）
       let pdfBuffer: Buffer;
       let pdfGenerationStatus = 'success';
       try {
@@ -243,6 +228,26 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         console.log(`[ASYNC] PDF saved to database for report ${reportId}`);
       } catch (dbError) {
         console.error(`[ASYNC] PDF save to DB failed for report ${reportId}:`, dbError);
+      }
+
+      // Slack通知（PDFリンク付き）
+      try {
+        const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+          ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+          : 'https://security-report.up.railway.app';
+        const pdfUrl = pdfGenerationStatus === 'success' ? `${baseUrl}/api/reports/${reportId}/pdf` : undefined;
+        const slackResult = await sendSlackNotification({
+          companyName: project.client_name_raw,
+          workDate: workDateStr,
+          projectName: project.work_title_raw || project.work_name || '',
+          reportId,
+          writerName: resolvedWriterName,
+          location: project.location || '',
+          pdfUrl
+        });
+        console.log(`[ASYNC] Slack notification result for report ${reportId}:`, slackResult);
+      } catch (slackError) {
+        console.error(`[ASYNC] Slack notification failed for report ${reportId}:`, slackError);
       }
 
       // メール通知（独立したtry-catch）
@@ -305,6 +310,30 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     console.error('Approve error:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     sendInternalError(res, `承認処理中にエラーが発生しました: ${errorMessage}`);
+  }
+});
+
+router.get('/:reportId/pdf', async (req: Request, res: Response) => {
+  const { reportId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT pdf_bytes, pdf_generation_status FROM reports WHERE id = $1',
+      [reportId]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'NOT_FOUND' });
+      return;
+    }
+    const { pdf_bytes, pdf_generation_status } = result.rows[0];
+    if (!pdf_bytes || pdf_bytes.length === 0 || pdf_generation_status !== 'success') {
+      res.status(404).json({ error: 'PDF_NOT_READY' });
+      return;
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="report-${reportId}.pdf"`);
+    res.send(pdf_bytes);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR' });
   }
 });
 
