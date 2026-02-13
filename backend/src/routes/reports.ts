@@ -289,35 +289,6 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         const castEmail = castUser.email;
         const displayWriterName = resolvedWriterName;
 
-        const rows: string[] = [];
-        const headers = [
-          '記入者','報告日','天気','案件名','案件住所','作業内容','協力会社名',
-          '警備内容1','警備内容2','警備内容3','警備内容4','警備内容5','警備内容6','警備内容7','警備内容8',
-          '警備員番号','氏名','勤務開始','勤務終了','早出残業(h)','資格有無','資格者氏名','備考'
-        ];
-        const weatherMap: Record<string,string> = { sunny: '晴', cloudy: '曇', rainy: '雨', snowy: '雪' };
-        const guardFlags = (['traffic','pedestrian','construction','worker_safety','property_safety','detour','alternating','other'] as const)
-          .map(code => (guard_contents || []).includes(code as string) ? '1' : '0');
-        const guardsArr = Array.isArray(guards) ? guards : [];
-        if (guardsArr.length === 0) {
-          rows.push([
-            resolvedWriterName, workDateStr, weatherMap[weather] || weather,
-            (project.work_name || project.work_title_raw || ''), project.location || '', project.work_name || project.work_title_raw || '', project.client_name_raw || '',
-            ...guardFlags,
-            '', '', '', '', '', (has_qualifier ? '有' : '無'), (Array.isArray(qualifier_name) ? qualifier_name.join('、') : (qualifier_name || '')), ''
-          ].map(v => typeof v === 'string' ? `"${v.replace(/"/g,'""')}"` : String(v)).join(','));
-        } else {
-          for (const g of guardsArr) {
-            rows.push([
-              resolvedWriterName, workDateStr, weatherMap[weather] || weather,
-              (project.work_name || project.work_title_raw || ''), project.location || '', project.work_name || project.work_title_raw || '', project.client_name_raw || '',
-              ...guardFlags,
-              g.index ?? '', g.name || '', g.start_time || '', g.end_time || '', (g.early_overtime_hours ?? ''), (has_qualifier ? '有' : '無'), (Array.isArray(qualifier_name) ? qualifier_name.join('、') : (qualifier_name || '')), ''
-            ].map(v => typeof v === 'string' ? `"${v.replace(/"/g,'""')}"` : String(v)).join(','));
-          }
-        }
-        const csvContent = [headers.join(','), ...rows].join('\n');
-
         const notificationResult = await sendReportApprovalNotifications({
           reportId,
           companyName: project.client_name_raw,
@@ -329,7 +300,6 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           supervisorName: supervisor_name || '',
           location: project.location || '',
           pdfBytes: pdfBuffer,
-          csvBytes: Buffer.from(csvContent, 'utf-8'),
           skipSlack: true
         });
 

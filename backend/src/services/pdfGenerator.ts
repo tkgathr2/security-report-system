@@ -108,13 +108,13 @@ function drawHeader(
   CW: number,
 ) {
   if (design === 'A') {
-    doc.rect(0, 0, W, 90).fill(colors.primary);
-    doc.rect(0, 90, W, 5).fill(colors.secondary);
-    if (logoBuffer) doc.image(logoBuffer, 15, 15, { height: 55 });
-    doc.fillColor('#FFFFFF').fontSize(22).text('警備報告書', M, 22, { width: CW, align: 'right' });
-    doc.fillColor('#FFFFFF').fontSize(8).text('SECURITY REPORT', M, 50, { width: CW, align: 'right' });
-    doc.fillColor('#FFFFFF').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 65, { width: CW, align: 'right' });
-    doc.y = 110;
+    doc.rect(0, 0, W, 70).fill(colors.primary);
+    doc.rect(0, 70, W, 4).fill(colors.secondary);
+    if (logoBuffer) doc.image(logoBuffer, 12, 10, { height: 45 });
+    doc.fillColor('#FFFFFF').fontSize(20).text('警備報告書', M, 14, { width: CW, align: 'right' });
+    doc.fillColor('#FFFFFF').fontSize(7).text('SECURITY REPORT', M, 38, { width: CW, align: 'right' });
+    doc.fillColor('#FFFFFF').fontSize(6).text('デジタル警備報告書システム【ほうこちゃん】', M, 50, { width: CW, align: 'right' });
+    doc.y = 82;
   } else if (design === 'B') {
     doc.rect(0, 0, W, 85).fill(colors.primary);
     doc.rect(0, 0, 8, 85).fill(colors.secondary);
@@ -193,7 +193,7 @@ export async function generateReportPdf(data: ReportData, design: PdfDesign = 'A
     try {
       const doc = new PDFDocument({
         size: 'A4',
-        margins: { top: 40, bottom: 40, left: 50, right: 50 },
+        margins: { top: 20, bottom: 20, left: 40, right: 40 },
         info: {
           Title: 'デジタル警備報告書システム【ほうこちゃん】',
           Author: 'デジタル警備報告書システム【ほうこちゃん】',
@@ -219,19 +219,19 @@ export async function generateReportPdf(data: ReportData, design: PdfDesign = 'A
       const logoBuffer = loadLogo();
 
       const pageWidth = 595.28;
-      const marginLeft = 50;
-      const contentWidth = pageWidth - marginLeft - 50;
+      const marginLeft = 40;
+      const contentWidth = pageWidth - marginLeft - 40;
 
       drawHeader(doc, design, colors, logoBuffer, pageWidth, marginLeft, contentWidth);
 
-      doc.fillColor(colors.secondary).fontSize(13).text(`${data.companyName} 御中`, marginLeft, doc.y);
-      doc.moveDown(0.4);
+      doc.fillColor(colors.secondary).fontSize(11).text(`${data.companyName} 御中`, marginLeft, doc.y);
+      doc.moveDown(0.2);
       doc.save(); doc.moveTo(marginLeft, doc.y).lineTo(marginLeft + contentWidth, doc.y).strokeColor('#DDDDDD').lineWidth(0.5).stroke(); doc.restore();
-      doc.moveDown(0.6);
+      doc.moveDown(0.3);
 
-      const labelColWidth = 110;
+      const labelColWidth = 100;
       const valueColWidth = contentWidth - labelColWidth;
-      const rowHeight = 26;
+      const rowHeight = 20;
       const tableTop = doc.y;
 
       const infoRows: [string, string][] = [
@@ -249,42 +249,42 @@ export async function generateReportPdf(data: ReportData, design: PdfDesign = 'A
         doc.rect(marginLeft, y, contentWidth, rowHeight).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
         doc.moveTo(marginLeft + labelColWidth, y).lineTo(marginLeft + labelColWidth, y + rowHeight).stroke();
         doc.restore();
-        doc.fillColor(colors.secondary).fontSize(9).text(row[0], marginLeft + 8, y + 8, { width: labelColWidth - 16 });
-        doc.fillColor('#333333').fontSize(9).text(row[1], marginLeft + labelColWidth + 8, y + 8, { width: valueColWidth - 16 });
+        doc.fillColor(colors.secondary).fontSize(8).text(row[0], marginLeft + 6, y + 5, { width: labelColWidth - 12 });
+        doc.fillColor('#333333').fontSize(8).text(row[1], marginLeft + labelColWidth + 6, y + 5, { width: valueColWidth - 12 });
       });
 
-      doc.y = tableTop + infoRows.length * rowHeight + 12;
+      doc.y = tableTop + infoRows.length * rowHeight + 6;
 
-      doc.save(); doc.rect(marginLeft, doc.y, contentWidth, 22).fill(colors.secondary); doc.restore();
-      doc.fillColor('#FFFFFF').fontSize(10).text('警備内容', marginLeft + 10, doc.y + 5);
-      doc.y += 22;
+      doc.save(); doc.rect(marginLeft, doc.y, contentWidth, 18).fill(colors.secondary); doc.restore();
+      doc.fillColor('#FFFFFF').fontSize(9).text('警備内容', marginLeft + 8, doc.y + 4);
+      doc.y += 18;
 
       const guardContentLabels = data.guardContents.map(code =>
         GUARD_CONTENT_LABELS[code] || code
       );
 
       const contentBoxTop = doc.y;
-      let chipX = marginLeft + 10;
-      let chipY = contentBoxTop + 8;
+      let chipX = marginLeft + 6;
+      let chipY = contentBoxTop + 5;
 
       guardContentLabels.forEach(label => {
         const tw = doc.widthOfString(label);
-        const cw = tw + 20;
-        if (chipX + cw > marginLeft + contentWidth - 10) { chipX = marginLeft + 10; chipY += 22; }
-        doc.save(); doc.roundedRect(chipX, chipY, cw, 18, 3).fill(colors.primary); doc.restore();
-        doc.fillColor('#FFFFFF').fontSize(8).text(label, chipX + 10, chipY + 4, { width: tw + 4 });
-        chipX += cw + 5;
+        const cw = tw + 14;
+        if (chipX + cw > marginLeft + contentWidth - 6) { chipX = marginLeft + 6; chipY += 18; }
+        doc.save(); doc.roundedRect(chipX, chipY, cw, 15, 3).fill(colors.primary); doc.restore();
+        doc.fillColor('#FFFFFF').fontSize(7).text(label, chipX + 7, chipY + 3, { width: tw + 4 });
+        chipX += cw + 4;
       });
 
-      doc.y = chipY + 26;
+      doc.y = chipY + 20;
 
       if (data.guardOtherText) {
-        doc.fontSize(9).fillColor('#666666').text(`  その他: ${data.guardOtherText}`, marginLeft + 10, doc.y);
-        doc.y += 16;
+        doc.fontSize(8).fillColor('#666666').text(`  その他: ${data.guardOtherText}`, marginLeft + 6, doc.y);
+        doc.y += 14;
       }
 
       doc.save(); doc.rect(marginLeft, contentBoxTop, contentWidth, doc.y - contentBoxTop).strokeColor('#DDDDDD').lineWidth(0.5).stroke(); doc.restore();
-      doc.moveDown(0.5);
+      doc.moveDown(0.2);
 
       const qNames = Array.isArray(data.qualifierName) ? data.qualifierName.filter(n => n && n.trim() !== '') : (data.qualifierName ? [data.qualifierName] : []);
       const qualifierText = data.hasQualifier
@@ -297,78 +297,78 @@ export async function generateReportPdf(data: ReportData, design: PdfDesign = 'A
       doc.rect(marginLeft, qRowY, contentWidth, rowHeight).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
       doc.moveTo(marginLeft + labelColWidth, qRowY).lineTo(marginLeft + labelColWidth, qRowY + rowHeight).stroke();
       doc.restore();
-      doc.fillColor(colors.secondary).fontSize(9).text('資格者', marginLeft + 8, qRowY + 8);
-      doc.fillColor('#333333').fontSize(9).text(qualifierText, marginLeft + labelColWidth + 8, qRowY + 8);
-      doc.y = qRowY + rowHeight + 12;
+      doc.fillColor(colors.secondary).fontSize(8).text('資格者', marginLeft + 6, qRowY + 5);
+      doc.fillColor('#333333').fontSize(8).text(qualifierText, marginLeft + labelColWidth + 6, qRowY + 5);
+      doc.y = qRowY + rowHeight + 6;
 
       if (data.guards && data.guards.length > 0) {
-        doc.save(); doc.rect(marginLeft, doc.y, contentWidth, 22).fill(colors.secondary); doc.restore();
-        doc.fillColor('#FFFFFF').fontSize(10).text('警備員一覧', marginLeft + 10, doc.y + 5);
-        doc.y += 22;
+        doc.save(); doc.rect(marginLeft, doc.y, contentWidth, 18).fill(colors.secondary); doc.restore();
+        doc.fillColor('#FFFFFF').fontSize(9).text('警備員一覧', marginLeft + 8, doc.y + 4);
+        doc.y += 18;
 
-        const colWidths = [35, 160, 100, 100, 100];
+        const colWidths = [30, 170, 95, 95, 125];
         const colXs = [marginLeft];
         for (let c = 1; c <= colWidths.length; c++) colXs.push(colXs[c - 1] + colWidths[c - 1]);
         const tHeaders = ['No', '氏名', '開始', '終了', '早出残業(h)'];
         const thY = doc.y;
 
-        doc.save(); doc.rect(marginLeft, thY, contentWidth, 22).fill(colors.accent); doc.restore();
+        doc.save(); doc.rect(marginLeft, thY, contentWidth, 16).fill(colors.accent); doc.restore();
         tHeaders.forEach((h, i) => {
-          doc.fillColor(colors.secondary).fontSize(8).text(h, colXs[i] + 6, thY + 6, { width: colWidths[i] - 12 });
+          doc.fillColor(colors.secondary).fontSize(7).text(h, colXs[i] + 4, thY + 4, { width: colWidths[i] - 8 });
         });
         doc.save();
-        doc.rect(marginLeft, thY, contentWidth, 22).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
-        colXs.slice(1, -1).forEach(x => doc.moveTo(x, thY).lineTo(x, thY + 22).stroke());
+        doc.rect(marginLeft, thY, contentWidth, 16).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
+        colXs.slice(1, -1).forEach(x => doc.moveTo(x, thY).lineTo(x, thY + 16).stroke());
         doc.restore();
-        doc.y = thY + 22;
+        doc.y = thY + 16;
 
         data.guards.forEach((g, idx) => {
           const rY = doc.y;
-          const rH = 20;
+          const rH = 16;
           if (idx % 2 === 1) { doc.save(); doc.rect(marginLeft, rY, contentWidth, rH).fill('#FAFAFA'); doc.restore(); }
           doc.save();
           doc.rect(marginLeft, rY, contentWidth, rH).strokeColor('#EEEEEE').lineWidth(0.3).stroke();
           colXs.slice(1, -1).forEach(x => doc.moveTo(x, rY).lineTo(x, rY + rH).stroke());
           doc.restore();
-          doc.fillColor('#333333').fontSize(8);
-          doc.text(String(g.index ?? ''), colXs[0] + 6, rY + 5, { width: colWidths[0] - 12 });
-          doc.text(g.name || '', colXs[1] + 6, rY + 5, { width: colWidths[1] - 12 });
-          doc.text(g.start_time || '', colXs[2] + 6, rY + 5, { width: colWidths[2] - 12 });
-          doc.text(g.end_time || '', colXs[3] + 6, rY + 5, { width: colWidths[3] - 12 });
+          doc.fillColor('#333333').fontSize(7);
+          doc.text(String(g.index ?? ''), colXs[0] + 4, rY + 4, { width: colWidths[0] - 8 });
+          doc.text(g.name || '', colXs[1] + 4, rY + 4, { width: colWidths[1] - 8 });
+          doc.text(g.start_time || '', colXs[2] + 4, rY + 4, { width: colWidths[2] - 8 });
+          doc.text(g.end_time || '', colXs[3] + 4, rY + 4, { width: colWidths[3] - 8 });
           doc.text(
             g.early_overtime_hours !== undefined && g.early_overtime_hours !== null ? String(g.early_overtime_hours) : '',
-            colXs[4] + 6, rY + 5, { width: colWidths[4] - 12 }
+            colXs[4] + 4, rY + 4, { width: colWidths[4] - 8 }
           );
           doc.y = rY + rH;
         });
       }
 
-      doc.moveDown(1.5);
+      doc.moveDown(0.5);
 
       if (data.signaturePng && data.signaturePng.length > 0) {
         try {
           const sigLabelY = doc.y;
-          doc.save(); doc.rect(marginLeft, sigLabelY, labelColWidth, 80).fill(colors.accent); doc.restore();
+          const sigHeight = 55;
+          doc.save(); doc.rect(marginLeft, sigLabelY, labelColWidth, sigHeight).fill(colors.accent); doc.restore();
           doc.save();
-          doc.rect(marginLeft, sigLabelY, contentWidth, 80).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
-          doc.moveTo(marginLeft + labelColWidth, sigLabelY).lineTo(marginLeft + labelColWidth, sigLabelY + 80).stroke();
+          doc.rect(marginLeft, sigLabelY, contentWidth, sigHeight).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
+          doc.moveTo(marginLeft + labelColWidth, sigLabelY).lineTo(marginLeft + labelColWidth, sigLabelY + sigHeight).stroke();
           doc.restore();
-          doc.fillColor(colors.secondary).fontSize(10).text('署名', marginLeft + 8, sigLabelY + 30);
-          doc.image(data.signaturePng, marginLeft + labelColWidth + 20, sigLabelY + 5, { width: 140, height: 70 });
-          doc.y = sigLabelY + 80;
+          doc.fillColor(colors.secondary).fontSize(9).text('署名', marginLeft + 6, sigLabelY + 20);
+          doc.image(data.signaturePng, marginLeft + labelColWidth + 10, sigLabelY + 3, { width: 120, height: 49 });
+          doc.y = sigLabelY + sigHeight;
         } catch (imgError) {
           console.error('[PDF] Failed to embed signature image:', imgError);
           doc.fillColor('#333333').text('(署名画像の埋め込みに失敗しました)', marginLeft + labelColWidth + 8);
         }
       }
 
-      const footerY = 800;
-      doc.save(); doc.rect(0, footerY, pageWidth, 2).fill(colors.primary); doc.restore();
+      const footerY = Math.max(doc.y + 10, 800);
+      doc.save(); doc.rect(0, footerY, pageWidth, 1).fill(colors.primary); doc.restore();
       const now = new Date();
       const generatedAt = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      doc.fillColor('#999999').fontSize(7);
-      doc.text(`生成日時: ${generatedAt}`, marginLeft, footerY + 6, { width: contentWidth, align: 'right' });
-      doc.text('Powered by デジタル警備報告書システム【ほうこちゃん】', marginLeft, doc.y, { width: contentWidth, align: 'right' });
+      doc.fillColor('#999999').fontSize(6);
+      doc.text(`生成日時: ${generatedAt}  |  Powered by デジタル警備報告書システム【ほうこちゃん】`, marginLeft, footerY + 4, { width: contentWidth, align: 'right' });
 
       doc.end();
     } catch (error) {
