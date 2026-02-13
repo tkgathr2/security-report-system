@@ -257,11 +257,41 @@ router.post('/request-access', async (req: Request, res: Response) => {
     const OWNER_EMAIL = process.env.ADMIN_NOTIFICATION_EMAILS || 'atsuhiro@takagi.bz';
     const ownerEmails = OWNER_EMAIL.split(',').map(e => e.trim()).filter(Boolean);
 
+    const BASE_URL = process.env.BASE_URL || 'https://security-report.up.railway.app';
     await sendEmail({
       to: ownerEmails,
       subject: '【ほうこちゃん】管理画面アクセス申請',
-      text: `管理画面へのアクセス申請がありました。\n\nメール: ${email}\n名前: ${display_name || '未設定'}\n\n管理画面のアカウント管理ページから承認・拒否してください。`,
-      html: `<h3>管理画面アクセス申請</h3><p><strong>メール:</strong> ${email}</p><p><strong>名前:</strong> ${display_name || '未設定'}</p><p>管理画面のアカウント管理ページから承認・拒否してください。</p>`
+      text: `管理画面へのアクセス申請がありました。\n\nメール: ${email}\n名前: ${display_name || '未設定'}\n\n管理画面のアカウント管理ページから承認・拒否してください。\n${BASE_URL}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:'Helvetica Neue',Arial,sans-serif;background-color:#f5f5f5;">
+  <div style="max-width:600px;margin:0 auto;padding:20px;">
+    <div style="background-color:#2C3E50;padding:20px 30px;border-radius:8px 8px 0 0;text-align:center;">
+      <h1 style="color:#ffffff;margin:0;font-size:20px;">ほうこちゃん</h1>
+      <p style="color:#bdc3c7;margin:5px 0 0;font-size:13px;">デジタル警備報告書システム</p>
+    </div>
+    <div style="background-color:#ffffff;padding:30px;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+      <h2 style="color:#e67e22;margin:0 0 20px;font-size:18px;border-bottom:2px solid #e67e22;padding-bottom:10px;">管理画面アクセス申請</h2>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+        <tr>
+          <td style="padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;font-weight:bold;color:#495057;width:120px;">メール</td>
+          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${email}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;font-weight:bold;color:#495057;">名前</td>
+          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${display_name || '未設定'}</td>
+        </tr>
+      </table>
+      <div style="text-align:center;margin:25px 0;">
+        <a href="${BASE_URL}" style="display:inline-block;background-color:#e67e22;color:#ffffff;text-decoration:none;padding:12px 30px;border-radius:6px;font-size:15px;font-weight:bold;">管理画面で承認・拒否する</a>
+      </div>
+      <p style="color:#6c757d;font-size:12px;text-align:center;margin:0;">ログイン後「アカウント管理」から申請を処理できます</p>
+    </div>
+    <p style="color:#adb5bd;font-size:11px;text-align:center;margin-top:15px;">日本交通誘導 警備報告書システム</p>
+  </div>
+</body>
+</html>`
     });
 
     res.json({ ok: true, message: '申請を送信しました。管理者の承認をお待ちください。' });
@@ -331,22 +361,49 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
 
     await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
 
-    await pool.query(
-      `INSERT INTO admin_allowlist (email, is_active, role) VALUES ($1, true, $2)
-       ON CONFLICT (email) DO UPDATE SET is_active = true, role = $2`,
-      [request.email, assignRole]
-    );
+    const existingAdmin = await pool.query('SELECT id FROM admin_allowlist WHERE LOWER(email) = LOWER($1)', [request.email]);
+    if (existingAdmin.rows.length > 0) {
+      await pool.query('UPDATE admin_allowlist SET is_active = true, role = $1 WHERE LOWER(email) = LOWER($2)', [assignRole, request.email]);
+    } else {
+      await pool.query('INSERT INTO admin_allowlist (email, is_active, role) VALUES ($1, true, $2)', [request.email, assignRole]);
+    }
 
     await pool.query(
       'UPDATE access_requests SET status = $1, reviewed_by = $2, reviewed_at = NOW() WHERE id = $3',
       ['approved', adminUser.email, requestId]
     );
 
+    const BASE_URL = process.env.BASE_URL || 'https://security-report.up.railway.app';
     await sendEmail({
       to: [request.email],
       subject: '【ほうこちゃん】アクセスが承認されました',
-      text: `管理画面へのアクセスが承認されました。\n\n権限: ${assignRole}\n\nログインしてご利用ください。`,
-      html: `<h3>アクセスが承認されました</h3><p>管理画面へのアクセスが承認されました。</p><p><strong>権限:</strong> ${assignRole}</p><p>ログインしてご利用ください。</p>`
+      text: `管理画面へのアクセスが承認されました。\n\n権限: ${assignRole}\n\nログインしてご利用ください。\n${BASE_URL}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:'Helvetica Neue',Arial,sans-serif;background-color:#f5f5f5;">
+  <div style="max-width:600px;margin:0 auto;padding:20px;">
+    <div style="background-color:#2C3E50;padding:20px 30px;border-radius:8px 8px 0 0;text-align:center;">
+      <h1 style="color:#ffffff;margin:0;font-size:20px;">ほうこちゃん</h1>
+      <p style="color:#bdc3c7;margin:5px 0 0;font-size:13px;">デジタル警備報告書システム</p>
+    </div>
+    <div style="background-color:#ffffff;padding:30px;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+      <h2 style="color:#27ae60;margin:0 0 20px;font-size:18px;border-bottom:2px solid #27ae60;padding-bottom:10px;">アクセスが承認されました</h2>
+      <p style="color:#212529;font-size:15px;line-height:1.6;">管理画面へのアクセスが承認されました。</p>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+        <tr>
+          <td style="padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;font-weight:bold;color:#495057;width:120px;">権限</td>
+          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${assignRole}</td>
+        </tr>
+      </table>
+      <div style="text-align:center;margin:25px 0;">
+        <a href="${BASE_URL}" style="display:inline-block;background-color:#27ae60;color:#ffffff;text-decoration:none;padding:12px 30px;border-radius:6px;font-size:15px;font-weight:bold;">管理画面にログイン</a>
+      </div>
+    </div>
+    <p style="color:#adb5bd;font-size:11px;text-align:center;margin-top:15px;">日本交通誘導 警備報告書システム</p>
+  </div>
+</body>
+</html>`
     });
 
     res.json({ ok: true });
