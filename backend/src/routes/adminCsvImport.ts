@@ -389,7 +389,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
             );
 
             const clientId = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
-            const status = clientId ? 'active' : 'pending_client';
+            const status = 'active';
 
             if (!clientId) {
               pendingClientRowsCount++;
