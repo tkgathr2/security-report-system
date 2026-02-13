@@ -3206,6 +3206,27 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     zIndex: 1000
   },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: '12px',
+    width: '90%',
+    boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px 24px',
+    borderBottom: `1px solid ${COLORS.gray}`
+  },
+  modalClose: {
+    background: 'none',
+    border: 'none',
+    fontSize: '24px',
+    cursor: 'pointer',
+    color: COLORS.darkGray,
+    padding: '4px 8px'
+  },
   modal: {
     backgroundColor: COLORS.white,
     padding: '32px',
