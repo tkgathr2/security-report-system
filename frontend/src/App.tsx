@@ -382,9 +382,13 @@ function AdminApp() {
       if (response.ok) {
         fetchAccessRequests()
         fetchAdminAccounts()
+        alert('承認しました')
+      } else {
+        const data = await response.json().catch(() => null)
+        alert(`承認に失敗しました: ${data?.message || response.status}`)
       }
-    } catch {
-      alert('承認に失敗しました')
+    } catch (e) {
+      alert(`承認に失敗しました: ${e}`)
     }
   }
 
