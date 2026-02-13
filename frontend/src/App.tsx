@@ -212,6 +212,7 @@ function AdminApp() {
                 const [loadingReportDetail, setLoadingReportDetail] = useState(false)
                 const [resending, setResending] = useState(false)
                 const [resendResult, setResendResult] = useState<string | null>(null)
+                const [deleting, setDeleting] = useState(false)
 
                 // MVP: Single date navigation (no infinite scroll)
                 const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -717,6 +718,28 @@ function AdminApp() {
 
   const handleDownloadPdf = (reportId: string) => {
     window.open(`/api/admin/reports/${reportId}/pdf`, '_blank')
+  }
+
+  const handleDeleteReport = async (reportId: string) => {
+    if (!confirm('本当に削除しますか？\nこの操作は取り消せません。')) return
+    setDeleting(true)
+    try {
+      const response = await fetch(`/api/admin/reports/${reportId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || '削除に失敗しました')
+      }
+      setSelectedReportDetail(null)
+      setResendResult(null)
+      fetchReports(reportDate)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '削除に失敗しました')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const handleResendNotifications = async (reportId: string) => {
@@ -1621,6 +1644,13 @@ function AdminApp() {
                               )}
 
                               <div style={{display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px'}}>
+                                <button
+                                  style={{...styles.primaryButton, background: '#d32f2f', color: '#fff', opacity: deleting ? 0.6 : 1}}
+                                  onClick={() => handleDeleteReport(selectedReportDetail.id)}
+                                  disabled={deleting}
+                                >
+                                  {deleting ? '削除中...' : '削除'}
+                                </button>
                                 <button
                                   style={{...styles.primaryButton, background: '#1976D2', opacity: resending ? 0.6 : 1}}
                                   onClick={() => handleResendNotifications(selectedReportDetail.id)}
