@@ -164,6 +164,135 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+app.post('/api/setup/diagnose-and-fix', async (req: Request, res: Response) => {
+  const secret = req.headers['x-auth-secret'];
+  if (secret !== SESSION_SECRET) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  try {
+    const results: Record<string, unknown> = {};
+
+    // 1. Check staff_master for both people
+    const staffCheck = await pool.query(
+      `SELECT id, display_name_kanji, display_name_kana, email FROM staff_master 
+       WHERE display_name_kanji IN ('大野 祢音', '大野祢音', '宮﨑 萌', '宮﨑萌', '宮崎 萌', '宮崎萌')
+       ORDER BY display_name_kanji`
+    );
+    results.staff_master = staffCheck.rows;
+
+    // 2. Check cast_users for both
+    const castCheck = await pool.query(
+      `SELECT cu.id, cu.email, cu.name, cu.staff_id, cu.email_verified, 
+              sm.display_name_kanji as linked_staff_name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.name LIKE '%大野%' OR cu.name LIKE '%宮%' OR cu.email LIKE '%ohno%' OR cu.email LIKE '%miyazaki%'`
+    );
+    results.cast_users = castCheck.rows;
+
+    // 3. Check project_casts for their names
+    const pcCheck = await pool.query(
+      `SELECT pc.id, pc.project_id, pc.cast_name, pc.staff_no, p.work_date, p.work_name
+       FROM project_casts pc
+       JOIN projects p ON pc.project_id = p.id
+       WHERE pc.cast_name LIKE '%大野%' OR pc.cast_name LIKE '%宮%'
+       ORDER BY p.work_date DESC
+       LIMIT 20`
+    );
+    results.project_casts = pcCheck.rows;
+
+    // 4. Check today's projects
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayProjects = await pool.query(
+      `SELECT p.id, p.work_name, p.work_date, p.location, p.status,
+              array_agg(pc.cast_name) as casts
+       FROM projects p
+       LEFT JOIN project_casts pc ON pc.project_id = p.id
+       WHERE p.work_date = $1
+       GROUP BY p.id, p.work_name, p.work_date, p.location, p.status
+       ORDER BY p.work_name
+       LIMIT 20`,
+      [todayStr]
+    );
+    results.today_projects = todayProjects.rows;
+    results.today_date = todayStr;
+
+    // 5. All staff list
+    const allStaff = await pool.query(`SELECT id, display_name_kanji FROM staff_master ORDER BY display_name_kanji`);
+    results.all_staff = allStaff.rows;
+
+    // 6. All cast_users
+    const allCasts = await pool.query(`SELECT id, email, name, staff_id, email_verified FROM cast_users ORDER BY name`);
+    results.all_cast_users = allCasts.rows;
+
+    res.json(results);
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+app.post('/api/setup/add-staff-to-projects', async (req: Request, res: Response) => {
+  const secret = req.headers['x-auth-secret'];
+  if (secret !== SESSION_SECRET) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  try {
+    const crypto = await import('crypto');
+    const results: Record<string, unknown> = {};
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const staffToAdd = [
+      { kanji: '大野 祢音', kana: 'オオノ ネオン' },
+      { kanji: '宮﨑 萌', kana: 'ミヤザキ モエ' }
+    ];
+
+    for (const staff of staffToAdd) {
+      // Ensure staff exists in staff_master
+      let staffId: string;
+      const existing = await pool.query(
+        `SELECT id FROM staff_master WHERE display_name_kanji = $1`,
+        [staff.kanji]
+      );
+      if (existing.rows.length > 0) {
+        staffId = existing.rows[0].id;
+      } else {
+        const ins = await pool.query(
+          `INSERT INTO staff_master (display_name_kanji, display_name_kana) VALUES ($1, $2) RETURNING id`,
+          [staff.kanji, staff.kana]
+        );
+        staffId = ins.rows[0].id;
+      }
+
+      // Create a new project for today
+      const uniqueUrl = crypto.randomUUID();
+      const urlExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const projectKey = `SETUP-${staff.kanji.replace(/\s/g, '')}-${todayStr}`;
+
+      const projResult = await pool.query(
+        `INSERT INTO projects (project_key, client_name_raw, work_date, work_name, location, work_title_raw, unique_url, url_expires_at, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')
+         RETURNING id`,
+        [projectKey, 'テスト現場', todayStr, `${staff.kanji}テスト現場`, '東京都', `${staff.kanji}テスト`, uniqueUrl, urlExpires]
+      );
+      const projectId = projResult.rows[0].id;
+
+      // Add cast to project
+      await pool.query(
+        `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index) VALUES ($1, $2, $3, $4)`,
+        [projectId, '001', staff.kanji, 0]
+      );
+
+      results[staff.kanji] = { staffId, projectId, uniqueUrl };
+    }
+
+    res.json({ ok: true, results });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 ensureSchema().finally(() => {
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
