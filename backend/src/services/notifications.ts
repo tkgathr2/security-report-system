@@ -126,6 +126,7 @@ export async function uploadPdfToSlack(params: {
   filename: string;
   reportId: string;
   title: string;
+  initialComment?: string;
 }): Promise<{ success: boolean; error?: string }> {
   if (!SLACK_BOT_TOKEN) {
     console.log('[SLACK-PDF] Bot token not configured, skipping PDF upload');
@@ -175,7 +176,7 @@ export async function uploadPdfToSlack(params: {
       body: JSON.stringify({
         files: [{ id: urlData.file_id, title: params.title }],
         channel_id: SLACK_CHANNEL_ID,
-        initial_comment: `📄 報告書PDF（報告書ID: ${params.reportId}）`
+        initial_comment: params.initialComment || `📄 報告書PDF（報告書ID: ${params.reportId}）`
       })
     });
     const completeData = await completeRes.json() as { ok: boolean; error?: string };

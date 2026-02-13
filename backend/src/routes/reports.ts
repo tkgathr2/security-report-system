@@ -230,39 +230,57 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         console.error(`[ASYNC] PDF save to DB failed for report ${reportId}:`, dbError);
       }
 
-      // Slack通知（PDFリンク付き）
+      // Slack通知（PDF添付と通知テキストを1メッセージに統合）
       try {
         const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
           ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
           : 'https://security-report.up.railway.app';
         const pdfUrl = pdfGenerationStatus === 'success' ? `${baseUrl}/api/reports/${reportId}/pdf` : undefined;
-        const slackResult = await sendSlackNotification({
-          companyName: project.client_name_raw,
-          workDate: workDateStr,
-          projectName: project.work_title_raw || project.work_name || '',
-          reportId,
-          writerName: resolvedWriterName,
-          location: project.location || '',
-          pdfUrl
-        });
-        console.log(`[ASYNC] Slack notification result for report ${reportId}:`, slackResult);
-      } catch (slackError) {
-        console.error(`[ASYNC] Slack notification failed for report ${reportId}:`, slackError);
-      }
+        const projectName = project.work_title_raw || project.work_name || '';
+        const slackText = `<!channel>\n【デジタル警備報告書システム ほうこちゃん】報告書承認通知\n\n` +
+          `会社名: ${project.client_name_raw}\n` +
+          `実施日: ${workDateStr}\n` +
+          `案件名: ${projectName}\n` +
+          (project.location ? `実施場所: ${project.location}\n` : '') +
+          (resolvedWriterName ? `報告者: ${resolvedWriterName}\n` : '') +
+          `報告書ID: ${reportId}` +
+          (pdfUrl ? `\n\n:page_facing_up: <${pdfUrl}|報告書PDFをダウンロード>` : '');
 
-      // Slack PDF添付（Bot Token設定時のみ、独立したtry-catch）
-      if (pdfGenerationStatus === 'success') {
-        try {
+        if (pdfGenerationStatus === 'success') {
           const pdfUploadResult = await uploadPdfToSlack({
             pdfBuffer,
             filename: `report_${workDateStr}.pdf`,
             reportId,
-            title: `警備報告書 ${project.work_title_raw || project.work_name || ''} (${workDateStr})`
+            title: `警備報告書 ${projectName} (${workDateStr})`,
+            initialComment: slackText
           });
           console.log(`[ASYNC] Slack PDF upload result for report ${reportId}:`, pdfUploadResult);
-        } catch (pdfUploadError) {
-          console.error(`[ASYNC] Slack PDF upload failed for report ${reportId}:`, pdfUploadError);
+          if (!pdfUploadResult.success) {
+            const slackResult = await sendSlackNotification({
+              companyName: project.client_name_raw,
+              workDate: workDateStr,
+              projectName,
+              reportId,
+              writerName: resolvedWriterName,
+              location: project.location || '',
+              pdfUrl
+            });
+            console.log(`[ASYNC] Slack webhook fallback result for report ${reportId}:`, slackResult);
+          }
+        } else {
+          const slackResult = await sendSlackNotification({
+            companyName: project.client_name_raw,
+            workDate: workDateStr,
+            projectName,
+            reportId,
+            writerName: resolvedWriterName,
+            location: project.location || '',
+            pdfUrl
+          });
+          console.log(`[ASYNC] Slack notification result for report ${reportId}:`, slackResult);
         }
+      } catch (slackError) {
+        console.error(`[ASYNC] Slack notification failed for report ${reportId}:`, slackError);
       }
 
       // メール通知（独立したtry-catch）
