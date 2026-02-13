@@ -374,11 +374,12 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
     );
 
     const BASE_URL = process.env.BASE_URL || 'https://security-report.up.railway.app';
-    await sendEmail({
-      to: [request.email],
-      subject: '【ほうこちゃん】アクセスが承認されました',
-      text: `管理画面へのアクセスが承認されました。\n\n権限: ${assignRole}\n\nログインしてご利用ください。\n${BASE_URL}`,
-      html: `
+    try {
+      await sendEmail({
+        to: [request.email],
+        subject: '【ほうこちゃん】アクセスが承認されました',
+        text: `管理画面へのアクセスが承認されました。\n\n権限: ${assignRole}\n\nログインしてご利用ください。\n${BASE_URL}`,
+        html: `
 <!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;font-family:'Helvetica Neue',Arial,sans-serif;background-color:#f5f5f5;">
@@ -404,7 +405,10 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
   </div>
 </body>
 </html>`
-    });
+      });
+    } catch (emailError) {
+      console.error('[APPROVE] Email send failed (approval still succeeded):', emailError);
+    }
 
     res.json({ ok: true });
   } catch (error) {
