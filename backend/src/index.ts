@@ -79,6 +79,7 @@ async function ensureSchema(){
     await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
     await pool.query('ALTER TABLE projects ADD COLUMN IF NOT EXISTS supervisor_name TEXT');
     await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
+    await pool.query(`UPDATE admin_allowlist SET role = 'super_admin' WHERE LOWER(email) = LOWER('atsuhiro@takagi.bz') AND (role IS NULL OR role != 'super_admin')`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS access_requests (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -162,23 +163,6 @@ if (process.env.NODE_ENV !== 'production') {
     });
   });
 }
-
-app.post('/api/setup/set-super-admin', async (req: Request, res: Response) => {
-  const secret = req.headers['x-auth-secret'];
-  if (secret !== SESSION_SECRET) {
-    res.status(403).json({ error: 'Forbidden' });
-    return;
-  }
-  try {
-    const { email } = req.body;
-    if (!email) { res.status(400).json({ error: 'email required' }); return; }
-    await pool.query(`UPDATE admin_allowlist SET role = 'super_admin' WHERE LOWER(email) = LOWER($1)`, [email]);
-    const result = await pool.query(`SELECT id, email, role FROM admin_allowlist WHERE LOWER(email) = LOWER($1)`, [email]);
-    res.json({ ok: true, admin: result.rows[0] || null });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
 
 ensureSchema().finally(() => {
   app.listen(PORT, () => {
