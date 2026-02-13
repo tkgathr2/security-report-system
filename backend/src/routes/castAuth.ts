@@ -441,15 +441,18 @@ router.get('/search-staff', async (req: Request, res: Response) => {
     }
 
     const searchTerm = q.trim();
+    const searchNoSpace = searchTerm.replace(/[\s\u3000]/g, '');
 
-    // Search by kana (display_name_kana)
     const result = await pool.query(
       `SELECT id, display_name_kanji, display_name_kana 
        FROM staff_master 
-       WHERE display_name_kana ILIKE $1
+       WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') ILIKE $1
+          OR display_name_kana ILIKE $2
+          OR display_name_kanji ILIKE $2
+          OR REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $1
        ORDER BY display_name_kana
        LIMIT 10`,
-      [`%${searchTerm}%`]
+      [`%${searchNoSpace}%`, `%${searchTerm}%`]
     );
 
     res.json({ staff: result.rows });
