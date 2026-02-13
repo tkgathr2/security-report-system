@@ -232,6 +232,24 @@ app.post('/api/setup/diagnose-and-fix', async (req: Request, res: Response) => {
   }
 });
 
+app.post('/api/setup/activate-all', async (req: Request, res: Response) => {
+  const secret = req.headers['x-auth-secret'];
+  if (secret !== SESSION_SECRET) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  try {
+    const before = await pool.query(`SELECT status, COUNT(*) as count FROM projects GROUP BY status`);
+    const result = await pool.query(
+      `UPDATE projects SET status = 'active' WHERE status = 'pending_client' RETURNING id`
+    );
+    const after = await pool.query(`SELECT status, COUNT(*) as count FROM projects GROUP BY status`);
+    res.json({ ok: true, updated: result.rows.length, before: before.rows, after: after.rows });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 app.post('/api/setup/add-staff-to-projects', async (req: Request, res: Response) => {
   const secret = req.headers['x-auth-secret'];
   if (secret !== SESSION_SECRET) {
