@@ -1488,11 +1488,6 @@ function AdminApp() {
                                 {renderDateHeader(date, projectsByDate[date].length)}
                                 {projectsByDate[date].map(project => (
                               <div key={project.id} style={styles.mobileCard}>
-                                <div style={styles.mobileCardHeader}>
-                                  <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
-                                    {getStatusLabel(project.status)}
-                                  </span>
-                                </div>
                                 <div style={styles.mobileCardBody}>
                                   <div style={styles.mobileCardRow}>
                                     <span style={styles.mobileCardLabel}>会社名</span>
@@ -1561,7 +1556,6 @@ function AdminApp() {
                                           <th style={styles.sortableTh} onClick={() => handleSort('work_name')}>作業名{getSortIndicator('work_name')}</th>
                                           <th style={styles.sortableTh} onClick={() => handleSort('location')}>場所{getSortIndicator('location')}</th>
                                           <th style={styles.th}>キャスト</th>
-                                          <th style={styles.sortableTh} onClick={() => handleSort('status')}>状態{getSortIndicator('status')}</th>
                                           <th style={styles.th}>操作</th>
                                         </tr>
                                       </thead>
@@ -1584,11 +1578,6 @@ function AdminApp() {
                                                   </span>
                                                 )
                                                 : '-'}
-                                            </td>
-                                            <td style={styles.td}>
-                                              <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
-                                                {getStatusLabel(project.status)}
-                                              </span>
                                             </td>
                                             <td style={styles.td}>
                                               <div style={{ display: 'flex', gap: '8px' }}>
@@ -2260,9 +2249,6 @@ function AdminApp() {
                                     {importedProjects.map(project => (
                                       <div key={project.id} style={styles.mobileCard}>
                                         <div style={styles.mobileCardHeader}>
-                                          <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
-                                            {getStatusLabel(project.status)}
-                                          </span>
                                           <span style={styles.mobileCardDate}>{formatDate(project.work_date)}</span>
                                         </div>
                                         <div style={styles.mobileCardBody}>
@@ -2291,7 +2277,6 @@ function AdminApp() {
                                           <th style={styles.th}>会社名</th>
                                           <th style={styles.th}>作業名</th>
                                           <th style={styles.th}>場所</th>
-                                          <th style={styles.th}>状態</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -2301,11 +2286,6 @@ function AdminApp() {
                                             <td style={styles.td}>{project.client_name_raw}</td>
                                             <td style={styles.td}>{project.work_name}</td>
                                             <td style={styles.td}>{project.location}</td>
-                                            <td style={styles.td}>
-                                              <span style={{...styles.statusBadge, backgroundColor: getStatusColor(project.status)}}>
-                                                {getStatusLabel(project.status)}
-                                              </span>
-                                            </td>
                                           </tr>
                                         ))}
                                       </tbody>
