@@ -1675,6 +1675,12 @@ function AdminApp() {
                                   </div>
                                 </div>
                                 <div style={styles.mobileCardActions}>
+                                  <button
+                                    style={{...styles.mobileActionButtonPrimary, background: COLORS.primary}}
+                                    onClick={(e) => { e.stopPropagation(); fetchReportDetail(report.id) }}
+                                  >
+                                    詳細を見る
+                                  </button>
                                   {report.pdf_generation_status === 'success' ? (
                                     <button 
                                       style={styles.mobileActionButtonPrimary}
@@ -1704,6 +1710,7 @@ function AdminApp() {
                                     <th style={styles.th}>監督者</th>
                                     <th style={styles.th}>記入者</th>
                                     <th style={styles.th}>PDF</th>
+                                    <th style={styles.th}>操作</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1728,6 +1735,14 @@ function AdminApp() {
                                             {report.pdf_generation_status === 'pending' ? '生成中' : '未生成'}
                                           </span>
                                         )}
+                                      </td>
+                                      <td style={styles.td}>
+                                        <button
+                                          style={{...styles.primaryButton, fontSize: '13px', padding: '6px 16px'}}
+                                          onClick={(e) => { e.stopPropagation(); fetchReportDetail(report.id) }}
+                                        >
+                                          詳細
+                                        </button>
                                       </td>
                                     </tr>
                                   ))}
