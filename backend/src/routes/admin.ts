@@ -367,9 +367,23 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
   }
 });
 
-// GET /api/admin/clients - クライアント一覧
+// GET /api/admin/clients - クライアント一覧（projects内の未登録会社も自動追加）
 router.get('/clients', requireAdmin, async (req: Request, res: Response) => {
   try {
+    await pool.query(
+      `INSERT INTO clients (name, name_normalized, is_active)
+       SELECT DISTINCT p.client_name_raw, 
+              LOWER(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(p.client_name_raw, '[（）()]', '', 'g'), '[\\s　]+', '', 'g'), '株式会社|有限会社|合同会社', '', 'g')),
+              true
+       FROM projects p
+       WHERE p.client_name_raw IS NOT NULL 
+         AND p.client_name_raw != ''
+         AND NOT EXISTS (
+           SELECT 1 FROM clients c WHERE c.name = p.client_name_raw
+         )
+       ON CONFLICT (name_normalized) DO NOTHING`
+    );
+
     const result = await pool.query(
       `SELECT id, name, name_normalized, emails, is_active, 
               contact_name, contact_title, contact_email,
