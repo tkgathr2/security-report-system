@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { sendReportApprovalNotifications, sendSlackNotification, uploadPdfToSlack } from '../services/notifications';
-import { generateReportPdf, PdfDesign } from '../services/pdfGenerator';
+import { generateReportPdf } from '../services/pdfGenerator';
 import { authenticateCast } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
 import { sendBadRequest, sendNotFound, sendConflict, sendForbidden, sendExpired, sendInternalError } from '../utils/errorHandler';
@@ -194,13 +194,6 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     setImmediate(async () => {
       console.log(`[ASYNC] Starting background processing for report ${reportId}`);
 
-      // DBからPDFデザイン設定を取得
-      let pdfDesign: PdfDesign = 'A';
-      try {
-        const settingsResult = await pool.query("SELECT value FROM app_settings WHERE key = 'pdf_design'");
-        if (settingsResult.rows.length > 0) pdfDesign = settingsResult.rows[0].value as PdfDesign;
-      } catch (e) { console.warn('[ASYNC] Failed to fetch pdf_design setting, using default A'); }
-
       // PDF生成を最初に実行（Slack通知にPDFリンクを含めるため）
       let pdfBuffer: Buffer;
       let pdfGenerationStatus = 'success';
@@ -218,7 +211,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           hasQualifier: has_qualifier || false,
           qualifierName: qualifier_name,
           signaturePng: signaturePngBuffer
-        }, pdfDesign);
+        });
         console.log(`[ASYNC] Generated PDF: ${pdfBuffer.length} bytes`);
       } catch (pdfError) {
         console.error('[ASYNC] PDF generation failed, using dummy PDF:', pdfError);
