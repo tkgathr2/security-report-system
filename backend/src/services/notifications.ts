@@ -205,7 +205,6 @@ export async function sendReportApprovalNotifications(params: {
   supervisorName: string;
   location: string;
   pdfBytes: Buffer;
-  csvBytes?: Buffer;
   skipSlack?: boolean;
 }): Promise<{ emailSent: boolean; slackSent: boolean; castEmailSent: boolean; adminEmailSent: boolean; warnings: string[] }> {
   const warnings: string[] = [];
@@ -215,12 +214,7 @@ export async function sendReportApprovalNotifications(params: {
       filename: `report_${params.workDate}.pdf`,
       content: params.pdfBytes,
       contentType: 'application/pdf'
-    },
-    ...(params.csvBytes ? [{
-      filename: `report_${params.workDate}.csv`,
-      content: params.csvBytes,
-      contentType: 'text/csv'
-    }] : [])
+    }
   ];
 
   let slackSent = false;
@@ -248,14 +242,14 @@ export async function sendReportApprovalNotifications(params: {
       `デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。\n\n` +
       `案件名: ${params.projectName}\n` +
       `実施日: ${params.workDate}\n\n` +
-      `添付のPDF/CSVファイルをご確認ください。`,
+      `添付のPDFファイルをご確認ください。`,
     html: `<p>${params.companyName} 様</p>` +
       `<p>デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。</p>` +
       `<ul>` +
       `<li>案件名: ${params.projectName}</li>` +
       `<li>実施日: ${params.workDate}</li>` +
       `</ul>` +
-      `<p>添付のPDF/CSVファイルをご確認ください。</p>`,
+      `<p>添付のPDFファイルをご確認ください。</p>`,
     attachments
   });
 
@@ -275,7 +269,7 @@ export async function sendReportApprovalNotifications(params: {
         `実施日: ${params.workDate}\n` +
         `実施場所: ${params.location}\n` +
         `監督者: ${params.supervisorName}\n\n` +
-        `添付のPDF/CSVファイルをご確認ください。`,
+        `添付のPDFファイルをご確認ください。`,
       html: `<p>${params.writerName} 様</p>` +
         `<p><strong>お仕事お疲れ様でした。</strong></p>` +
         `<p>報告書が正常に送信されました。</p>` +
@@ -285,7 +279,7 @@ export async function sendReportApprovalNotifications(params: {
         `<li>実施場所: ${params.location}</li>` +
         `<li>監督者: ${params.supervisorName}</li>` +
         `</ul>` +
-        `<p>添付のPDF/CSVファイルをご確認ください。</p>`,
+        `<p>添付のPDFファイルをご確認ください。</p>`,
       attachments
     });
     castEmailSent = castResult.success;
@@ -308,7 +302,7 @@ export async function sendReportApprovalNotifications(params: {
         `監督者: ${params.supervisorName}\n` +
         `記入者: ${params.writerName}\n` +
         `報告書ID: ${params.reportId}\n\n` +
-        `添付のPDF/CSVファイルをご確認ください。`,
+        `添付のPDFファイルをご確認ください。`,
       html: `<p>管理者様</p>` +
         `<p><strong>新しい報告書が提出されました。</strong></p>` +
         `<ul>` +
@@ -320,7 +314,7 @@ export async function sendReportApprovalNotifications(params: {
         `<li>記入者: ${params.writerName}</li>` +
         `<li>報告書ID: ${params.reportId}</li>` +
         `</ul>` +
-        `<p>添付のPDF/CSVファイルをご確認ください。</p>`,
+        `<p>添付のPDFファイルをご確認ください。</p>`,
       attachments
     });
     adminEmailSent = adminResult.success;
