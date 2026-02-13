@@ -53,7 +53,7 @@ interface ReportData {
   signaturePng?: Buffer | null;
 }
 
-export type PdfDesign = 'A' | 'B' | 'C' | 'D' | 'E';
+export type PdfDesign = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
 
 const GUARD_CONTENT_LABELS: Record<string, string> = {
   'traffic': '交通誘導',
@@ -78,6 +78,11 @@ const DESIGN_COLORS: Record<PdfDesign, DesignColors> = {
   C: { primary: '#1A1A2E', secondary: '#C85A17', accent: '#F0F0F0' },
   D: { primary: '#C85A17', secondary: '#333333', accent: '#FFF3E0' },
   E: { primary: '#C85A17', secondary: '#2B4C7E', accent: '#FAFAFA' },
+  F: { primary: '#D4651E', secondary: '#E8872B', accent: '#FFF0E0' },
+  G: { primary: '#C85A17', secondary: '#E07B30', accent: '#FDE8D0' },
+  H: { primary: '#B5500F', secondary: '#D96B1C', accent: '#FFF5EB' },
+  I: { primary: '#D4651E', secondary: '#C85A17', accent: '#FFE8D5' },
+  J: { primary: '#E07B30', secondary: '#C85A17', accent: '#FFF3E6' },
 };
 
 export const DESIGN_NAMES: Record<PdfDesign, string> = {
@@ -86,6 +91,11 @@ export const DESIGN_NAMES: Record<PdfDesign, string> = {
   C: 'Corporate',
   D: 'Bold',
   E: 'Clean',
+  F: 'Sunset',
+  G: 'Flame',
+  H: 'Citrus',
+  I: 'Amber',
+  J: 'Blaze',
 };
 
 function drawHeader(
@@ -129,13 +139,52 @@ function drawHeader(
     doc.fillColor('#999999').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 85, { width: CW, align: 'right' });
     doc.rect(0, 100, W, 3).fill(colors.primary);
     doc.y = 118;
+  } else if (design === 'F') {
+    doc.rect(0, 0, W, 95).fill(colors.primary);
+    doc.rect(0, 95, W, 8).fill(colors.secondary);
+    doc.rect(0, 103, W, 3).fill(colors.primary);
+    if (logoBuffer) doc.image(logoBuffer, 20, 15, { height: 55 });
+    doc.fillColor('#FFFFFF').fontSize(24).text('警備報告書', M, 18, { width: CW, align: 'right' });
+    doc.fillColor('#FFE0C0').fontSize(9).text('SECURITY REPORT', M, 48, { width: CW, align: 'right' });
+    doc.fillColor('#FFE0C0').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 65, { width: CW, align: 'right' });
+    doc.y = 118;
+  } else if (design === 'G') {
+    doc.rect(0, 0, W, 6).fill(colors.primary);
+    doc.rect(0, 6, W, 6).fill(colors.secondary);
+    if (logoBuffer) doc.image(logoBuffer, M, 22, { height: 30 });
+    doc.fillColor(colors.primary).fontSize(26).text('警備報告書', M, 58, { width: CW, align: 'left' });
+    doc.fillColor(colors.secondary).fontSize(8).text('SECURITY REPORT', M, 58, { width: CW, align: 'right' });
+    doc.fillColor('#999999').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 88, { width: CW, align: 'right' });
+    doc.rect(0, 100, W, 4).fill(colors.primary);
+    doc.rect(0, 104, W, 2).fill(colors.secondary);
+    doc.y = 118;
+  } else if (design === 'H') {
+    doc.rect(0, 0, W, 85).fill(colors.primary);
+    doc.save(); doc.moveTo(W - 180, 0).lineTo(W - 130, 85).lineTo(W - 120, 85).lineTo(W - 70, 0).closePath().fill(colors.secondary).opacity(0.3); doc.restore();
+    if (logoBuffer) doc.image(logoBuffer, 22, 12, { height: 26 });
+    doc.fillColor('#FFFFFF').fontSize(22).text('警備報告書', M, 14, { width: CW, align: 'right' });
+    doc.fillColor('#FFD8B8').fontSize(8).text('SECURITY REPORT', M, 42, { width: CW, align: 'right' });
+    doc.fillColor('#FFD8B8').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 58, { width: CW, align: 'right' });
+    doc.rect(0, 85, W, 4).fill(colors.secondary);
+    doc.y = 100;
+  } else if (design === 'I') {
+    doc.rect(0, 0, 12, 110).fill(colors.primary);
+    doc.rect(0, 0, W, 5).fill(colors.secondary);
+    doc.rect(12, 5, W - 12, 105).fill('#FFFFFF');
+    if (logoBuffer) doc.image(logoBuffer, 24, 14, { height: 30 });
+    doc.fillColor(colors.primary).fontSize(24).text('警備報告書', M, 50, { width: CW, align: 'left' });
+    doc.fillColor(colors.secondary).fontSize(8).text('SECURITY REPORT', M, 50, { width: CW, align: 'right' });
+    doc.fillColor('#999999').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 85, { width: CW, align: 'right' });
+    doc.rect(0, 110, W, 3).fill(colors.primary);
+    doc.y = 125;
   } else {
-    doc.rect(0, 0, W, 4).fill(colors.primary);
-    if (logoBuffer) doc.image(logoBuffer, M, 14, { height: 28 });
-    doc.fillColor(colors.primary).fontSize(20).text('警備報告書', M, 16, { width: CW, align: 'right' });
-    doc.fillColor('#AAAAAA').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 38, { width: CW, align: 'right' });
-    doc.save(); doc.moveTo(M, 52).lineTo(M + CW, 52).strokeColor(colors.primary).lineWidth(0.5).stroke(); doc.restore();
-    doc.y = 62;
+    doc.rect(0, 0, W, 100).fill(colors.primary);
+    doc.rect(0, 100, W, 4).fill(colors.secondary);
+    if (logoBuffer) doc.image(logoBuffer, W / 2 - 100, 8, { height: 30 });
+    doc.fillColor('#FFFFFF').fontSize(26).text('警備報告書', 0, 44, { width: W, align: 'center' });
+    doc.fillColor('#FFD8B0').fontSize(8).text('SECURITY REPORT', 0, 74, { width: W, align: 'center' });
+    doc.fillColor('#FFD8B0').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', 0, 86, { width: W, align: 'center' });
+    doc.y = 118;
   }
 }
 

@@ -2305,6 +2305,11 @@ function AdminApp() {
                               { key: 'C', name: 'Corporate', desc: 'ダーク中央配置＋オレンジタイトル', primary: '#1A1A2E', secondary: '#C85A17' },
                               { key: 'D', name: 'Bold', desc: 'ホワイト背景＋左オレンジバー＋大タイトル', primary: '#C85A17', secondary: '#333333' },
                               { key: 'E', name: 'Clean', desc: 'ミニマル＋上部オレンジライン', primary: '#C85A17', secondary: '#2B4C7E' },
+                              { key: 'F', name: 'Sunset', desc: 'オレンジ全幅＋ダブルオレンジライン', primary: '#D4651E', secondary: '#E8872B' },
+                              { key: 'G', name: 'Flame', desc: 'ダブルオレンジバー＋大タイトル', primary: '#C85A17', secondary: '#E07B30' },
+                              { key: 'H', name: 'Citrus', desc: 'オレンジヘッダー＋斜めアクセント', primary: '#B5500F', secondary: '#D96B1C' },
+                              { key: 'I', name: 'Amber', desc: 'オレンジ左サイドバー＋トップバー', primary: '#D4651E', secondary: '#C85A17' },
+                              { key: 'J', name: 'Blaze', desc: 'フルオレンジ中央配置＋ゴールドライン', primary: '#E07B30', secondary: '#C85A17' },
                             ].map(d => (
                               <div
                                 key={d.key}
@@ -2320,11 +2325,14 @@ function AdminApp() {
                                   boxShadow: pdfDesign === d.key ? `0 0 0 2px ${COLORS.primary}40` : 'none',
                                 }}
                               >
-                                <div style={{ height: '48px', background: d.key === 'C' ? d.primary : d.key === 'E' ? '#FAFAFA' : d.primary, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: d.key === 'C' ? 'center' : 'flex-end', padding: '0 16px' }}>
+                                <div style={{ height: '48px', background: d.key === 'C' ? d.primary : d.key === 'E' ? '#FAFAFA' : d.key === 'G' ? '#FFFFFF' : d.key === 'I' ? '#FFFFFF' : d.primary, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: (d.key === 'C' || d.key === 'J') ? 'center' : 'flex-end', padding: '0 16px' }}>
                                   {d.key === 'B' && <div style={{ position: 'absolute', left: 0, top: 0, width: '6px', height: '100%', background: d.secondary }} />}
                                   {d.key === 'D' && <div style={{ position: 'absolute', left: 0, top: 0, width: '6px', height: '100%', background: d.primary, zIndex: 1 }} />}
                                   {d.key === 'E' && <div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '4px', background: d.primary }} />}
-                                  <span style={{ color: d.key === 'D' ? d.primary : d.key === 'E' ? d.primary : '#FFF', fontSize: '14px', fontWeight: 700 }}>
+                                  {d.key === 'F' && <div style={{ position: 'absolute', left: 0, bottom: 0, width: '100%', height: '6px', background: d.secondary }} />}
+                                  {d.key === 'G' && <><div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '5px', background: d.primary }} /><div style={{ position: 'absolute', left: 0, top: '5px', width: '100%', height: '4px', background: d.secondary }} /></>}
+                                  {d.key === 'I' && <><div style={{ position: 'absolute', left: 0, top: 0, width: '8px', height: '100%', background: d.primary }} /><div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '4px', background: d.secondary }} /></>}
+                                  <span style={{ color: (d.key === 'D' || d.key === 'G' || d.key === 'I') ? d.primary : d.key === 'E' ? d.primary : '#FFF', fontSize: '14px', fontWeight: 700 }}>
                                     警備報告書
                                   </span>
                                 </div>
