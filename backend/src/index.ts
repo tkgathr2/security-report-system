@@ -59,7 +59,7 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-02-v71' });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-13-v72' });
 });
 
 app.use('/api/auth', authRouter);
@@ -91,6 +91,8 @@ async function ensureSchema(){
         reviewed_at TIMESTAMPTZ
       )
     `);
+    const activated = await pool.query(`UPDATE projects SET status = 'active' WHERE status = 'pending_client' RETURNING id`);
+    console.log(`[DB] Activated ${activated.rows.length} pending_client projects`);
   } catch (e) {
     console.error('[DB] ensureSchema failed:', e);
   }
