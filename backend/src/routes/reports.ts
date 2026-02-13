@@ -329,7 +329,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 });
 
 router.get('/:reportId/pdf', async (req: Request, res: Response) => {
-  const { reportId } = req.params;
+  const reportId = req.params.reportId as string;
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(reportId)) {
     res.status(400).json({ error: 'INVALID_ID', message: '報告書IDの形式が不正です' });
