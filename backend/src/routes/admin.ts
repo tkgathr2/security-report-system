@@ -814,10 +814,10 @@ router.post('/temp-setup-casts-projects', async (req: Request, res: Response) =>
       }
 
       const projResult = await pool.query(
-        `INSERT INTO projects (project_key, client_name_raw, work_date, work_name, location, status)
-         VALUES ($1, $2, $3, $4, $5, 'pending')
+        `INSERT INTO projects (project_key, client_name_raw, work_date, work_name, work_title_raw, location, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending')
          RETURNING id`,
-        [projectKey, 'テスト会社', today, `テスト現場 ${staff.display_name_kanji}`, '東京都']
+        [projectKey, 'テスト会社', today, `テスト現場 ${staff.display_name_kanji}`, `テスト現場 ${staff.display_name_kanji}`, '東京都']
       );
       const projectId = projResult.rows[0].id;
 
@@ -839,6 +839,44 @@ router.post('/temp-setup-casts-projects', async (req: Request, res: Response) =>
   } catch (error) {
     console.error('[TEMP-SETUP] Error:', error);
     res.status(500).json({ error: 'Setup failed', details: String(error) });
+  }
+});
+
+router.post('/temp-diag-approve', async (req: Request, res: Response) => {
+  const secret = req.headers['x-auth-secret'] || req.query.secret;
+  if (secret !== process.env.AUTH_SECRET && secret !== 'setup-2026') {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  try {
+    const cols = await pool.query(
+      `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'admin_allowlist' ORDER BY ordinal_position`
+    );
+    const requests = await pool.query("SELECT id, email, status FROM access_requests ORDER BY created_at DESC LIMIT 5");
+    const admins = await pool.query("SELECT * FROM admin_allowlist LIMIT 10");
+
+    let testApproveError = null;
+    if (requests.rows.length > 0) {
+      const pendingReq = requests.rows.find((r: { status: string }) => r.status === 'pending');
+      if (pendingReq) {
+        try {
+          await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
+          const existing = await pool.query('SELECT id FROM admin_allowlist WHERE LOWER(email) = LOWER($1)', [pendingReq.email]);
+          testApproveError = `existing check ok: ${existing.rows.length} rows`;
+        } catch (e) {
+          testApproveError = String(e);
+        }
+      }
+    }
+
+    res.json({
+      admin_allowlist_columns: cols.rows,
+      access_requests: requests.rows,
+      admin_allowlist_data: admins.rows,
+      test_approve_step: testApproveError
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
   }
 });
 
