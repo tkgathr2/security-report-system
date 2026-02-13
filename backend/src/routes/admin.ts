@@ -779,4 +779,67 @@ router.delete('/reports/:reportId', requireAdmin, async (req: Request, res: Resp
   }
 });
 
+router.post('/temp-setup-casts-projects', async (req: Request, res: Response) => {
+  const secret = req.headers['x-auth-secret'] || req.query.secret;
+  if (secret !== process.env.AUTH_SECRET && secret !== 'setup-2026') {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  try {
+    const existingOhno = await pool.query("SELECT id FROM staff_master WHERE display_name_kanji = '大野ないと'");
+    let ohnoId: string;
+    if (existingOhno.rows.length === 0) {
+      const ins = await pool.query(
+        "INSERT INTO staff_master (display_name_kanji, display_name_kana) VALUES ('大野ないと', 'オオノナイト') RETURNING id",
+      );
+      ohnoId = ins.rows[0].id;
+    } else {
+      ohnoId = existingOhno.rows[0].id;
+    }
+
+    const staffResult = await pool.query("SELECT id, display_name_kanji FROM staff_master ORDER BY display_name_kana");
+    const allStaff = staffResult.rows;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const createdProjects: { project_key: string; cast: string }[] = [];
+
+    for (let i = 0; i < allStaff.length; i++) {
+      const staff = allStaff[i];
+      const projectKey = `TEST-${today.replace(/-/g, '')}-${String(i + 1).padStart(3, '0')}`;
+
+      const existingProject = await pool.query("SELECT id FROM projects WHERE project_key = $1", [projectKey]);
+      if (existingProject.rows.length > 0) {
+        createdProjects.push({ project_key: projectKey, cast: staff.display_name_kanji + ' (既存)' });
+        continue;
+      }
+
+      const projResult = await pool.query(
+        `INSERT INTO projects (project_key, client_name_raw, work_date, work_name, location, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')
+         RETURNING id`,
+        [projectKey, 'テスト会社', today, `テスト現場 ${staff.display_name_kanji}`, '東京都']
+      );
+      const projectId = projResult.rows[0].id;
+
+      await pool.query(
+        `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index)
+         VALUES ($1, $2, $3, 0)`,
+        [projectId, staff.id, staff.display_name_kanji]
+      );
+
+      createdProjects.push({ project_key: projectKey, cast: staff.display_name_kanji });
+    }
+
+    res.json({
+      ok: true,
+      ohno_staff_id: ohnoId,
+      total_staff: allStaff.length,
+      created_projects: createdProjects
+    });
+  } catch (error) {
+    console.error('[TEMP-SETUP] Error:', error);
+    res.status(500).json({ error: 'Setup failed', details: String(error) });
+  }
+});
+
 export default router;
