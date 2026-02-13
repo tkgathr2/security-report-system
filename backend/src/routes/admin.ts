@@ -442,6 +442,42 @@ router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => 
   }
 });
 
+// DELETE /api/admin/clients/:id - クライアント削除
+router.delete('/clients/:id', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const adminUser = req.user as { id: string; email: string };
+
+    const currentResult = await pool.query(
+      `SELECT name FROM clients WHERE id = $1`,
+      [id]
+    );
+
+    if (currentResult.rows.length === 0) {
+      sendNotFound(res, '会社が見つかりません');
+      return;
+    }
+
+    await pool.query(
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, target_id, payload_json)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        adminUser.email,
+        'DELETE_CLIENT',
+        'client',
+        id,
+        JSON.stringify({ deleted_name: currentResult.rows[0].name })
+      ]
+    );
+
+    await pool.query(`DELETE FROM clients WHERE id = $1`, [id]);
+
+    res.json({ ok: true });
+  } catch (error) {
+    handleDbError(res, error, 'Client delete');
+  }
+});
+
 // POST /api/admin/clients - クライアント登録
 router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
   try {

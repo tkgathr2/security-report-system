@@ -604,6 +604,24 @@ function AdminApp() {
           }
         }
 
+        const handleDeleteClient = async (clientId: string, clientName: string) => {
+          if (!confirm(`${clientName} を削除しますか？この操作は取り消せません。`)) return
+          setError(null)
+          try {
+            const response = await fetch(`/api/admin/clients/${clientId}`, {
+              method: 'DELETE',
+              credentials: 'include'
+            })
+            if (!response.ok) {
+              const data = await response.json()
+              throw new Error(data.message || '削除に失敗しました')
+            }
+            fetchClients()
+          } catch (err) {
+            setError(err instanceof Error ? err.message : '削除に失敗しました')
+          }
+        }
+
 
         const fetchCastUsers = async () => {
           setLoading(true)
@@ -2333,6 +2351,12 @@ function AdminApp() {
                                   >
                                     編集
                                   </button>
+                                  <button 
+                                    style={{...styles.mobileActionButtonPrimary, backgroundColor: COLORS.danger}}
+                                    onClick={() => handleDeleteClient(client.id, client.name)}
+                                  >
+                                    削除
+                                  </button>
                                 </div>
                               </div>
                             ))}
@@ -2362,6 +2386,12 @@ function AdminApp() {
                                         onClick={() => setEditingClient(client)}
                                       >
                                         編集
+                                      </button>
+                                      <button 
+                                        style={{...styles.secondaryButton, backgroundColor: COLORS.danger, color: 'white', marginLeft: '8px'}}
+                                        onClick={() => handleDeleteClient(client.id, client.name)}
+                                      >
+                                        削除
                                       </button>
                                     </td>
                                   </tr>
