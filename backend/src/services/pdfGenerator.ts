@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import * as fs from 'fs';
+import * as path from 'path';
 
 const FONT_PATHS = [
   '/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf',
@@ -20,6 +21,23 @@ function findJapaneseFont(): string | null {
   return null;
 }
 
+function loadLogo(): Buffer | null {
+  const candidates = [
+    path.join(__dirname, '../../assets/logo.png'),
+    path.join(__dirname, '../assets/logo.png'),
+    path.join(process.cwd(), 'assets/logo.png'),
+  ];
+  for (const p of candidates) {
+    try {
+      return fs.readFileSync(p);
+    } catch {
+      continue;
+    }
+  }
+  console.warn('[PDF] Logo not found');
+  return null;
+}
+
 interface ReportData {
   companyName: string;
   workDate: string;
@@ -35,6 +53,8 @@ interface ReportData {
   signaturePng?: Buffer | null;
 }
 
+export type PdfDesign = 'A' | 'B' | 'C' | 'D' | 'E';
+
 const GUARD_CONTENT_LABELS: Record<string, string> = {
   'traffic': '交通誘導',
   'pedestrian': '歩行者誘導',
@@ -46,14 +66,80 @@ const GUARD_CONTENT_LABELS: Record<string, string> = {
   'other': 'その他'
 };
 
-const BRAND_ORANGE = '#C85A17';
-const BRAND_NAVY = '#2B4C7E';
-const LIGHT_GRAY = '#F5F5F5';
-const BORDER_GRAY = '#DDDDDD';
-const TEXT_DARK = '#333333';
-const TEXT_LIGHT = '#FFFFFF';
+interface DesignColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+}
 
-export async function generateReportPdf(data: ReportData): Promise<Buffer> {
+const DESIGN_COLORS: Record<PdfDesign, DesignColors> = {
+  A: { primary: '#C85A17', secondary: '#2B4C7E', accent: '#FBE8D8' },
+  B: { primary: '#2B4C7E', secondary: '#C85A17', accent: '#EDF1F7' },
+  C: { primary: '#1A1A2E', secondary: '#C85A17', accent: '#F0F0F0' },
+  D: { primary: '#C85A17', secondary: '#333333', accent: '#FFF3E0' },
+  E: { primary: '#C85A17', secondary: '#2B4C7E', accent: '#FAFAFA' },
+};
+
+export const DESIGN_NAMES: Record<PdfDesign, string> = {
+  A: 'Executive',
+  B: 'Modern',
+  C: 'Corporate',
+  D: 'Bold',
+  E: 'Clean',
+};
+
+function drawHeader(
+  doc: PDFKit.PDFDocument,
+  design: PdfDesign,
+  colors: DesignColors,
+  logoBuffer: Buffer | null,
+  W: number,
+  M: number,
+  CW: number,
+) {
+  if (design === 'A') {
+    doc.rect(0, 0, W, 90).fill(colors.primary);
+    doc.rect(0, 90, W, 5).fill(colors.secondary);
+    if (logoBuffer) doc.image(logoBuffer, 20, 15, { height: 55 });
+    doc.fillColor('#FFFFFF').fontSize(22).text('警備報告書', M, 22, { width: CW, align: 'right' });
+    doc.fillColor('#FFFFFF').fontSize(8).text('SECURITY REPORT', M, 50, { width: CW, align: 'right' });
+    doc.fillColor('#FFFFFF').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 65, { width: CW, align: 'right' });
+    doc.y = 110;
+  } else if (design === 'B') {
+    doc.rect(0, 0, W, 85).fill(colors.primary);
+    doc.rect(0, 0, 8, 85).fill(colors.secondary);
+    if (logoBuffer) doc.image(logoBuffer, 22, 10, { height: 28 });
+    doc.fillColor('#FFFFFF').fontSize(18).text('警備報告書', M, 42, { width: CW });
+    doc.fillColor('#DDDDDD').fontSize(8).text('SECURITY REPORT', M, 42, { width: CW, align: 'right' });
+    doc.rect(0, 85, W, 3).fill(colors.secondary);
+    doc.y = 100;
+  } else if (design === 'C') {
+    doc.rect(0, 0, W, 110).fill(colors.primary);
+    if (logoBuffer) doc.image(logoBuffer, W / 2 - 100, 12, { height: 32 });
+    doc.fillColor(colors.secondary).fontSize(24).text('警備報告書', 0, 56, { width: W, align: 'center' });
+    doc.fillColor('#999999').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', 0, 84, { width: W, align: 'center' });
+    doc.save(); doc.rect(W / 2 - 40, 96, 80, 2).fill(colors.secondary); doc.restore();
+    doc.y = 115;
+  } else if (design === 'D') {
+    doc.rect(0, 0, W, 100).fill('#FFFFFF');
+    doc.rect(0, 0, 8, 100).fill(colors.primary);
+    if (logoBuffer) doc.image(logoBuffer, 20, 12, { height: 30 });
+    doc.fillColor(colors.primary).fontSize(28).text('警備報告書', M, 55, { width: CW, align: 'left' });
+    doc.fillColor('#999999').fontSize(8).text('SECURITY REPORT', M, 55, { width: CW, align: 'right' });
+    doc.fillColor('#999999').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 85, { width: CW, align: 'right' });
+    doc.rect(0, 100, W, 3).fill(colors.primary);
+    doc.y = 118;
+  } else {
+    doc.rect(0, 0, W, 4).fill(colors.primary);
+    if (logoBuffer) doc.image(logoBuffer, M, 14, { height: 28 });
+    doc.fillColor(colors.primary).fontSize(20).text('警備報告書', M, 16, { width: CW, align: 'right' });
+    doc.fillColor('#AAAAAA').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 38, { width: CW, align: 'right' });
+    doc.save(); doc.moveTo(M, 52).lineTo(M + CW, 52).strokeColor(colors.primary).lineWidth(0.5).stroke(); doc.restore();
+    doc.y = 62;
+  }
+}
+
+export async function generateReportPdf(data: ReportData, design: PdfDesign = 'A'): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
@@ -80,38 +166,24 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
         doc.font('Helvetica');
       }
 
+      const colors = DESIGN_COLORS[design];
+      const logoBuffer = loadLogo();
+
       const pageWidth = 595.28;
       const marginLeft = 50;
       const contentWidth = pageWidth - marginLeft - 50;
 
-      doc.save();
-      doc.rect(0, 0, pageWidth, 80).fill(BRAND_ORANGE);
-      doc.restore();
+      drawHeader(doc, design, colors, logoBuffer, pageWidth, marginLeft, contentWidth);
 
-      doc.save();
-      doc.rect(0, 80, pageWidth, 4).fill(BRAND_NAVY);
-      doc.restore();
+      doc.fillColor(colors.secondary).fontSize(13).text(`${data.companyName} 御中`, marginLeft, doc.y);
+      doc.moveDown(0.4);
+      doc.save(); doc.moveTo(marginLeft, doc.y).lineTo(marginLeft + contentWidth, doc.y).strokeColor('#DDDDDD').lineWidth(0.5).stroke(); doc.restore();
+      doc.moveDown(0.6);
 
-      doc.fillColor(TEXT_LIGHT);
-      doc.fontSize(18).text('警 備 報 告 書', marginLeft, 18, { width: contentWidth, align: 'center' });
-      doc.fontSize(9).text('デジタル警備報告書システム【ほうこちゃん】', marginLeft, 50, { width: contentWidth, align: 'center' });
-
-      doc.fillColor(TEXT_DARK);
-      doc.y = 100;
-
-      doc.fontSize(13).fillColor(BRAND_NAVY).text(`${data.companyName} 御中`, marginLeft, doc.y);
-      doc.moveDown(0.3);
-      doc.save();
-      doc.moveTo(marginLeft, doc.y).lineTo(marginLeft + contentWidth, doc.y).strokeColor(BORDER_GRAY).lineWidth(0.5).stroke();
-      doc.restore();
-      doc.moveDown(0.8);
-
-      doc.fillColor(TEXT_DARK);
-
-      const tableTop = doc.y;
       const labelColWidth = 110;
       const valueColWidth = contentWidth - labelColWidth;
-      const rowHeight = 28;
+      const rowHeight = 26;
+      const tableTop = doc.y;
 
       const infoRows: [string, string][] = [
         ['実施日', data.workDate],
@@ -123,74 +195,47 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
 
       infoRows.forEach((row, i) => {
         const y = tableTop + i * rowHeight;
-
+        doc.save(); doc.rect(marginLeft, y, labelColWidth, rowHeight).fill(colors.accent); doc.restore();
         doc.save();
-        doc.rect(marginLeft, y, labelColWidth, rowHeight).fill(LIGHT_GRAY);
-        doc.restore();
-
-        doc.save();
-        doc.rect(marginLeft, y, contentWidth, rowHeight).strokeColor(BORDER_GRAY).lineWidth(0.5).stroke();
+        doc.rect(marginLeft, y, contentWidth, rowHeight).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
         doc.moveTo(marginLeft + labelColWidth, y).lineTo(marginLeft + labelColWidth, y + rowHeight).stroke();
         doc.restore();
-
-        doc.fillColor(BRAND_NAVY).fontSize(10).text(row[0], marginLeft + 8, y + 8, { width: labelColWidth - 16 });
-        doc.fillColor(TEXT_DARK).fontSize(10).text(row[1], marginLeft + labelColWidth + 8, y + 8, { width: valueColWidth - 16 });
+        doc.fillColor(colors.secondary).fontSize(9).text(row[0], marginLeft + 8, y + 8, { width: labelColWidth - 16 });
+        doc.fillColor('#333333').fontSize(9).text(row[1], marginLeft + labelColWidth + 8, y + 8, { width: valueColWidth - 16 });
       });
 
-      doc.y = tableTop + infoRows.length * rowHeight + 16;
+      doc.y = tableTop + infoRows.length * rowHeight + 12;
 
-      doc.save();
-      doc.rect(marginLeft, doc.y, contentWidth, 24).fill(BRAND_NAVY);
-      doc.restore();
-      doc.fillColor(TEXT_LIGHT).fontSize(11).text('警備内容', marginLeft + 10, doc.y + 6);
-      doc.y = doc.y + 24;
+      doc.save(); doc.rect(marginLeft, doc.y, contentWidth, 22).fill(colors.secondary); doc.restore();
+      doc.fillColor('#FFFFFF').fontSize(10).text('警備内容', marginLeft + 10, doc.y + 5);
+      doc.y += 22;
 
-      doc.fillColor(TEXT_DARK);
       const guardContentLabels = data.guardContents.map(code =>
         GUARD_CONTENT_LABELS[code] || code
       );
 
       const contentBoxTop = doc.y;
-
-      doc.fontSize(10);
       let chipX = marginLeft + 10;
       let chipY = contentBoxTop + 8;
-      const chipHeight = 20;
-      const chipPadding = 12;
-      const chipGap = 6;
 
       guardContentLabels.forEach(label => {
-        const textWidth = doc.widthOfString(label);
-        const chipWidth = textWidth + chipPadding * 2;
-
-        if (chipX + chipWidth > marginLeft + contentWidth - 10) {
-          chipX = marginLeft + 10;
-          chipY += chipHeight + 4;
-        }
-
-        doc.save();
-        doc.roundedRect(chipX, chipY, chipWidth, chipHeight, 4).fill(BRAND_ORANGE);
-        doc.restore();
-
-        doc.fillColor(TEXT_LIGHT).fontSize(9).text(label, chipX + chipPadding, chipY + 5, { width: textWidth + 2 });
-        doc.fillColor(TEXT_DARK);
-
-        chipX += chipWidth + chipGap;
+        const tw = doc.widthOfString(label);
+        const cw = tw + 20;
+        if (chipX + cw > marginLeft + contentWidth - 10) { chipX = marginLeft + 10; chipY += 22; }
+        doc.save(); doc.roundedRect(chipX, chipY, cw, 18, 3).fill(colors.primary); doc.restore();
+        doc.fillColor('#FFFFFF').fontSize(8).text(label, chipX + 10, chipY + 4, { width: tw + 4 });
+        chipX += cw + 5;
       });
 
-      doc.y = chipY + chipHeight + 8;
+      doc.y = chipY + 26;
 
       if (data.guardOtherText) {
         doc.fontSize(9).fillColor('#666666').text(`  その他: ${data.guardOtherText}`, marginLeft + 10, doc.y);
-        doc.fillColor(TEXT_DARK);
         doc.y += 16;
       }
 
-      doc.save();
-      doc.rect(marginLeft, contentBoxTop, contentWidth, doc.y - contentBoxTop).strokeColor(BORDER_GRAY).lineWidth(0.5).stroke();
-      doc.restore();
-
-      doc.moveDown(0.8);
+      doc.save(); doc.rect(marginLeft, contentBoxTop, contentWidth, doc.y - contentBoxTop).strokeColor('#DDDDDD').lineWidth(0.5).stroke(); doc.restore();
+      doc.moveDown(0.5);
 
       const qNames = Array.isArray(data.qualifierName) ? data.qualifierName.filter(n => n && n.trim() !== '') : (data.qualifierName ? [data.qualifierName] : []);
       const qualifierText = data.hasQualifier
@@ -198,79 +243,53 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
         : '無';
 
       const qRowY = doc.y;
+      doc.save(); doc.rect(marginLeft, qRowY, labelColWidth, rowHeight).fill(colors.accent); doc.restore();
       doc.save();
-      doc.rect(marginLeft, qRowY, labelColWidth, rowHeight).fill(LIGHT_GRAY);
-      doc.restore();
-      doc.save();
-      doc.rect(marginLeft, qRowY, contentWidth, rowHeight).strokeColor(BORDER_GRAY).lineWidth(0.5).stroke();
+      doc.rect(marginLeft, qRowY, contentWidth, rowHeight).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
       doc.moveTo(marginLeft + labelColWidth, qRowY).lineTo(marginLeft + labelColWidth, qRowY + rowHeight).stroke();
       doc.restore();
-      doc.fillColor(BRAND_NAVY).fontSize(10).text('資格者', marginLeft + 8, qRowY + 8, { width: labelColWidth - 16 });
-      doc.fillColor(TEXT_DARK).fontSize(10).text(qualifierText, marginLeft + labelColWidth + 8, qRowY + 8, { width: valueColWidth - 16 });
-      doc.y = qRowY + rowHeight + 16;
+      doc.fillColor(colors.secondary).fontSize(9).text('資格者', marginLeft + 8, qRowY + 8);
+      doc.fillColor('#333333').fontSize(9).text(qualifierText, marginLeft + labelColWidth + 8, qRowY + 8);
+      doc.y = qRowY + rowHeight + 12;
 
       if (data.guards && data.guards.length > 0) {
-        doc.save();
-        doc.rect(marginLeft, doc.y, contentWidth, 24).fill(BRAND_NAVY);
-        doc.restore();
-        doc.fillColor(TEXT_LIGHT).fontSize(11).text('警備員一覧', marginLeft + 10, doc.y + 6);
-        doc.y = doc.y + 24;
-
-        doc.fillColor(TEXT_DARK);
+        doc.save(); doc.rect(marginLeft, doc.y, contentWidth, 22).fill(colors.secondary); doc.restore();
+        doc.fillColor('#FFFFFF').fontSize(10).text('警備員一覧', marginLeft + 10, doc.y + 5);
+        doc.y += 22;
 
         const colWidths = [35, 160, 100, 100, 100];
         const colXs = [marginLeft];
-        for (let c = 1; c <= colWidths.length; c++) {
-          colXs.push(colXs[c - 1] + colWidths[c - 1]);
-        }
+        for (let c = 1; c <= colWidths.length; c++) colXs.push(colXs[c - 1] + colWidths[c - 1]);
         const tHeaders = ['No', '氏名', '開始', '終了', '早出残業(h)'];
         const thY = doc.y;
-        const thH = 24;
 
-        doc.save();
-        doc.rect(marginLeft, thY, contentWidth, thH).fill(LIGHT_GRAY);
-        doc.restore();
-
+        doc.save(); doc.rect(marginLeft, thY, contentWidth, 22).fill(colors.accent); doc.restore();
         tHeaders.forEach((h, i) => {
-          doc.fillColor(BRAND_NAVY).fontSize(9).text(h, colXs[i] + 6, thY + 7, { width: colWidths[i] - 12 });
+          doc.fillColor(colors.secondary).fontSize(8).text(h, colXs[i] + 6, thY + 6, { width: colWidths[i] - 12 });
         });
-
         doc.save();
-        doc.rect(marginLeft, thY, contentWidth, thH).strokeColor(BORDER_GRAY).lineWidth(0.5).stroke();
-        colXs.slice(1, -1).forEach(x => {
-          doc.moveTo(x, thY).lineTo(x, thY + thH).stroke();
-        });
+        doc.rect(marginLeft, thY, contentWidth, 22).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
+        colXs.slice(1, -1).forEach(x => doc.moveTo(x, thY).lineTo(x, thY + 22).stroke());
         doc.restore();
-
-        doc.y = thY + thH;
+        doc.y = thY + 22;
 
         data.guards.forEach((g, idx) => {
           const rY = doc.y;
-          const rH = 22;
-
-          if (idx % 2 === 1) {
-            doc.save();
-            doc.rect(marginLeft, rY, contentWidth, rH).fill('#FAFAFA');
-            doc.restore();
-          }
-
+          const rH = 20;
+          if (idx % 2 === 1) { doc.save(); doc.rect(marginLeft, rY, contentWidth, rH).fill('#FAFAFA'); doc.restore(); }
           doc.save();
-          doc.rect(marginLeft, rY, contentWidth, rH).strokeColor(BORDER_GRAY).lineWidth(0.3).stroke();
-          colXs.slice(1, -1).forEach(x => {
-            doc.moveTo(x, rY).lineTo(x, rY + rH).strokeColor('#EEEEEE').lineWidth(0.3).stroke();
-          });
+          doc.rect(marginLeft, rY, contentWidth, rH).strokeColor('#EEEEEE').lineWidth(0.3).stroke();
+          colXs.slice(1, -1).forEach(x => doc.moveTo(x, rY).lineTo(x, rY + rH).stroke());
           doc.restore();
-
-          doc.fillColor(TEXT_DARK).fontSize(9);
-          doc.text(String(g.index ?? ''), colXs[0] + 6, rY + 6, { width: colWidths[0] - 12 });
-          doc.text(g.name || '', colXs[1] + 6, rY + 6, { width: colWidths[1] - 12 });
-          doc.text(g.start_time || '', colXs[2] + 6, rY + 6, { width: colWidths[2] - 12 });
-          doc.text(g.end_time || '', colXs[3] + 6, rY + 6, { width: colWidths[3] - 12 });
+          doc.fillColor('#333333').fontSize(8);
+          doc.text(String(g.index ?? ''), colXs[0] + 6, rY + 5, { width: colWidths[0] - 12 });
+          doc.text(g.name || '', colXs[1] + 6, rY + 5, { width: colWidths[1] - 12 });
+          doc.text(g.start_time || '', colXs[2] + 6, rY + 5, { width: colWidths[2] - 12 });
+          doc.text(g.end_time || '', colXs[3] + 6, rY + 5, { width: colWidths[3] - 12 });
           doc.text(
             g.early_overtime_hours !== undefined && g.early_overtime_hours !== null ? String(g.early_overtime_hours) : '',
-            colXs[4] + 6, rY + 6, { width: colWidths[4] - 12 }
+            colXs[4] + 6, rY + 5, { width: colWidths[4] - 12 }
           );
-
           doc.y = rY + rH;
         });
       }
@@ -280,35 +299,26 @@ export async function generateReportPdf(data: ReportData): Promise<Buffer> {
       if (data.signaturePng && data.signaturePng.length > 0) {
         try {
           const sigLabelY = doc.y;
+          doc.save(); doc.rect(marginLeft, sigLabelY, labelColWidth, 80).fill(colors.accent); doc.restore();
           doc.save();
-          doc.rect(marginLeft, sigLabelY, labelColWidth, 80).fill(LIGHT_GRAY);
-          doc.restore();
-          doc.save();
-          doc.rect(marginLeft, sigLabelY, contentWidth, 80).strokeColor(BORDER_GRAY).lineWidth(0.5).stroke();
+          doc.rect(marginLeft, sigLabelY, contentWidth, 80).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
           doc.moveTo(marginLeft + labelColWidth, sigLabelY).lineTo(marginLeft + labelColWidth, sigLabelY + 80).stroke();
           doc.restore();
-
-          doc.fillColor(BRAND_NAVY).fontSize(10).text('署名', marginLeft + 8, sigLabelY + 30);
-          doc.image(data.signaturePng, marginLeft + labelColWidth + 20, sigLabelY + 5, {
-            width: 140,
-            height: 70
-          });
+          doc.fillColor(colors.secondary).fontSize(10).text('署名', marginLeft + 8, sigLabelY + 30);
+          doc.image(data.signaturePng, marginLeft + labelColWidth + 20, sigLabelY + 5, { width: 140, height: 70 });
           doc.y = sigLabelY + 80;
         } catch (imgError) {
           console.error('[PDF] Failed to embed signature image:', imgError);
-          doc.fillColor(TEXT_DARK).text('(署名画像の埋め込みに失敗しました)', marginLeft + labelColWidth + 8);
+          doc.fillColor('#333333').text('(署名画像の埋め込みに失敗しました)', marginLeft + labelColWidth + 8);
         }
       }
 
       const footerY = 800;
-      doc.save();
-      doc.rect(0, footerY, pageWidth, 2).fill(BRAND_ORANGE);
-      doc.restore();
-
+      doc.save(); doc.rect(0, footerY, pageWidth, 2).fill(colors.primary); doc.restore();
       const now = new Date();
       const generatedAt = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       doc.fillColor('#999999').fontSize(7);
-      doc.text(`生成日時: ${generatedAt}`, marginLeft, footerY + 8, { width: contentWidth, align: 'right' });
+      doc.text(`生成日時: ${generatedAt}`, marginLeft, footerY + 6, { width: contentWidth, align: 'right' });
       doc.text('Powered by デジタル警備報告書システム【ほうこちゃん】', marginLeft, doc.y, { width: contentWidth, align: 'right' });
 
       doc.end();

@@ -35,7 +35,7 @@ const GUARD_CONTENT_LABELS: Record<string, string> = {
   other: '⑧その他'
 }
 
-type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients' | 'cast_users'
+type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients' | 'cast_users' | 'settings'
 
 interface AdminUser {
   id: string
@@ -210,6 +210,8 @@ function AdminApp() {
                 const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
                 const [selectedReportDetail, setSelectedReportDetail] = useState<ReportDetail | null>(null)
                 const [loadingReportDetail, setLoadingReportDetail] = useState(false)
+                const [pdfDesign, setPdfDesign] = useState<string>('A')
+                const [savingDesign, setSavingDesign] = useState(false)
 
                 // MVP: Single date navigation (no infinite scroll)
                 const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -449,6 +451,36 @@ function AdminApp() {
             setError(err instanceof Error ? err.message : '更新に失敗しました')
           } finally {
             setSavingClient(false)
+          }
+        }
+
+        const fetchSettings = async () => {
+          try {
+            const response = await fetch('/api/admin/settings', { credentials: 'include' })
+            if (response.ok) {
+              const data = await response.json()
+              if (data.settings?.pdf_design) setPdfDesign(data.settings.pdf_design)
+            }
+          } catch { /* ignore */ }
+        }
+
+        const handleSaveDesign = async (design: string) => {
+          setSavingDesign(true)
+          try {
+            const response = await fetch('/api/admin/settings', {
+              method: 'PUT',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pdf_design: design })
+            })
+            if (response.ok) {
+              const data = await response.json()
+              setPdfDesign(data.settings.pdf_design)
+            }
+          } catch (err) {
+            setError('設定の保存に失敗しました')
+          } finally {
+            setSavingDesign(false)
           }
         }
 
@@ -1000,6 +1032,13 @@ function AdminApp() {
                                       >
                                         <span style={styles.sidebarIcon}>&#127970;</span>
                                         <span style={styles.sidebarText}>会社管理</span>
+                                      </button>
+                                      <button 
+                                        style={screen === 'settings' ? styles.sidebarItemActive : styles.sidebarItem}
+                                        onClick={() => { navigateTo('settings'); fetchSettings(); }}
+                                      >
+                                        <span style={styles.sidebarIcon}>&#9881;</span>
+                                        <span style={styles.sidebarText}>設定</span>
                                       </button>
                                     </nav>
                 </aside>
@@ -2247,6 +2286,60 @@ function AdminApp() {
                             </div>
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Settings */}
+                    {screen === 'settings' && (
+                      <div>
+                        <h2 style={styles.pageTitle}>設定</h2>
+                        <div style={{ background: 'white', borderRadius: '12px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                          <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: COLORS.secondary }}>PDFデザイン選択</h3>
+                          <p style={{ fontSize: '14px', color: COLORS.darkGray, marginBottom: '20px' }}>
+                            報告書PDFのヘッダーデザインを選択してください。選択したデザインが今後のすべてのPDF生成に適用されます。
+                          </p>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                            {[
+                              { key: 'A', name: 'Executive', desc: 'オレンジ全幅ヘッダー＋ネイビーライン', primary: '#C85A17', secondary: '#2B4C7E' },
+                              { key: 'B', name: 'Modern', desc: 'ネイビーヘッダー＋左オレンジアクセント', primary: '#2B4C7E', secondary: '#C85A17' },
+                              { key: 'C', name: 'Corporate', desc: 'ダーク中央配置＋オレンジタイトル', primary: '#1A1A2E', secondary: '#C85A17' },
+                              { key: 'D', name: 'Bold', desc: 'ホワイト背景＋左オレンジバー＋大タイトル', primary: '#C85A17', secondary: '#333333' },
+                              { key: 'E', name: 'Clean', desc: 'ミニマル＋上部オレンジライン', primary: '#C85A17', secondary: '#2B4C7E' },
+                            ].map(d => (
+                              <div
+                                key={d.key}
+                                onClick={() => handleSaveDesign(d.key)}
+                                style={{
+                                  border: pdfDesign === d.key ? `3px solid ${COLORS.primary}` : '2px solid #E0E0E0',
+                                  borderRadius: '10px',
+                                  padding: '0',
+                                  cursor: savingDesign ? 'wait' : 'pointer',
+                                  overflow: 'hidden',
+                                  transition: 'all 0.2s',
+                                  opacity: savingDesign ? 0.6 : 1,
+                                  boxShadow: pdfDesign === d.key ? `0 0 0 2px ${COLORS.primary}40` : 'none',
+                                }}
+                              >
+                                <div style={{ height: '48px', background: d.key === 'C' ? d.primary : d.key === 'E' ? '#FAFAFA' : d.primary, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: d.key === 'C' ? 'center' : 'flex-end', padding: '0 16px' }}>
+                                  {d.key === 'B' && <div style={{ position: 'absolute', left: 0, top: 0, width: '6px', height: '100%', background: d.secondary }} />}
+                                  {d.key === 'D' && <div style={{ position: 'absolute', left: 0, top: 0, width: '6px', height: '100%', background: d.primary, zIndex: 1 }} />}
+                                  {d.key === 'E' && <div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '4px', background: d.primary }} />}
+                                  <span style={{ color: d.key === 'D' ? d.primary : d.key === 'E' ? d.primary : '#FFF', fontSize: '14px', fontWeight: 700 }}>
+                                    警備報告書
+                                  </span>
+                                </div>
+                                <div style={{ padding: '12px 16px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                    <span style={{ fontWeight: 700, fontSize: '15px', color: COLORS.text }}>{d.key}. {d.name}</span>
+                                    {pdfDesign === d.key && <span style={{ background: COLORS.primary, color: '#FFF', fontSize: '11px', padding: '2px 8px', borderRadius: '10px' }}>選択中</span>}
+                                  </div>
+                                  <p style={{ fontSize: '12px', color: COLORS.darkGray, margin: 0 }}>{d.desc}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {savingDesign && <p style={{ marginTop: '12px', color: COLORS.primary, fontSize: '14px' }}>保存中...</p>}
+                        </div>
                       </div>
                     )}
 

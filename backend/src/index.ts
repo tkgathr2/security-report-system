@@ -78,6 +78,12 @@ async function ensureSchema(){
   try {
     await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
     await pool.query('ALTER TABLE projects ADD COLUMN IF NOT EXISTS supervisor_name TEXT');
+    await pool.query(`CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await pool.query(`INSERT INTO app_settings (key, value) VALUES ('pdf_design', 'A') ON CONFLICT (key) DO NOTHING`);
   } catch (e) {
     console.error('[DB] ensureSchema failed:', e);
   }

@@ -777,4 +777,39 @@ router.delete('/reports/:reportId', requireAdmin, async (req: Request, res: Resp
   }
 });
 
+router.get('/settings', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query('SELECT key, value, updated_at FROM app_settings');
+    const settings: Record<string, string> = {};
+    for (const row of result.rows) settings[row.key] = row.value;
+    res.json({ settings });
+  } catch (error) {
+    handleDbError(res, error, 'Settings get');
+  }
+});
+
+router.put('/settings', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { pdf_design } = req.body;
+    const validDesigns = ['A', 'B', 'C', 'D', 'E'];
+    if (pdf_design && !validDesigns.includes(pdf_design)) {
+      sendBadRequest(res, 'デザインはA〜Eから選択してください');
+      return;
+    }
+    if (pdf_design) {
+      await pool.query(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES ('pdf_design', $1, CURRENT_TIMESTAMP)
+         ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
+        [pdf_design]
+      );
+    }
+    const result = await pool.query('SELECT key, value FROM app_settings');
+    const settings: Record<string, string> = {};
+    for (const row of result.rows) settings[row.key] = row.value;
+    res.json({ settings });
+  } catch (error) {
+    handleDbError(res, error, 'Settings update');
+  }
+});
+
 export default router;
