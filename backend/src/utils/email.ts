@@ -94,6 +94,52 @@ export async function sendMagicLinkEmail(email: string, name: string, token: str
   }
 }
 
+export async function sendPinResetEmail(email: string, name: string, token: string, baseUrl: string) {
+  if (!resend) {
+    console.log('RESEND_API_KEY not configured, skipping email');
+    return { success: false, error: 'Email not configured' };
+  }
+
+  const resetUrl = `${baseUrl}/cast/reset-pin?token=${token}`;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: email,
+      subject: `【${APP_NAME}】暗証番号の再設定`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #E67E22;">【${APP_NAME}】暗証番号の再設定</h2>
+          <p>${name} 様</p>
+          <p>暗証番号の再設定リクエストを受け付けました。</p>
+          <p>以下のボタンをクリックして、新しい暗証番号を設定してください。</p>
+          <p style="margin: 30px 0;">
+            <a href="${resetUrl}" 
+               style="display: inline-block; padding: 15px 30px; background: #E67E22; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
+              暗証番号を再設定する
+            </a>
+          </p>
+          <p style="color: #666; font-size: 14px;">
+            このリンクは1時間有効です。<br>
+            心当たりがない場合は、このメールを無視してください。
+          </p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error('Failed to send pin reset email:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('Pin reset email sent:', data);
+    return { success: true, data };
+  } catch (error) {
+    console.error('Email send error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
 export async function sendWelcomeEmail(email: string, name: string, baseUrl: string) {
   if (!resend) {
     console.log('RESEND_API_KEY not configured, skipping email');

@@ -203,12 +203,13 @@ export default function CastLogin() {
         </form>
 
         <div className="cast-links">
+          <a href="/cast/reset-pin">暗証番号を再設定する</a>
           <button 
             type="button" 
             className="cast-link-button"
             onClick={() => setShowMagicLink(true)}
           >
-            暗証番号を忘れた方はこちら
+            メールでログイン
           </button>
           <a href="/cast/register">新規登録</a>
         </div>
