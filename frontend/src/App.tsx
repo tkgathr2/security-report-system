@@ -1760,12 +1760,12 @@ function AdminApp() {
 
                               {selectedReportDetail.signature_png_base64 && (
                                 <div style={{marginBottom: '20px'}}>
-                                  <h4 style={{margin: '0 0 8px', color: '#333'}}>署名</h4>
-                                  <div style={{border: '1px solid #ddd', borderRadius: '8px', padding: '12px', background: '#fafafa', display: 'inline-block'}}>
+                                  <h4 style={{margin: '0 0 12px', color: '#333', fontSize: '16px'}}>署名</h4>
+                                  <div style={{border: '2px solid #ddd', borderRadius: '12px', padding: '20px', background: '#fafafa', textAlign: 'center' as const}}>
                                     <img
                                       src={`data:image/png;base64,${selectedReportDetail.signature_png_base64}`}
                                       alt="署名"
-                                      style={{maxWidth: '300px', maxHeight: '150px'}}
+                                      style={{width: '100%', maxWidth: '500px', height: 'auto', minHeight: '120px'}}
                                     />
                                   </div>
                                 </div>
