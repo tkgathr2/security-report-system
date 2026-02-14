@@ -23,6 +23,7 @@ export default function CastVerify() {
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [staffSuggestions, setStaffSuggestions] = useState<StaffMember[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [error, setError] = useState('');
@@ -71,14 +72,15 @@ export default function CastVerify() {
       });
   }, [token]);
 
-  // Staff search effect
   useEffect(() => {
     const searchStaff = async () => {
       if (nameKana.length < 1) {
         setStaffSuggestions([]);
+        setSearching(false);
         return;
       }
 
+      setSearching(true);
       try {
         const res = await fetch(`${API_BASE}/api/cast/search-staff?q=${encodeURIComponent(nameKana)}`);
         const data = await res.json();
@@ -86,6 +88,8 @@ export default function CastVerify() {
         setShowSuggestions(true);
       } catch (err) {
         console.error('Staff search error:', err);
+      } finally {
+        setSearching(false);
       }
     };
 
@@ -118,12 +122,20 @@ export default function CastVerify() {
     setNameKanji('');
   };
 
+  const handleClearSelection = () => {
+    setNameKana('');
+    setNameKanji('');
+    setSelectedStaffId(null);
+    setStaffSuggestions([]);
+    setShowSuggestions(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     if (!selectedStaffId) {
-      setError('スタッフを選択してください。カナを入力して候補から選んでください。');
+      setError('スタッフを選択してください。名前（カナまたは漢字）を入力して候補から選んでください。');
       return;
     }
 
@@ -197,20 +209,28 @@ export default function CastVerify() {
 
         <form onSubmit={handleSubmit}>
           <div className="cast-input-group" ref={suggestionsRef}>
-            <label htmlFor="nameKana">お名前（カナで検索）</label>
-            <input
-              type="text"
-              id="nameKana"
-              value={nameKana}
-              onChange={(e) => handleKanaChange(e.target.value)}
-              onFocus={() => nameKana.length > 0 && setShowSuggestions(true)}
-              placeholder="カナで入力（例：ヤマダタロウ）"
-              required
-              disabled={verifying}
-              autoComplete="off"
-            />
+            <label htmlFor="nameKana">お名前で検索（カナ・漢字対応）</label>
+            <div className="search-input-wrapper">
+              <span className="search-icon">&#128269;</span>
+              <input
+                type="text"
+                id="nameKana"
+                className="search-input-with-icon"
+                value={nameKana}
+                onChange={(e) => handleKanaChange(e.target.value)}
+                onFocus={() => nameKana.length > 0 && setShowSuggestions(true)}
+                placeholder="名前を入力（例：ヤマダタロウ / 高木）"
+                required
+                disabled={verifying}
+                autoComplete="off"
+              />
+              {searching && <span className="search-spinner" />}
+            </div>
             {showSuggestions && staffSuggestions.length > 0 && (
               <div className="staff-suggestions">
+                <div className="staff-suggestions-count">
+                  {staffSuggestions.length}件見つかりました
+                </div>
                 {staffSuggestions.map((staff) => (
                   <div
                     key={staff.id}
@@ -223,7 +243,7 @@ export default function CastVerify() {
                 ))}
               </div>
             )}
-            {nameKana.length > 0 && staffSuggestions.length === 0 && showSuggestions && (
+            {nameKana.length > 0 && staffSuggestions.length === 0 && showSuggestions && !searching && (
               <div className="staff-suggestions">
                 <div className="staff-suggestion-empty">
                   該当するスタッフが見つかりません
@@ -238,6 +258,14 @@ export default function CastVerify() {
               <div className="selected-staff">
                 <span className="selected-staff-name">{nameKanji}</span>
                 <span className="selected-staff-kana">（{nameKana}）</span>
+                <button
+                  type="button"
+                  className="selected-staff-clear"
+                  onClick={handleClearSelection}
+                  disabled={verifying}
+                >
+                  解除
+                </button>
               </div>
             </div>
           )}
