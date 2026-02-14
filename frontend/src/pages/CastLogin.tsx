@@ -10,8 +10,8 @@ export default function CastLogin() {
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showMagicLink, setShowMagicLink] = useState(false);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [showResetPin, setShowResetPin] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('castToken');
@@ -65,13 +65,13 @@ export default function CastLogin() {
     }
   };
 
-  const handleMagicLink = async (e: React.FormEvent) => {
+  const handleResetPin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const res = await fetch(`${API_BASE}/api/cast/magic-link`, {
+      const res = await fetch(`${API_BASE}/api/cast/reset-pin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -80,14 +80,10 @@ export default function CastLogin() {
       const data = await res.json();
 
       if (!res.ok) {
-        if (data.redirect) {
-          window.location.href = data.redirect;
-          return;
-        }
         throw new Error(data.message || 'メール送信に失敗しました');
       }
 
-      setMagicLinkSent(true);
+      setResetEmailSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'メール送信に失敗しました');
     } finally {
@@ -95,19 +91,19 @@ export default function CastLogin() {
     }
   };
 
-  if (magicLinkSent) {
+  if (resetEmailSent) {
     return (
       <div className="cast-container">
         <div className="cast-card">
           <div className="cast-logo">ほうこちゃん</div>
           <h1>メールを確認してください</h1>
           <p className="cast-message success">
-            {email} にログインリンクを送信しました。<br />
-            メール内のリンクをクリックしてログインしてください。
+            {email} に暗証番号リセット用のメールを送信しました。<br />
+            メール内のリンクをクリックして、新しい暗証番号を設定してください。
           </p>
           <button 
             className="cast-button secondary"
-            onClick={() => { setMagicLinkSent(false); setShowMagicLink(false); }}
+            onClick={() => { setResetEmailSent(false); setShowResetPin(false); }}
           >
             戻る
           </button>
@@ -116,15 +112,15 @@ export default function CastLogin() {
     );
   }
 
-  if (showMagicLink) {
+  if (showResetPin) {
     return (
       <div className="cast-container">
         <div className="cast-card">
           <div className="cast-logo">ほうこちゃん</div>
-          <h1>メールでログイン</h1>
-          <p className="cast-subtitle">メールアドレスにログインリンクを送信します</p>
+          <h1>暗証番号をリセット</h1>
+          <p className="cast-subtitle">登録済みのメールアドレスにリセット用リンクを送信します</p>
 
-          <form onSubmit={handleMagicLink}>
+          <form onSubmit={handleResetPin}>
             <div className="cast-input-group">
               <label htmlFor="email">メールアドレス</label>
               <input
@@ -141,7 +137,7 @@ export default function CastLogin() {
             {error && <p className="cast-message error">{error}</p>}
 
             <button type="submit" className="cast-button" disabled={loading}>
-              {loading ? '送信中...' : 'ログインリンクを送信'}
+              {loading ? '送信中...' : 'リセットメールを送信'}
             </button>
           </form>
 
@@ -149,7 +145,7 @@ export default function CastLogin() {
             <button 
               type="button" 
               className="cast-link-button"
-              onClick={() => setShowMagicLink(false)}
+              onClick={() => setShowResetPin(false)}
             >
               暗証番号でログイン
             </button>
@@ -206,7 +202,7 @@ export default function CastLogin() {
           <button 
             type="button" 
             className="cast-link-button"
-            onClick={() => setShowMagicLink(true)}
+            onClick={() => setShowResetPin(true)}
           >
             暗証番号を忘れた方はこちら
           </button>

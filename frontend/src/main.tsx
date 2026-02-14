@@ -8,6 +8,7 @@ import CastVerify from './pages/CastVerify'
 import CastLogin from './pages/CastLogin'
 import CastToday from './pages/CastToday'
 import CastMagic from './pages/CastMagic'
+import CastResetPin from './pages/CastResetPin'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -20,6 +21,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/cast/login" element={<CastLogin />} />
         <Route path="/cast/today" element={<CastToday />} />
         <Route path="/cast/magic" element={<CastMagic />} />
+        <Route path="/cast/reset-pin" element={<CastResetPin />} />
         <Route path="/*" element={<App />} />
       </Routes>
     </BrowserRouter>

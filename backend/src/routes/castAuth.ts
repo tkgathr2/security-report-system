@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import pool from '../db/pool';
-import { sendVerificationEmail, sendMagicLinkEmail, sendWelcomeEmail } from '../utils/email';
+import { sendVerificationEmail, sendMagicLinkEmail, sendPinResetEmail, sendWelcomeEmail } from '../utils/email';
 
 const router = Router();
 
@@ -458,6 +458,117 @@ router.get('/search-staff', async (req: Request, res: Response) => {
     res.json({ staff: result.rows });
   } catch (error) {
     console.error('Search staff error:', error);
+    res.status(500).json({ message: 'エラーが発生しました' });
+  }
+});
+
+// Request PIN reset
+router.post('/reset-pin', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'メールアドレスを入力してください' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const result = await pool.query(
+      `SELECT id, email, name, email_verified FROM cast_users WHERE email = $1`,
+      [normalizedEmail]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].email_verified) {
+      return res.json({ message: 'メールアドレスが登録されている場合、リセット用のメールを送信しました' });
+    }
+
+    const user = result.rows[0];
+    const token = generateToken();
+    const tokenExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await pool.query(
+      `UPDATE cast_users SET verification_token = $1, verification_token_expires = $2 WHERE id = $3`,
+      [token, tokenExpires, user.id]
+    );
+
+    const baseUrl = getBaseUrl(req);
+    const emailResult = await sendPinResetEmail(user.email, user.name || '', token, baseUrl);
+
+    if (!emailResult.success) {
+      console.error('Failed to send pin reset email:', emailResult.error);
+      return res.status(500).json({ message: 'メール送信に失敗しました' });
+    }
+
+    res.json({ message: 'メールアドレスが登録されている場合、リセット用のメールを送信しました' });
+  } catch (error) {
+    console.error('Pin reset request error:', error);
+    res.status(500).json({ message: 'エラーが発生しました' });
+  }
+});
+
+// Verify PIN reset token
+router.post('/reset-pin/verify', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ valid: false, message: '無効なリンクです' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, email, name FROM cast_users 
+       WHERE verification_token = $1 AND verification_token_expires > NOW() AND email_verified = true`,
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ valid: false, message: 'リンクが無効または期限切れです' });
+    }
+
+    const user = result.rows[0];
+    res.json({ valid: true, email: user.email, name: user.name });
+  } catch (error) {
+    console.error('Pin reset verify error:', error);
+    res.status(500).json({ valid: false, message: 'エラーが発生しました' });
+  }
+});
+
+// Confirm PIN reset (set new PIN)
+router.post('/reset-pin/confirm', async (req: Request, res: Response) => {
+  try {
+    const { token, pin } = req.body;
+
+    if (!token || !pin) {
+      return res.status(400).json({ message: '必要な情報が不足しています' });
+    }
+
+    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ message: '暗証番号は4桁の数字で入力してください' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, email, name FROM cast_users 
+       WHERE verification_token = $1 AND verification_token_expires > NOW() AND email_verified = true`,
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ message: 'リンクが無効または期限切れです。再度リセットをお試しください' });
+    }
+
+    const user = result.rows[0];
+    const pinHash = await bcrypt.hash(pin, 10);
+
+    await pool.query(
+      `UPDATE cast_users 
+       SET pin_hash = $1, verification_token = NULL, verification_token_expires = NULL, updated_at = NOW()
+       WHERE id = $2`,
+      [pinHash, user.id]
+    );
+
+    res.json({ message: '暗証番号を再設定しました。新しい暗証番号でログインしてください' });
+  } catch (error) {
+    console.error('Pin reset confirm error:', error);
     res.status(500).json({ message: 'エラーが発生しました' });
   }
 });
