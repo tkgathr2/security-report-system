@@ -913,7 +913,8 @@ function AdminApp() {
     return (
       member.display_name_kanji.toLowerCase().includes(query) ||
       member.display_name_kana.toLowerCase().includes(query) ||
-      (member.email && member.email.toLowerCase().includes(query))
+      (member.email && member.email.toLowerCase().includes(query)) ||
+      (member.registered_email && member.registered_email.toLowerCase().includes(query))
     )
   })
 
@@ -1889,7 +1890,7 @@ function AdminApp() {
                                                                   <div style={styles.mobileCardRow}>
                                                                     <button 
                                                                       style={styles.primaryButton}
-                                                                      onClick={() => setEditingStaff(member)}
+                                                                      onClick={() => setEditingStaff({ ...member, email: member.registered_email || member.email })}
                                                                     >
                                                                       編集
                                                                     </button>
@@ -1921,7 +1922,7 @@ function AdminApp() {
                                                                       <td style={styles.td}>
                                                                         <button 
                                                                           style={styles.primaryButton}
-                                                                          onClick={() => setEditingStaff(member)}
+                                                                          onClick={() => setEditingStaff({ ...member, email: member.registered_email || member.email })}
                                                                         >
                                                                           編集
                                                                         </button>
