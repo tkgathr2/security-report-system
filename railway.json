@@ -5,7 +5,7 @@
     "buildCommand": "cd frontend && npm install && npm run build && cp -r dist ../backend/frontend-dist && cd ../backend && npm install && npx tsc"
   },
   "deploy": {
-    "startCommand": "cd backend && npm run migrate:up && npm start",
+    "startCommand": "cd backend && (npm run migrate:up || true) && npm start",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 60,
     "restartPolicyType": "ON_FAILURE",
