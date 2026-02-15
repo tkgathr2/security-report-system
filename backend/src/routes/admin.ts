@@ -453,6 +453,13 @@ router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => 
       .filter(Boolean)
       .map((e) => String(e).trim().toLowerCase());
 
+    if (contact_email) {
+      const normalizedContactEmail = contact_email.trim().toLowerCase();
+      if (!normalizedEmails.includes(normalizedContactEmail)) {
+        normalizedEmails.push(normalizedContactEmail);
+      }
+    }
+
     const nameNormalized = name
       .replace(/[（）\(\)]/g, '')
       .replace(/[\s　]+/g, '')
