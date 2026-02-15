@@ -91,7 +91,7 @@ export async function sendSlackNotification(notification: SlackNotification): Pr
             text: `<!channel>\n*【デジタル警備報告書システム ほうこちゃん】報告書承認通知*\n\n` +
               `*会社名:* ${notification.companyName}\n` +
               `*実施日:* ${notification.workDate}\n` +
-              `*案件名:* ${notification.projectName}\n` +
+              `*作業名称:* ${notification.projectName}\n` +
               (notification.location ? `*実施場所:* ${notification.location}\n` : '') +
               (notification.writerName ? `*報告者:* ${notification.writerName}\n` : '') +
               `*報告書ID:* ${notification.reportId}` +
@@ -238,17 +238,16 @@ export async function sendReportApprovalNotifications(params: {
     slackSent = true;
   }
 
-  const recipientParts: string[] = [params.companyName];
+  const contactParts: string[] = [];
   if (params.contactName) {
-    recipientParts.push(params.contactName);
+    contactParts.push(params.contactName);
   }
   if (params.contactTitle) {
-    recipientParts.push(params.contactTitle);
+    contactParts.push(params.contactTitle);
   }
-  const recipientLabel = recipientParts.join(' ');
+  const contactLine = contactParts.length > 0 ? contactParts.join(' ') : '';
 
   const detailItems: string[] = [
-    `案件名: ${params.projectName}`,
     `実施日: ${params.workDate}`,
   ];
   if (params.location) {
@@ -257,15 +256,16 @@ export async function sendReportApprovalNotifications(params: {
   if (params.clientAddress) {
     detailItems.push(`住所: ${params.clientAddress}`);
   }
+  detailItems.push(`作業名称: ${params.projectName}`);
 
   const emailResult = await sendEmail({
     to: params.clientEmails,
     subject: `【デジタル警備報告書システム ほうこちゃん】警備報告書 ${params.projectName} (${params.workDate})`,
-    text: `${recipientLabel} 様\n\n` +
+    text: `${params.companyName}\n${contactLine ? contactLine + ' ' : ''}様\n\n` +
       `デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。\n\n` +
       detailItems.join('\n') + `\n\n` +
       `添付のPDFファイルをご確認ください。`,
-    html: `<p>${recipientLabel} 様</p>` +
+    html: `<p>${params.companyName}<br>${contactLine ? contactLine + ' ' : ''}様</p>` +
       `<p>デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。</p>` +
       `<ul>` +
       detailItems.map(item => `<li>${item}</li>`).join('') +
@@ -286,7 +286,7 @@ export async function sendReportApprovalNotifications(params: {
       text: `${params.writerName} 様\n\n` +
         `お仕事お疲れ様でした。\n` +
         `報告書が正常に送信されました。\n\n` +
-        `案件名: ${params.projectName}\n` +
+        `作業名称: ${params.projectName}\n` +
         `実施日: ${params.workDate}\n` +
         `実施場所: ${params.location}\n` +
         `監督者: ${params.supervisorName}\n\n` +
@@ -295,7 +295,7 @@ export async function sendReportApprovalNotifications(params: {
         `<p><strong>お仕事お疲れ様でした。</strong></p>` +
         `<p>報告書が正常に送信されました。</p>` +
         `<ul>` +
-        `<li>案件名: ${params.projectName}</li>` +
+        `<li>作業名称: ${params.projectName}</li>` +
         `<li>実施日: ${params.workDate}</li>` +
         `<li>実施場所: ${params.location}</li>` +
         `<li>監督者: ${params.supervisorName}</li>` +
@@ -303,7 +303,7 @@ export async function sendReportApprovalNotifications(params: {
         `<p>添付のPDFファイルをご確認ください。</p>`,
       attachments
     });
-    castEmailSent = castResult.success;
+    castEmailSent= castResult.success;
     if (!castResult.success) {
       warnings.push(`キャストメール送信失敗: ${castResult.error}`);
     }
@@ -317,7 +317,7 @@ export async function sendReportApprovalNotifications(params: {
       text: `管理者様\n\n` +
         `新しい報告書が提出されました。\n\n` +
         `会社名: ${params.companyName}\n` +
-        `案件名: ${params.projectName}\n` +
+        `作業名称: ${params.projectName}\n` +
         `実施日: ${params.workDate}\n` +
         `実施場所: ${params.location}\n` +
         `監督者: ${params.supervisorName}\n` +
@@ -328,7 +328,7 @@ export async function sendReportApprovalNotifications(params: {
         `<p><strong>新しい報告書が提出されました。</strong></p>` +
         `<ul>` +
         `<li>会社名: ${params.companyName}</li>` +
-        `<li>案件名: ${params.projectName}</li>` +
+        `<li>作業名称: ${params.projectName}</li>` +
         `<li>実施日: ${params.workDate}</li>` +
         `<li>実施場所: ${params.location}</li>` +
         `<li>監督者: ${params.supervisorName}</li>` +
