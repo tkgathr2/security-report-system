@@ -36,7 +36,7 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
               p.qualifier_hint, p.unique_url, p.url_expires_at, p.status, p.supervisor_name, p.created_at, p.updated_at
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
-       WHERE p.unique_url = $1`,
+       WHERE p.unique_url = $1 AND p.deleted_at IS NULL`,
       [unique_url]
     );
 
@@ -49,7 +49,7 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
 
     // Check if report already exists for this project
     const existingReportResult = await pool.query(
-      'SELECT id FROM reports WHERE project_id = $1',
+      'SELECT id FROM reports WHERE project_id = $1 AND deleted_at IS NULL',
       [project.id]
     );
 
@@ -65,8 +65,8 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     const castsResult = await pool.query(
       `SELECT pc.staff_no, sm.display_name_kanji as cast_name
        FROM project_casts pc
-       LEFT JOIN staff_master sm ON pc.staff_id = sm.id
-       WHERE pc.project_id = $1 ORDER BY pc.row_index`,
+       LEFT JOIN staff_master sm ON pc.staff_id = sm.id AND sm.deleted_at IS NULL
+       WHERE pc.project_id = $1 AND pc.deleted_at IS NULL ORDER BY pc.row_index`,
       [project.id]
     );
     const casts = castsResult.rows;
@@ -119,7 +119,7 @@ router.post('/test/create', async (req: Request, res: Response) => {
     if (client_email) {
       // First try to find existing client
       const existingClient = await pool.query(
-        `SELECT id FROM clients WHERE name = $1`,
+        `SELECT id FROM clients WHERE name = $1 AND deleted_at IS NULL`,
         ['テスト株式会社']
       );
       

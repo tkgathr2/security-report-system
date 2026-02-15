@@ -21,7 +21,7 @@ router.put('/:project_unique_url', authenticateCast, async (req: Request, res: R
     }
 
     const projectResult = await pool.query(
-      'SELECT id FROM projects WHERE unique_url = $1',
+      'SELECT id FROM projects WHERE unique_url = $1 AND deleted_at IS NULL',
       [project_unique_url]
     );
 
@@ -116,7 +116,7 @@ router.get('/:project_unique_url', authenticateCast, async (req: Request, res: R
     const castUserId = (req as AuthenticatedCastRequest).castUser.userId;
 
     const projectResult = await pool.query(
-      'SELECT id FROM projects WHERE unique_url = $1',
+      'SELECT id FROM projects WHERE unique_url = $1 AND deleted_at IS NULL',
       [project_unique_url]
     );
 

@@ -38,7 +38,7 @@ router.get('/search', authenticateCast, async (req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT id, display_name_kanji, display_name_kana 
        FROM staff_master 
-       WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), '　', '') ILIKE $1
+       WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), '　', '') ILIKE $1 AND deleted_at IS NULL
        ORDER BY display_name_kana
        LIMIT 20`,
       [`%${normalizedQuery}%`]
@@ -74,7 +74,7 @@ router.post('/select', authenticateCast, async (req: Request, res: Response) => 
     }
 
     const staffResult = await pool.query(
-      'SELECT id, display_name_kanji FROM staff_master WHERE id = $1',
+      'SELECT id, display_name_kanji FROM staff_master WHERE id = $1 AND deleted_at IS NULL',
       [staff_id]
     );
 
@@ -89,7 +89,7 @@ router.post('/select', authenticateCast, async (req: Request, res: Response) => 
     await pool.query(
       `UPDATE cast_users 
        SET staff_id = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2`,
+       WHERE id = $2 AND deleted_at IS NULL`,
       [staff_id, castUser.userId]
     );
 
@@ -114,8 +114,8 @@ router.get('/me', authenticateCast, async (req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT cu.staff_id, sm.display_name_kanji as staff_name
        FROM cast_users cu
-       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.id = $1`,
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id AND sm.deleted_at IS NULL
+       WHERE cu.id = $1 AND cu.deleted_at IS NULL`,
       [castUser.userId]
     );
 

@@ -370,13 +370,13 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
       try {
         if (!projectMap.has(projectKey)) {
           const existingProject = await pool.query(
-            'SELECT id FROM projects WHERE project_key = $1',
+            'SELECT id FROM projects WHERE project_key = $1 AND deleted_at IS NULL',
             [projectKey]
           );
 
           if (existingProject.rows.length > 0) {
             const existingCasts = await pool.query(
-              'SELECT staff_no FROM project_casts WHERE project_id = $1',
+              'SELECT staff_no FROM project_casts WHERE project_id = $1 AND deleted_at IS NULL',
               [existingProject.rows[0].id]
             );
             const castSet = new Set(existingCasts.rows.map((c: { staff_no: string }) => c.staff_no));
@@ -385,7 +385,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
           } else {
             const clientNameNormalized = normalizeClientName(validClientNameRaw);
             const clientResult = await pool.query(
-              'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true',
+              'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true AND deleted_at IS NULL',
               [clientNameNormalized]
             );
 
@@ -405,7 +405,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                 clientAutoCreatedCount++;
               } else {
                 const retryResult = await pool.query(
-                  'SELECT id FROM clients WHERE name_normalized = $1',
+                  'SELECT id FROM clients WHERE name_normalized = $1 AND deleted_at IS NULL',
                   [clientNameNormalized]
                 );
                 clientId = retryResult.rows.length > 0 ? retryResult.rows[0].id : null;
@@ -472,12 +472,14 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
             if (!castDateAssignments.has(castDateKey) || castDateAssignments.get(castDateKey) === workName) {
               if (!projectInfo.casts.has(castIdentifier)) {
                 const existingAssignment = await pool.query(
-                  `SELECT p.work_name FROM project_casts pc
-                   JOIN projects p ON pc.project_id = p.id
-                   LEFT JOIN staff_master sm ON pc.staff_id = sm.id
-                   WHERE REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
-                     AND p.work_date = $2
-                     AND p.id != $3`,
+                                    `SELECT p.work_name FROM project_casts pc
+                                     JOIN projects p ON pc.project_id = p.id
+                                     LEFT JOIN staff_master sm ON pc.staff_id = sm.id AND sm.deleted_at IS NULL
+                                     WHERE REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
+                                       AND p.work_date = $2
+                                       AND p.id != $3
+                                       AND pc.deleted_at IS NULL
+                                       AND p.deleted_at IS NULL`,
                   [castName, workDate, projectInfo.projectId]
                 );
                 if (existingAssignment.rows.length > 0) {
@@ -485,7 +487,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                   duplicateCastAssignments++;
                 } else {
                   const staffIdRow = await pool.query(
-                    `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') LIMIT 1`,
+                    `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
                     [castName]
                   );
                   await pool.query(
@@ -504,7 +506,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
               processedStaffKana.add(staffKanaKey);
               try {
                 const existingStaff = await pool.query(
-                  'SELECT id FROM staff_master WHERE display_name_kana = $1',
+                  'SELECT id FROM staff_master WHERE display_name_kana = $1 AND deleted_at IS NULL',
                   [staffKanaKey]
                 );
 
@@ -602,9 +604,10 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     const kanaList = Array.from(processedStaffKana);
     const placeholders = kanaList.map((_, i) => `$${i + 1}`).join(', ');
     const noEmailResult = await pool.query(
-      `SELECT sm.display_name_kanji FROM staff_master sm
-       LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true
-       WHERE sm.display_name_kana IN (${placeholders})
+            `SELECT sm.display_name_kanji FROM staff_master sm
+             LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true AND cu.deleted_at IS NULL
+             WHERE sm.display_name_kana IN (${placeholders})
+         AND sm.deleted_at IS NULL
          AND cu.id IS NULL`,
       kanaList
     );
@@ -680,7 +683,7 @@ router.get('/imports/:id/projects', requireAdminAuth, async (req: Request, res: 
               p.status, p.unique_url, p.url_expires_at, p.created_at
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
-       WHERE p.created_at >= $1 AND p.created_at <= $2
+       WHERE p.created_at >= $1 AND p.created_at <= $2 AND p.deleted_at IS NULL
        ORDER BY p.work_date DESC, p.created_at DESC`,
       [startTime, endTime]
     );

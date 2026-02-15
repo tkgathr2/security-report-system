@@ -124,7 +124,7 @@ router.post('/:reportId/pdf/generate', requireAdmin, async (req: Request, res: R
   try {
     // Get report data
     const reportResult = await pool.query(
-      'SELECT * FROM reports WHERE id = $1',
+      'SELECT * FROM reports WHERE id = $1 AND deleted_at IS NULL',
       [reportId]
     );
 
@@ -215,7 +215,7 @@ router.get('/:reportId/pdf', requireAdmin, async (req: Request, res: Response) =
 
   try {
     const result = await pool.query(
-      'SELECT pdf_bytes, pdf_generation_status FROM reports WHERE id = $1',
+      'SELECT pdf_bytes, pdf_generation_status FROM reports WHERE id = $1 AND deleted_at IS NULL',
       [reportId]
     );
 
@@ -268,7 +268,7 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
        JOIN projects p ON r.project_id = p.id 
        LEFT JOIN clients c ON p.client_id = c.id 
        LEFT JOIN staff_master sm ON r.writer_staff_id = sm.id
-       WHERE r.id = $1`,
+       WHERE r.id = $1 AND r.deleted_at IS NULL`,
       [reportId]
     );
 
