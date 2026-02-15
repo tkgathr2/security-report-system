@@ -87,7 +87,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     }
 
     const projectResult = await pool.query(
-      `SELECT p.id, p.status, p.url_expires_at, p.client_name_raw, p.work_date, p.work_title_raw,
+      `SELECT p.id, p.status, p.url_expires_at, c.name as client_name_raw, p.work_date, p.work_title_raw,
               p.location, p.work_name, c.emails as client_emails
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
@@ -125,14 +125,14 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     let resolvedWriterName = writer_name || '';
     if (!resolvedWriterName) {
       const castUserResult = await pool.query(
-        `SELECT cu.selected_name_kanji, sm.display_name_kanji
+        `SELECT sm.display_name_kanji
          FROM cast_users cu
          LEFT JOIN staff_master sm ON cu.staff_id = sm.id
          WHERE cu.id = $1`,
         [castUser.userId]
       );
       if (castUserResult.rows.length > 0) {
-        resolvedWriterName = castUserResult.rows[0].selected_name_kanji || castUserResult.rows[0].display_name_kanji || castUser.email;
+        resolvedWriterName = castUserResult.rows[0].display_name_kanji || castUser.email;
       } else {
         resolvedWriterName = castUser.email;
       }
@@ -148,7 +148,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     const initialPdfBuffer = generateDummyPdf();
     const reportResult = await pool.query(
       `INSERT INTO reports (
-        project_id, cast_user_id, supervisor_name, writer_name, weather,
+        project_id, cast_user_id, supervisor_name, writer_staff_id, weather,
         guard_contents, guard_other_text, overtime_hours, has_qualifier, qualifier_name,
         signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
@@ -157,7 +157,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         project.id,
         castUser.userId,
         supervisor_name || '',
-        resolvedWriterName,
+        (await (async () => { const r = await pool.query('SELECT staff_id FROM cast_users WHERE id = $1',[castUser.userId]); return r.rows[0]?.staff_id || null; })()),
         weather || 'sunny',
         guard_contents,
         guard_other_text || null,

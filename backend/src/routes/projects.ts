@@ -31,11 +31,12 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     const { unique_url } = req.params;
 
     const result = await pool.query(
-      `SELECT id, project_key, client_id, client_name_raw, work_date, work_name, 
-              location, start_time, end_time, break_time, work_title_raw, 
-              qualifier_hint, unique_url, url_expires_at, status, supervisor_name, created_at, updated_at
-       FROM projects 
-       WHERE unique_url = $1`,
+      `SELECT p.id, p.project_key, p.client_id, c.name as client_name_raw, p.work_date, p.work_name, 
+              p.location, p.start_time, p.end_time, p.break_time, p.work_title_raw, 
+              p.qualifier_hint, p.unique_url, p.url_expires_at, p.status, p.supervisor_name, p.created_at, p.updated_at
+       FROM projects p
+       LEFT JOIN clients c ON p.client_id = c.id
+       WHERE p.unique_url = $1`,
       [unique_url]
     );
 
@@ -62,7 +63,10 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     }
 
     const castsResult = await pool.query(
-      `SELECT staff_no, cast_name FROM project_casts WHERE project_id = $1 ORDER BY row_index`,
+      `SELECT pc.staff_no, sm.display_name_kanji as cast_name
+       FROM project_casts pc
+       LEFT JOIN staff_master sm ON pc.staff_id = sm.id
+       WHERE pc.project_id = $1 ORDER BY pc.row_index`,
       [project.id]
     );
     const casts = castsResult.rows;

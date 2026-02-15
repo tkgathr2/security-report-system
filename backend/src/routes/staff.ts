@@ -88,9 +88,9 @@ router.post('/select', authenticateCast, async (req: Request, res: Response) => 
 
     await pool.query(
       `UPDATE cast_users 
-       SET selected_staff_id = $1, selected_name_kanji = $2, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3`,
-      [staff_id, staff_name_kanji, castUser.userId]
+       SET staff_id = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [staff_id, castUser.userId]
     );
 
     res.json({
@@ -112,7 +112,10 @@ router.get('/me', authenticateCast, async (req: Request, res: Response) => {
     const castUser = (req as AuthenticatedCastRequest).castUser;
 
     const result = await pool.query(
-      `SELECT selected_staff_id, selected_name_kanji FROM cast_users WHERE id = $1`,
+      `SELECT cu.staff_id, sm.display_name_kanji as staff_name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.id = $1`,
       [castUser.userId]
     );
 
@@ -126,9 +129,9 @@ router.get('/me', authenticateCast, async (req: Request, res: Response) => {
 
     const user = result.rows[0];
     res.json({
-      selectedStaffId: user.selected_staff_id,
-      selectedNameKanji: user.selected_name_kanji,
-      hasSelectedName: !!user.selected_staff_id
+      selectedStaffId: user.staff_id,
+      selectedNameKanji: user.staff_name,
+      hasSelectedName: !!user.staff_id
     });
   } catch (error) {
     console.error('Get user info error:', error);
