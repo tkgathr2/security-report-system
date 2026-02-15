@@ -91,13 +91,14 @@ exports.up = async (pgm) => {
 
   // Create client entries for unmatched projects
   pgm.sql(`
-    INSERT INTO clients (name, name_normalized, is_active)
+    INSERT INTO clients (name, name_normalized, emails, is_active)
     SELECT DISTINCT p.client_name_raw,
            LOWER(REGEXP_REPLACE(
              REGEXP_REPLACE(
                REGEXP_REPLACE(p.client_name_raw, '[（）()]', '', 'g'),
              '[\\s　]+', '', 'g'),
            '株式会社|有限会社|合同会社', '', 'g')),
+           '{}'::text[],
            true
     FROM projects p
     WHERE p.client_id IS NULL
