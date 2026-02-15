@@ -70,7 +70,10 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // Check if user already exists
     const existingUser = await pool.query(
-      'SELECT id, email_verified, name FROM cast_users WHERE email = $1',
+      `SELECT cu.id, cu.email_verified, cu.staff_id, sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.email = $1`,
       [normalizedEmail]
     );
 
@@ -132,8 +135,10 @@ router.post('/verify', async (req: Request, res: Response) => {
 
     // Find user by token
     const result = await pool.query(
-      `SELECT id, email, name FROM cast_users 
-       WHERE verification_token = $1 AND verification_token_expires > NOW()`,
+      `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.verification_token = $1 AND cu.verification_token_expires > NOW()`,
       [token]
     );
 
@@ -163,11 +168,11 @@ router.post('/verify', async (req: Request, res: Response) => {
 
       await pool.query(
         `UPDATE cast_users 
-         SET name = $1, pin_hash = $2, email_verified = true, staff_id = $3,
+         SET pin_hash = $1, email_verified = true, staff_id = $2,
              verification_token = NULL, verification_token_expires = NULL,
              updated_at = NOW()
-         WHERE id = $4`,
-        [name.trim(), pinHash, staffId, user.id]
+         WHERE id = $3`,
+        [pinHash, staffId, user.id]
       );
 
       // Send welcome email
@@ -212,7 +217,11 @@ router.post('/login', async (req: Request, res: Response) => {
     const normalizedEmail = email.toLowerCase().trim();
 
     const result = await pool.query(
-      `SELECT id, email, name, pin_hash, email_verified FROM cast_users WHERE email = $1`,
+      `SELECT cu.id, cu.email, cu.pin_hash, cu.email_verified, cu.staff_id,
+              sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.email = $1`,
       [normalizedEmail]
     );
 
@@ -265,7 +274,11 @@ router.post('/magic-link', async (req: Request, res: Response) => {
     const normalizedEmail = email.toLowerCase().trim();
 
     const result = await pool.query(
-      `SELECT id, email, name, email_verified FROM cast_users WHERE email = $1`,
+      `SELECT cu.id, cu.email, cu.email_verified, cu.staff_id,
+              sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.email = $1`,
       [normalizedEmail]
     );
 
@@ -286,7 +299,7 @@ router.post('/magic-link', async (req: Request, res: Response) => {
     );
 
     const baseUrl = getBaseUrl(req);
-    const emailResult = await sendMagicLinkEmail(user.email, user.name, token, baseUrl);
+    const emailResult = await sendMagicLinkEmail(user.email, user.name || '', token, baseUrl);
 
     if (!emailResult.success) {
       return res.status(500).json({ message: 'メール送信に失敗しました' });
@@ -309,8 +322,10 @@ router.get('/magic', async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      `SELECT id, email, name FROM cast_users 
-       WHERE magic_link_token = $1 AND magic_link_expires > NOW()`,
+      `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW()`,
       [token]
     );
 
@@ -350,8 +365,10 @@ router.get('/me', async (req: Request, res: Response) => {
     const token = authHeader.substring(7);
 
     const result = await pool.query(
-      `SELECT id, email, name FROM cast_users 
-       WHERE magic_link_token = $1 AND magic_link_expires > NOW()`,
+      `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW()`,
       [token]
     );
 
@@ -379,7 +396,7 @@ router.get('/today', async (req: Request, res: Response) => {
 
     // Get user with staff info
     const userResult = await pool.query(
-      `SELECT cu.id, cu.email, cu.name, cu.staff_id, sm.display_name_kanji as staff_name
+      `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as staff_name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
        WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW()`,
@@ -397,27 +414,27 @@ router.get('/today', async (req: Request, res: Response) => {
       ? dateParam
       : new Date().toISOString().split('T')[0];
 
-    // Use staff_name from staff_master if available, otherwise use cast_users.name
-    const matchName = user.staff_name || user.name;
+    const matchName = user.staff_name || '';
 
     const normalizedMatchName = normalizeKanjiVariants(matchName);
 
     const projectsResult = await pool.query(
-      `SELECT DISTINCT p.id, p.project_key, p.client_name_raw, p.work_date, p.work_name, 
+      `SELECT DISTINCT p.id, p.project_key, p.work_date, p.work_name, 
               p.location, p.status, p.unique_url, p.url_expires_at,
               c.name as client_name
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN project_casts pc ON p.id = pc.project_id
+       LEFT JOIN staff_master sm2 ON pc.staff_id = sm2.id
        WHERE p.work_date = $1
          AND p.status = 'active'
          AND (
-           pc.cast_name = $2
-           OR REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($2, ' ', ''), E'\\u3000', '')
-           OR TRANSLATE(REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', ''), E'\\u9AD9\\uFA11\\u5861\\u6FA4\\u9F8D\\u5EE3\\u6AFB\\u7027\\u90DE\\u9F4B\\u83EF\\u5B78', E'\\u9AD8\\u5D0E\\u5D0E\\u6CA2\\u7ADC\\u5E83\\u685C\\u6EDD\\u90CE\\u658E\\u82B1\\u5B66') = $3
+           pc.staff_id = $2
+           OR REPLACE(REPLACE(sm2.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($3, ' ', ''), E'\\u3000', '')
+           OR TRANSLATE(REPLACE(REPLACE(sm2.display_name_kanji, ' ', ''), E'\\u3000', ''), E'\\u9AD9\\uFA11\\u5861\\u6FA4\\u9F8D\\u5EE3\\u6AFB\\u7027\\u90DE\\u9F4B\\u83EF\\u5B78', E'\\u9AD8\\u5D0E\\u5D0E\\u6CA2\\u7ADC\\u5E83\\u685C\\u6EDD\\u90CE\\u658E\\u82B1\\u5B66') = $4
          )
        ORDER BY p.work_date, p.work_name`,
-      [today, matchName, normalizedMatchName]
+     [today, user.staff_id, matchName, normalizedMatchName]
     );
 
     res.json({ 
@@ -482,7 +499,11 @@ router.post('/reset-pin', async (req: Request, res: Response) => {
     const normalizedEmail = email.toLowerCase().trim();
 
     const result = await pool.query(
-      `SELECT id, email, name, email_verified FROM cast_users WHERE email = $1`,
+      `SELECT cu.id, cu.email, cu.email_verified, cu.staff_id,
+              sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.email = $1`,
       [normalizedEmail]
     );
 
@@ -500,7 +521,7 @@ router.post('/reset-pin', async (req: Request, res: Response) => {
     );
 
     const baseUrl = getBaseUrl(req);
-    const emailResult = await sendPinResetEmail(user.email, user.name, token, baseUrl);
+    const emailResult = await sendPinResetEmail(user.email, user.name || '', token, baseUrl);
 
     if (!emailResult.success) {
       return res.status(500).json({ message: 'メール送信に失敗しました' });
@@ -523,8 +544,10 @@ router.get('/reset-pin/verify', async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      `SELECT id, email, name FROM cast_users 
-       WHERE pin_reset_token = $1 AND pin_reset_token_expires > NOW()`,
+      `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.pin_reset_token = $1 AND cu.pin_reset_token_expires > NOW()`,
       [token]
     );
 
@@ -554,8 +577,10 @@ router.post('/reset-pin/confirm', async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      `SELECT id, email, name FROM cast_users 
-       WHERE pin_reset_token = $1 AND pin_reset_token_expires > NOW()`,
+      `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.pin_reset_token = $1 AND cu.pin_reset_token_expires > NOW()`,
       [token]
     );
 

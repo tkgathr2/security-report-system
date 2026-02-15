@@ -402,13 +402,13 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
 
             const insertResult = await pool.query(
               `INSERT INTO projects (
-                project_key, client_id, client_name_raw, work_date, work_name, location,
+                project_key, client_id, work_date, work_name, location,
                 start_time, end_time, break_time, work_title_raw, qualifier_hint,
                 unique_url, url_expires_at, status, supervisor_name
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
               RETURNING id`,
               [
-                projectKey, clientId, validClientNameRaw, workDate, workName, validLocation,
+                projectKey, clientId, workDate, workName, validLocation,
                 startTime, endTime, breakTime, validProjectName, qualifierHint,
                 uniqueUrl, urlExpiresAt, status, supervisorName
               ]
@@ -454,7 +454,8 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                 const existingAssignment = await pool.query(
                   `SELECT p.work_name FROM project_casts pc
                    JOIN projects p ON pc.project_id = p.id
-                   WHERE REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
+                   LEFT JOIN staff_master sm ON pc.staff_id = sm.id
+                   WHERE REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
                      AND p.work_date = $2
                      AND p.id != $3`,
                   [castName, workDate, projectInfo.projectId]
@@ -463,11 +464,15 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                   errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingAssignment.rows[0].work_name}」に割り当て済みです（1日1現場まで）` });
                   duplicateCastAssignments++;
                 } else {
+                  const staffIdRow = await pool.query(
+                    `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') LIMIT 1`,
+                    [castName]
+                  );
                   await pool.query(
-                    `INSERT INTO project_casts (project_id, staff_no, cast_name, row_index)
+                    `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index)
                      VALUES ($1, $2, $3, $4)
                      ON CONFLICT (project_id, staff_no) DO NOTHING`,
-                    [projectInfo.projectId, castIdentifier, castName, i]
+                    [projectInfo.projectId, castIdentifier, staffIdRow.rows[0]?.id || null, i]
                   );
                   projectInfo.casts.add(castIdentifier);
                 }
@@ -650,11 +655,12 @@ router.get('/imports/:id/projects', requireAdminAuth, async (req: Request, res: 
     const endTime = new Date(importTime.getTime() + 60000);
 
     const projectsResult = await pool.query(
-      `SELECT id, project_key, client_name_raw, work_date, work_name, location, 
-              status, unique_url, url_expires_at, created_at
-       FROM projects
-       WHERE created_at >= $1 AND created_at <= $2
-       ORDER BY work_date DESC, created_at DESC`,
+      `SELECT p.id, p.project_key, c.name as client_name_raw, p.work_date, p.work_name, p.location, 
+              p.status, p.unique_url, p.url_expires_at, p.created_at
+       FROM projects p
+       LEFT JOIN clients c ON p.client_id = c.id
+       WHERE p.created_at >= $1 AND p.created_at <= $2
+       ORDER BY p.work_date DESC, p.created_at DESC`,
       [startTime, endTime]
     );
 

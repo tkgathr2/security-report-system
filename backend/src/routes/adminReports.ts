@@ -141,7 +141,10 @@ router.post('/:reportId/pdf/generate', requireAdmin, async (req: Request, res: R
 
     // Get project data
     const projectResult = await pool.query(
-      'SELECT project_key, client_name_raw, work_date, work_name, location, start_time, end_time FROM projects WHERE id = $1',
+      `SELECT p.project_key, c.name as client_name_raw, p.work_date, p.work_name, p.location, p.start_time, p.end_time
+       FROM projects p
+       LEFT JOIN clients c ON p.client_id = c.id
+       WHERE p.id = $1`,
       [report.project_id]
     );
 
@@ -258,7 +261,13 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
 
   try {
     const reportResult = await pool.query(
-      'SELECT r.*, p.client_name_raw, p.work_date, p.work_name, p.work_title_raw, p.location, c.emails as client_emails FROM reports r JOIN projects p ON r.project_id = p.id LEFT JOIN clients c ON p.client_id = c.id WHERE r.id = $1',
+      `SELECT r.*, c.name as client_name_raw, p.work_date, p.work_name, p.work_title_raw, p.location, c.emails as client_emails,
+              sm.display_name_kanji as writer_name
+       FROM reports r 
+       JOIN projects p ON r.project_id = p.id 
+       LEFT JOIN clients c ON p.client_id = c.id 
+       LEFT JOIN staff_master sm ON r.writer_staff_id = sm.id
+       WHERE r.id = $1`,
       [reportId]
     );
 
