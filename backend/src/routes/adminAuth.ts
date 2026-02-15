@@ -248,7 +248,7 @@ router.post('/request-access', async (req: Request, res: Response) => {
     const BASE_URL = process.env.BASE_URL || 'https://security-report.up.railway.app';
     await sendEmail({
       to: ownerEmails,
-      subject: '【ほうこちゃん】管理画面アクセス申請',
+      subject: '【デジタル警備報告書システム ほうこちゃん】管理画面アクセス申請',
       text: `管理画面へのアクセス申請がありました。\n\nメール: ${email}\n名前: ${display_name || '未設定'}\n\n管理画面のアカウント管理ページから承認・拒否してください。\n${BASE_URL}`,
       html: `
 <!DOCTYPE html>
@@ -256,8 +256,7 @@ router.post('/request-access', async (req: Request, res: Response) => {
 <body style="margin:0;padding:0;font-family:'Helvetica Neue',Arial,sans-serif;background-color:#f5f5f5;">
   <div style="max-width:600px;margin:0 auto;padding:20px;">
     <div style="background-color:#2C3E50;padding:20px 30px;border-radius:8px 8px 0 0;text-align:center;">
-      <h1 style="color:#ffffff;margin:0;font-size:20px;">ほうこちゃん</h1>
-      <p style="color:#bdc3c7;margin:5px 0 0;font-size:13px;">デジタル警備報告書システム</p>
+      <h1 style="color:#ffffff;margin:0;font-size:20px;">デジタル警備報告書システム【ほうこちゃん】</h1>
     </div>
     <div style="background-color:#ffffff;padding:30px;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
       <h2 style="color:#e67e22;margin:0 0 20px;font-size:18px;border-bottom:2px solid #e67e22;padding-bottom:10px;">管理画面アクセス申請</h2>
@@ -276,7 +275,7 @@ router.post('/request-access', async (req: Request, res: Response) => {
       </div>
       <p style="color:#6c757d;font-size:12px;text-align:center;margin:0;">ログイン後「アカウント管理」から申請を処理できます</p>
     </div>
-    <p style="color:#adb5bd;font-size:11px;text-align:center;margin-top:15px;">日本交通誘導 警備報告書システム</p>
+    <p style="color:#adb5bd;font-size:11px;text-align:center;margin-top:15px;">日本交通誘導 デジタル警備報告書システム【ほうこちゃん】</p>
   </div>
 </body>
 </html>`
@@ -352,7 +351,7 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
     try {
       await sendEmail({
         to: [request.email],
-        subject: '【ほうこちゃん】アクセスが承認されました',
+        subject: '【デジタル警備報告書システム ほうこちゃん】アクセスが承認されました',
         text: `管理画面へのアクセスが承認されました。\n\n権限: ${assignRole}\n\nログインしてご利用ください。\n${BASE_URL}`,
         html: `
 <!DOCTYPE html>
@@ -360,8 +359,7 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
 <body style="margin:0;padding:0;font-family:'Helvetica Neue',Arial,sans-serif;background-color:#f5f5f5;">
   <div style="max-width:600px;margin:0 auto;padding:20px;">
     <div style="background-color:#2C3E50;padding:20px 30px;border-radius:8px 8px 0 0;text-align:center;">
-      <h1 style="color:#ffffff;margin:0;font-size:20px;">ほうこちゃん</h1>
-      <p style="color:#bdc3c7;margin:5px 0 0;font-size:13px;">デジタル警備報告書システム</p>
+      <h1 style="color:#ffffff;margin:0;font-size:20px;">デジタル警備報告書システム【ほうこちゃん】</h1>
     </div>
     <div style="background-color:#ffffff;padding:30px;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
       <h2 style="color:#27ae60;margin:0 0 20px;font-size:18px;border-bottom:2px solid #27ae60;padding-bottom:10px;">アクセスが承認されました</h2>
@@ -376,7 +374,7 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
         <a href="${BASE_URL}" style="display:inline-block;background-color:#27ae60;color:#ffffff;text-decoration:none;padding:12px 30px;border-radius:6px;font-size:15px;font-weight:bold;">管理画面にログイン</a>
       </div>
     </div>
-    <p style="color:#adb5bd;font-size:11px;text-align:center;margin-top:15px;">日本交通誘導 警備報告書システム</p>
+    <p style="color:#adb5bd;font-size:11px;text-align:center;margin-top:15px;">日本交通誘導 デジタル警備報告書システム【ほうこちゃん】</p>
   </div>
 </body>
 </html>`

@@ -68,7 +68,7 @@ export default function CastRegister() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">ほうこちゃん</div>
+          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
           <h1>メールを確認してください</h1>
           <p className="cast-message success">
             {email} に確認メールを送信しました。<br />
@@ -91,7 +91,7 @@ export default function CastRegister() {
   return (
     <div className="cast-container">
       <div className="cast-card">
-        <div className="cast-logo">ほうこちゃん</div>
+        <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
         <h1>スタッフ登録</h1>
         <p className="cast-subtitle">メールアドレスを入力してください</p>
 

@@ -282,7 +282,7 @@ export async function sendReportApprovalNotifications(params: {
   if (params.writerEmail) {
     const castResult = await sendEmail({
       to: [params.writerEmail],
-      subject: `【ほうこちゃん】お仕事お疲れ様でした - ${params.projectName} (${params.workDate})`,
+      subject: `【デジタル警備報告書システム ほうこちゃん】お仕事お疲れ様でした - ${params.projectName} (${params.workDate})`,
       text: `${params.writerName} 様\n\n` +
         `お仕事お疲れ様でした。\n` +
         `報告書が正常に送信されました。\n\n` +
@@ -313,7 +313,7 @@ export async function sendReportApprovalNotifications(params: {
   if (ADMIN_EMAILS.length > 0) {
     const adminResult = await sendEmail({
       to: ADMIN_EMAILS,
-      subject: `【ほうこちゃん・管理者通知】報告書提出 ${params.projectName} (${params.workDate})`,
+      subject: `【デジタル警備報告書システム ほうこちゃん・管理者通知】報告書提出 ${params.projectName} (${params.workDate})`,
       text: `管理者様\n\n` +
         `新しい報告書が提出されました。\n\n` +
         `会社名: ${params.companyName}\n` +
