@@ -142,14 +142,13 @@ router.post('/test/create', async (req: Request, res: Response) => {
 
     const result = await pool.query(
       `INSERT INTO projects (
-        project_key, client_id, client_name_raw, work_date, work_name, location,
+        project_key, client_id, work_date, work_name, location,
         work_title_raw, unique_url, url_expires_at, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING id, unique_url`,
       [
         projectKey,
         clientId,
-        'テスト株式会社',
         workDate,
         'テスト警備業務',
         '東京都渋谷区テストビル',
