@@ -88,7 +88,9 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     const projectResult = await pool.query(
       `SELECT p.id, p.status, p.url_expires_at, c.name as client_name_raw, p.work_date, p.work_title_raw,
-              p.location, p.work_name, c.emails as client_emails, c.contact_email
+              p.location, p.work_name, c.emails as client_emails, c.contact_email,
+              c.contact_name as client_contact_name, c.contact_title as client_contact_title,
+              c.address as client_address
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
        WHERE p.unique_url = $1`,
@@ -295,6 +297,9 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         const notificationResult = await sendReportApprovalNotifications({
           reportId,
           companyName: project.client_name_raw,
+          contactName: project.client_contact_name || '',
+          contactTitle: project.client_contact_title || '',
+          clientAddress: project.client_address || '',
           workDate: workDateStr,
           projectName: project.work_title_raw || project.work_name || '',
           clientEmails,

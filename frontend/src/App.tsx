@@ -178,6 +178,7 @@ interface Client {
   contact_name: string | null
   contact_title: string | null
   contact_email: string | null
+  address: string | null
   created_at: string
   updated_at: string
 }
@@ -604,6 +605,7 @@ function AdminApp() {
                 contact_name: editingClient.contact_name,
                 contact_title: editingClient.contact_title,
                 contact_email: editingClient.contact_email,
+                address: editingClient.address,
                 emails: editingClient.emails
               })
             })
@@ -2452,6 +2454,10 @@ function AdminApp() {
                                     <span style={styles.mobileCardLabel}>メールアドレス</span>
                                     <span style={styles.mobileCardValue}>{client.contact_email || '-'}</span>
                                   </div>
+                                  <div style={styles.mobileCardRow}>
+                                    <span style={styles.mobileCardLabel}>住所</span>
+                                    <span style={styles.mobileCardValue}>{client.address || '-'}</span>
+                                  </div>
                                 </div>
                                 <div style={styles.mobileCardActions}>
                                   <button 
@@ -2479,6 +2485,7 @@ function AdminApp() {
                                   <th style={styles.th}>担当者名</th>
                                   <th style={styles.th}>役職</th>
                                   <th style={styles.th}>メールアドレス</th>
+                                  <th style={styles.th}>住所</th>
                                   <th style={styles.th}>操作</th>
                                 </tr>
                               </thead>
@@ -2489,6 +2496,7 @@ function AdminApp() {
                                     <td style={styles.td}>{client.contact_name || '-'}</td>
                                     <td style={styles.td}>{client.contact_title || '-'}</td>
                                     <td style={styles.td}>{client.contact_email || '-'}</td>
+                                    <td style={styles.td}>{client.address || '-'}</td>
                                     <td style={styles.td}>
                                       <button 
                                         style={styles.primaryButton}
@@ -2552,6 +2560,16 @@ function AdminApp() {
                                   value={editingClient.contact_email || ''}
                                   onChange={(e) => setEditingClient({...editingClient, contact_email: e.target.value || null})}
                                   placeholder="例: yamada@example.com"
+                                />
+                              </div>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>住所</label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={editingClient.address || ''}
+                                  onChange={(e) => setEditingClient({...editingClient, address: e.target.value || null})}
+                                  placeholder="例: 東京都新宿区西新宿1-1-1"
                                 />
                               </div>
                               <div style={styles.modalActions}>

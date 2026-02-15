@@ -410,7 +410,7 @@ router.get('/clients', requireAdmin, async (req: Request, res: Response) => {
 
     const result = await pool.query(
       `SELECT id, name, name_normalized, emails, is_active, 
-              contact_name, contact_title, contact_email,
+              contact_name, contact_title, contact_email, address,
               created_at, updated_at
        FROM clients
        ORDER BY name
@@ -430,7 +430,7 @@ router.get('/clients', requireAdmin, async (req: Request, res: Response) => {
 router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, contact_name, contact_title, contact_email, emails } = req.body;
+    const { name, contact_name, contact_title, contact_email, address, emails } = req.body;
 
     if (!name || !name.trim()) {
       sendBadRequest(res, '会社名は必須です');
@@ -470,10 +470,10 @@ router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => 
     const result = await pool.query(
       `UPDATE clients 
        SET name = $1, name_normalized = $2, contact_name = $3, contact_title = $4, 
-           contact_email = $5, emails = $6, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $7
-       RETURNING id, name, name_normalized, contact_name, contact_title, contact_email, emails, is_active, updated_at`,
-      [name.trim(), nameNormalized, contact_name || null, contact_title || null, contact_email || null, normalizedEmails, id]
+           contact_email = $5, emails = $6, address = $7, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $8
+       RETURNING id, name, name_normalized, contact_name, contact_title, contact_email, address, emails, is_active, updated_at`,
+      [name.trim(), nameNormalized, contact_name || null, contact_title || null, contact_email || null, normalizedEmails, address || null, id]
     );
 
     if (result.rows.length === 0) {
