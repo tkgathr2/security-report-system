@@ -219,18 +219,6 @@ router.post('/request-access', async (req: Request, res: Response) => {
       return;
     }
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS access_requests (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        email TEXT NOT NULL,
-        display_name TEXT,
-        status TEXT NOT NULL DEFAULT 'pending',
-        reviewed_by TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        reviewed_at TIMESTAMPTZ
-      )
-    `);
-
     const existing = await pool.query(
       'SELECT id, status FROM access_requests WHERE LOWER(email) = LOWER($1) AND status = $2',
       [email, 'pending']
@@ -325,17 +313,6 @@ function requireAdminAuth(req: Request, res: Response, next: NextFunction): void
 
 router.get('/access-requests',requireSuperAdmin, async (_req: Request, res: Response) => {
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS access_requests (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        email TEXT NOT NULL,
-        display_name TEXT,
-        status TEXT NOT NULL DEFAULT 'pending',
-        reviewed_by TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        reviewed_at TIMESTAMPTZ
-      )
-    `);
     const result = await pool.query('SELECT * FROM access_requests ORDER BY created_at DESC');
     res.json({ requests: result.rows });
   } catch (error) {
@@ -358,8 +335,6 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
     }
 
     const request = requestResult.rows[0];
-
-    await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
 
     const existingAdmin = await pool.query('SELECT id FROM admin_allowlist WHERE LOWER(email) = LOWER($1)', [request.email]);
     if (existingAdmin.rows.length > 0) {
@@ -436,7 +411,6 @@ router.post('/access-requests/:requestId/reject', requireSuperAdmin, async (req:
 
 router.get('/admins', requireSuperAdmin, async (_req: Request, res: Response) => {
   try {
-    await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
     const result = await pool.query(
       `SELECT id, email, is_active, COALESCE(role, 'admin') as role, created_at FROM admin_allowlist ORDER BY created_at`
     );
@@ -457,7 +431,6 @@ router.put('/admins/:adminId/role', requireSuperAdmin, async (req: Request, res:
       return;
     }
 
-    await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
     await pool.query('UPDATE admin_allowlist SET role = $1 WHERE id = $2', [role, adminId]);
     res.json({ ok: true });
   } catch (error) {
