@@ -197,6 +197,9 @@ const ADMIN_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAILS || '').split(',').ma
 export async function sendReportApprovalNotifications(params: {
   reportId: string;
   companyName: string;
+  contactName?: string;
+  contactTitle?: string;
+  clientAddress?: string;
   workDate: string;
   projectName: string;
   clientEmails: string[];
@@ -235,19 +238,37 @@ export async function sendReportApprovalNotifications(params: {
     slackSent = true;
   }
 
+  const recipientParts: string[] = [params.companyName];
+  if (params.contactName) {
+    recipientParts.push(params.contactName);
+  }
+  if (params.contactTitle) {
+    recipientParts.push(params.contactTitle);
+  }
+  const recipientLabel = recipientParts.join(' ');
+
+  const detailItems: string[] = [
+    `案件名: ${params.projectName}`,
+    `実施日: ${params.workDate}`,
+  ];
+  if (params.location) {
+    detailItems.push(`実施場所: ${params.location}`);
+  }
+  if (params.clientAddress) {
+    detailItems.push(`住所: ${params.clientAddress}`);
+  }
+
   const emailResult = await sendEmail({
     to: params.clientEmails,
     subject: `【デジタル警備報告書システム ほうこちゃん】警備報告書 ${params.projectName} (${params.workDate})`,
-    text: `${params.companyName} 様\n\n` +
+    text: `${recipientLabel} 様\n\n` +
       `デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。\n\n` +
-      `案件名: ${params.projectName}\n` +
-      `実施日: ${params.workDate}\n\n` +
+      detailItems.join('\n') + `\n\n` +
       `添付のPDFファイルをご確認ください。`,
-    html: `<p>${params.companyName} 様</p>` +
+    html: `<p>${recipientLabel} 様</p>` +
       `<p>デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。</p>` +
       `<ul>` +
-      `<li>案件名: ${params.projectName}</li>` +
-      `<li>実施日: ${params.workDate}</li>` +
+      detailItems.map(item => `<li>${item}</li>`).join('') +
       `</ul>` +
       `<p>添付のPDFファイルをご確認ください。</p>`,
     attachments
