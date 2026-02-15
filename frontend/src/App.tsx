@@ -1315,7 +1315,7 @@ function AdminApp() {
                             )}
                             <button
                               style={{padding: '4px 8px', fontSize: '11px', background: COLORS.primary, color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer'}}
-                              onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
+                              onClick={() => window.open(`/report/${project.unique_url}?mode=view`, '_blank')}
                             >
                               報告
                             </button>
@@ -1594,7 +1594,7 @@ function AdminApp() {
                                   </button>
                                   <button
                                     style={styles.mobileActionButtonPrimary}
-                                    onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
+                                    onClick={() => window.open(`/report/${project.unique_url}?mode=view`, '_blank')}
                                   >
                                     報告画面
                                   </button>
@@ -1655,7 +1655,7 @@ function AdminApp() {
                                                 </button>
                                                 <button
                                                   style={styles.linkButton}
-                                                  onClick={() => window.open(`/report/${project.unique_url}`, '_blank')}
+                                                  onClick={() => window.open(`/report/${project.unique_url}?mode=view`, '_blank')}
                                                 >
                                                   報告画面
                                                 </button>

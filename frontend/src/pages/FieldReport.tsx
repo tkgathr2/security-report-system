@@ -73,6 +73,7 @@ export default function FieldReport() {
   const [project, setProject] = useState<Project | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   
+  const isViewMode = searchParams.get('mode') === 'view'
   const [token, setToken] = useState<string | null>(null)
   const [showSignatureModal, setShowSignatureModal] = useState(false)
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
@@ -140,6 +141,12 @@ export default function FieldReport() {
       const data = await response.json()
       setProject(data.project)
       
+      if (isViewMode) {
+        initializeFormFromProject(data.project)
+        setPageState('form')
+        return
+      }
+
       const savedEmail = localStorage.getItem(`writer_email_${uniqueUrl}`)
       const queryEmail = searchParams.get('email')
       const emailToUse = savedEmail || queryEmail
@@ -1008,14 +1015,14 @@ export default function FieldReport() {
 
         <section style={styles.submitSection}>
           <button
-            style={isFormValid ? styles.submitButton : styles.submitButtonDisabled}
+            style={isViewMode ? styles.submitButtonDisabled : (isFormValid ? styles.submitButton : styles.submitButtonDisabled)}
             onClick={handleSubmit}
-            onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isFormValid && !submitting) handleSubmit() }}
-            disabled={!isFormValid || submitting}
+            onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isFormValid && !submitting && !isViewMode) handleSubmit() }}
+            disabled={isViewMode || !isFormValid || submitting}
           >
-            {submitting ? '送信中...' : '報告書を送信'}
+            {isViewMode ? '閲覧モード' : submitting ? '送信中...' : '報告書を送信'}
           </button>
-          {!isFormValid && (
+          {!isViewMode && !isFormValid && (
             <p style={styles.submitHint}>
               監督者名、警備内容（1つ以上）、署名を入力してください
             </p>
