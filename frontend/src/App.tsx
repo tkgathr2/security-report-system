@@ -217,6 +217,7 @@ function AdminApp() {
                 const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null)
                 const [savingStaff, setSavingStaff] = useState(false)
                 const [staffSearchQuery, setStaffSearchQuery] = useState('')
+                const [clientSearchQuery, setClientSearchQuery] = useState('')
                 const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
                 const [selectedReportDetail, setSelectedReportDetail] = useState<ReportDetail | null>(null)
                 const [loadingReportDetail, setLoadingReportDetail] = useState(false)
@@ -971,6 +972,17 @@ function AdminApp() {
       member.display_name_kana.toLowerCase().includes(query) ||
       (member.email && member.email.toLowerCase().includes(query)) ||
       (member.registered_email && member.registered_email.toLowerCase().includes(query))
+    )
+  })
+
+  const filteredClients = clients.filter(client => {
+    if (!clientSearchQuery.trim()) return true
+    const query = clientSearchQuery.toLowerCase()
+    return (
+      client.name.toLowerCase().includes(query) ||
+      (client.contact_name && client.contact_name.toLowerCase().includes(query)) ||
+      (client.contact_email && client.contact_email.toLowerCase().includes(query)) ||
+      (client.contact_title && client.contact_title.toLowerCase().includes(query))
     )
   })
 
@@ -2399,13 +2411,29 @@ function AdminApp() {
                         <p style={styles.description}>
                           登録済みの会社一覧です。担当者情報を編集できます。
                         </p>
+                        <div style={{ marginBottom: '16px' }}>
+                          <input
+                            type="text"
+                            style={styles.searchInput}
+                            placeholder="会社名・担当者名・メールアドレスで検索..."
+                            value={clientSearchQuery}
+                            onChange={(e) => setClientSearchQuery(e.target.value)}
+                          />
+                          {clientSearchQuery && (
+                            <span style={{ marginLeft: '12px', color: COLORS.darkGray, fontSize: '14px' }}>
+                              {filteredClients.length}件 / {clients.length}件
+                            </span>
+                          )}
+                        </div>
                         {loading ? (
                           <p>読み込み中...</p>
                         ) : clients.length === 0 ? (
                           <p style={styles.emptyMessage}>登録済みの会社はありません</p>
+                        ) : filteredClients.length === 0 ? (
+                          <p style={styles.emptyMessage}>検索結果がありません</p>
                         ) : isMobile ? (
                           <div style={styles.mobileCardList}>
-                            {clients.map(client => (
+                            {filteredClients.map(client => (
                               <div key={client.id} style={styles.mobileCard}>
                                 <div style={styles.mobileCardBody}>
                                   <div style={styles.mobileCardRow}>
@@ -2455,7 +2483,7 @@ function AdminApp() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {clients.map(client => (
+                                {filteredClients.map(client => (
                                   <tr key={client.id} style={styles.tr}>
                                     <td style={styles.td}>{client.name}</td>
                                     <td style={styles.td}>{client.contact_name || '-'}</td>
