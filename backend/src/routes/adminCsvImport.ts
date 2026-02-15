@@ -288,6 +288,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   let pendingClientRowsCount = 0;
   let staffAutoAddedCount = 0;
   let duplicateCastAssignments = 0;
+  let clientAutoCreatedCount = 0;
 
   const projectMap = new Map<string, { projectId: string; casts: Set<string> }>();
   const processedStaffKana = new Set<string>();
@@ -388,11 +389,30 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
               [clientNameNormalized]
             );
 
-            const clientId = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
+            let clientId: string | null = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
             const status = 'active';
 
             if (!clientId) {
-              pendingClientRowsCount++;
+              const newClient = await pool.query(
+                `INSERT INTO clients (name, name_normalized, emails, is_active)
+                 VALUES ($1, $2, $3, true)
+                 ON CONFLICT DO NOTHING
+                 RETURNING id`,
+                [validClientNameRaw, clientNameNormalized, []]
+              );
+              if (newClient.rows.length > 0) {
+                clientId = newClient.rows[0].id;
+                clientAutoCreatedCount++;
+              } else {
+                const retryResult = await pool.query(
+                  'SELECT id FROM clients WHERE name_normalized = $1',
+                  [clientNameNormalized]
+                );
+                clientId = retryResult.rows.length > 0 ? retryResult.rows[0].id : null;
+              }
+              if (!clientId) {
+                pendingClientRowsCount++;
+              }
             }
 
             const uniqueUrl = generateUniqueUrl();
@@ -601,6 +621,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     skipped_rows_count: skippedRowsCount,
     pending_client_rows_count: pendingClientRowsCount,
     staff_auto_added_count: staffAutoAddedCount,
+    client_auto_created_count: clientAutoCreatedCount,
     duplicate_cast_assignments: duplicateCastAssignments,
     staff_without_email: staffWithoutEmail,
     errors: errors.slice(0, 10)
