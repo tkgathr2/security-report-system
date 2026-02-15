@@ -348,14 +348,16 @@ export async function generateReportPdf(data: ReportData, design: PdfDesign = 'A
       if (data.signaturePng && data.signaturePng.length > 0) {
         try {
           const sigLabelY = doc.y;
-          const sigHeight = 120;
+          const sigHeight = 140;
+          const sigAreaWidth = contentWidth - labelColWidth - 20;
+          const sigAreaHeight = sigHeight - 16;
           doc.save(); doc.rect(marginLeft, sigLabelY, labelColWidth, sigHeight).fill(colors.accent); doc.restore();
           doc.save();
           doc.rect(marginLeft, sigLabelY, contentWidth, sigHeight).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
           doc.moveTo(marginLeft + labelColWidth, sigLabelY).lineTo(marginLeft + labelColWidth, sigLabelY + sigHeight).stroke();
           doc.restore();
-          doc.fillColor(colors.secondary).fontSize(9).text('署名', marginLeft + 6, sigLabelY + 48);
-          doc.image(data.signaturePng, marginLeft + labelColWidth + 10, sigLabelY + 8, { width: 300, height: 105 });
+          doc.fillColor(colors.secondary).fontSize(9).text('署名', marginLeft + 6, sigLabelY + 55);
+          doc.image(data.signaturePng, marginLeft + labelColWidth + 10, sigLabelY + 8, { fit: [sigAreaWidth, sigAreaHeight], align: 'center', valign: 'center' });
           doc.y = sigLabelY + sigHeight;
         } catch (imgError) {
           console.error('[PDF] Failed to embed signature image:', imgError);
