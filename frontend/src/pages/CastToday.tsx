@@ -65,6 +65,13 @@ export default function CastToday() {
           setUser(data.user);
           setProjects(data.projects);
           setDate(data.date);
+          if (data.projects && data.projects.length === 1) {
+            const p = data.projects[0];
+            if (p.unique_url) {
+              window.location.href = `/report/${p.unique_url}?email=${encodeURIComponent(data.user?.email || '')}`;
+              return;
+            }
+          }
         }
       })
       .catch(() => {
