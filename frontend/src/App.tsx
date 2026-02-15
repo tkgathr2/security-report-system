@@ -1223,7 +1223,7 @@ function AdminApp() {
                         <li key={c.id}>
                           <span 
                             style={styles.alertClientLink}
-                            onClick={() => setEditingClient(c)}
+                            onClick={() => { navigateTo('clients'); setEditingClient(c) }}
                           >
                             {c.name}
                           </span>
