@@ -59,7 +59,7 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-15-v76' });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-15-v77' });
 });
 
 app.use('/api/auth', authRouter);
@@ -73,28 +73,6 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/admin/csv', adminCsvImportRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/cast', castAuthRouter);
-
-async function ensureSchema(){
-  try {
-    await pool.query('ALTER TABLE reports ADD COLUMN IF NOT EXISTS guards_json JSONB');
-    await pool.query('ALTER TABLE projects ADD COLUMN IF NOT EXISTS supervisor_name TEXT');
-    await pool.query(`ALTER TABLE admin_allowlist ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'`);
-    await pool.query(`UPDATE admin_allowlist SET role = 'super_admin' WHERE LOWER(email) = LOWER('atsuhiro@takagi.bz') AND (role IS NULL OR role != 'super_admin')`);
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS access_requests (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        email TEXT NOT NULL,
-        display_name TEXT,
-        status TEXT NOT NULL DEFAULT 'pending',
-        reviewed_by TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        reviewed_at TIMESTAMPTZ
-      )
-    `);
-  } catch (e) {
-    console.error('[DB] ensureSchema failed:', e);
-  }
-}
 
 // Serve frontend static files in production
 // __dirname is backend/dist after compilation, so ../frontend-dist points to backend/frontend-dist
@@ -164,8 +142,6 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-ensureSchema().finally(() => {
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
