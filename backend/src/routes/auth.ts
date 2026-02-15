@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import pool from '../db/pool';
+import { isValidEmail } from '../utils/validation';
 
 const router = Router();
 
@@ -16,6 +17,15 @@ router.post('/register', async (req: Request, res: Response) => {
       res.status(400).json({
         error: 'INVALID_PAYLOAD',
         message: 'メールアドレスとPINは必須です',
+        details: {}
+      });
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      res.status(400).json({
+        error: 'INVALID_PAYLOAD',
+        message: '正しいメールアドレスを入力してください',
         details: {}
       });
       return;
@@ -110,6 +120,15 @@ router.post('/login', async (req: Request, res: Response) => {
       res.status(400).json({
         error: 'INVALID_PAYLOAD',
         message: 'メールアドレスとPINは必須です',
+        details: {}
+      });
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      res.status(400).json({
+        error: 'INVALID_PAYLOAD',
+        message: '正しいメールアドレスを入力してください',
         details: {}
       });
       return;

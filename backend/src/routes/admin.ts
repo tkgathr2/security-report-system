@@ -3,6 +3,7 @@ import multer from 'multer';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
 import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '../utils/errorHandler';
+import { isValidEmail } from '../utils/validation';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -227,6 +228,11 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
       return;
     }
 
+    if (email && !isValidEmail(email)) {
+      sendBadRequest(res, '正しいメールアドレスを入力してください');
+      return;
+    }
+
     const result = await pool.query(
       `UPDATE staff_master 
        SET display_name_kanji = $1, display_name_kana = $2, email = $3, updated_at = CURRENT_TIMESTAMP
@@ -431,6 +437,22 @@ router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => 
       return;
     }
 
+    if (contact_email && !isValidEmail(contact_email)) {
+      sendBadRequest(res, '正しいメールアドレスを入力してください');
+      return;
+    }
+
+    const emailList: string[] = Array.isArray(emails) ? emails : [];
+    const invalidEmails = emailList.filter((e) => e && !isValidEmail(String(e)));
+    if (invalidEmails.length > 0) {
+      sendBadRequest(res, '無効なメールアドレスが含まれています', { invalid: invalidEmails });
+      return;
+    }
+
+    const normalizedEmails = emailList
+      .filter(Boolean)
+      .map((e) => String(e).trim().toLowerCase());
+
     const nameNormalized = name
       .replace(/[（）\(\)]/g, '')
       .replace(/[\s　]+/g, '')
@@ -444,7 +466,7 @@ router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => 
            contact_email = $5, emails = $6, updated_at = CURRENT_TIMESTAMP
        WHERE id = $7
        RETURNING id, name, name_normalized, contact_name, contact_title, contact_email, emails, is_active, updated_at`,
-      [name.trim(), nameNormalized, contact_name || null, contact_title || null, contact_email || null, emails || [], id]
+      [name.trim(), nameNormalized, contact_name || null, contact_title || null, contact_email || null, normalizedEmails, id]
     );
 
     if (result.rows.length === 0) {

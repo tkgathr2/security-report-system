@@ -579,6 +579,18 @@ function AdminApp() {
 
         const handleUpdateClient = async () => {
           if (!editingClient) return
+          const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+          if (editingClient.contact_email && !emailRegex.test(editingClient.contact_email.trim())) {
+            setError('正しいメールアドレスを入力してください')
+            return
+          }
+          if (Array.isArray(editingClient.emails)) {
+            const invalid = editingClient.emails.filter(e => e && !emailRegex.test(String(e).trim()))
+            if (invalid.length > 0) {
+              setError('無効なメールアドレスが含まれています')
+              return
+            }
+          }
           setSavingClient(true)
           setError(null)
           try {
@@ -682,6 +694,11 @@ function AdminApp() {
 
     const handleUpdateStaff = async () => {
       if (!editingStaff) return
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+      if (editingStaff.email && !emailRegex.test(editingStaff.email.trim())) {
+        setError('正しいメールアドレスを入力してください')
+        return
+      }
       setSavingStaff(true)
       setError(null)
       try {

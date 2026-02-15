@@ -264,7 +264,7 @@ export default function FieldReport() {
       return
     }
     
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
     if (!emailRegex.test(emailInput)) {
       setEmailError('有効なメールアドレスを入力してください')
       return

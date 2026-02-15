@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import pool from '../db/pool';
 import { sendVerificationEmail, sendMagicLinkEmail, sendWelcomeEmail, sendPinResetEmail } from '../utils/email';
+import { isValidEmail } from '../utils/validation';
 
 const router = Router();
 
@@ -62,8 +63,8 @@ router.post('/register', async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
 
-    if (!email || !email.includes('@')) {
-      return res.status(400).json({ message: 'メールアドレスを入力してください' });
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ message: '正しいメールアドレスを入力してください' });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
@@ -214,6 +215,10 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'メールアドレスとPINコードを入力してください' });
     }
 
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ message: '正しいメールアドレスを入力してください' });
+    }
+
     const normalizedEmail = email.toLowerCase().trim();
 
     const result = await pool.query(
@@ -267,8 +272,8 @@ router.post('/magic-link', async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ message: 'メールアドレスを入力してください' });
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ message: '正しいメールアドレスを入力してください' });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
@@ -492,8 +497,8 @@ router.post('/reset-pin', async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ message: 'メールアドレスを入力してください' });
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ message: '正しいメールアドレスを入力してください' });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
