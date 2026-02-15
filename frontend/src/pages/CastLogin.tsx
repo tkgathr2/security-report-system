@@ -113,7 +113,7 @@ export default function CastLogin() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">ほうこちゃん</div>
+          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
           <h1>メールを確認してください</h1>
           <p className="cast-message success">
             {email} にログインリンクを送信しました。<br />
@@ -134,7 +134,7 @@ export default function CastLogin() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">ほうこちゃん</div>
+          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
           <h1>メールでログイン</h1>
           <p className="cast-subtitle">メールアドレスにログインリンクを送信します</p>
 
@@ -176,7 +176,7 @@ export default function CastLogin() {
   return (
     <div className="cast-container">
       <div className="cast-card">
-        <div className="cast-logo">ほうこちゃん</div>
+        <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
         <h1>スタッフログイン</h1>
 
         <form onSubmit={handleLogin}>

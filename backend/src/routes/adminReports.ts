@@ -294,10 +294,10 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
         ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
         : 'https://security-report.up.railway.app';
       const pdfUrl = `${baseUrl}/api/reports/${reportId}/pdf`;
-      const slackText = `<!channel>\n【デジタル警備報告書システム ほうこちゃん】報告書再送信\n\n` +
-        `会社名: ${report.client_name_raw}\n` +
-        `実施日: ${workDateStr}\n` +
-        `案件名: ${projectName}\n` +
+            const slackText = `<!channel>\n【デジタル警備報告書システム ほうこちゃん】報告書再送信\n\n` +
+              `会社名: ${report.client_name_raw}\n` +
+              `実施日: ${workDateStr}\n` +
+              `作業名称: ${projectName}\n`+
         (report.location ? `実施場所: ${report.location}\n` : '') +
         (report.writer_name ? `報告者: ${report.writer_name}\n` : '') +
         `報告書ID: ${reportId}` +

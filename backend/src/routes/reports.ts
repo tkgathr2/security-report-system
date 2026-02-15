@@ -239,10 +239,10 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           : 'https://security-report.up.railway.app';
         const pdfUrl = pdfGenerationStatus === 'success' ? `${baseUrl}/api/reports/${reportId}/pdf` : undefined;
         const projectName = project.work_title_raw || project.work_name || '';
-        const slackText = `<!channel>\n【デジタル警備報告書システム ほうこちゃん】報告書承認通知\n\n` +
-          `会社名: ${project.client_name_raw}\n` +
-          `実施日: ${workDateStr}\n` +
-          `案件名: ${projectName}\n` +
+                const slackText = `<!channel>\n【デジタル警備報告書システム ほうこちゃん】報告書承認通知\n\n` +
+                  `会社名: ${project.client_name_raw}\n` +
+                  `実施日: ${workDateStr}\n` +
+                  `作業名称: ${projectName}\n`+
           (project.location ? `実施場所: ${project.location}\n` : '') +
           (resolvedWriterName ? `報告者: ${resolvedWriterName}\n` : '') +
           `報告書ID: ${reportId}` +

@@ -3,7 +3,7 @@ import { Resend } from 'resend';
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const FROM_EMAIL = 'noreply@takagi.bz';
-const APP_NAME = 'ほうこちゃん';
+const APP_NAME = 'デジタル警備報告書システム ほうこちゃん';
 
 export async function sendVerificationEmail(email: string, name: string | null, token: string, baseUrl: string) {
   if (!resend) {

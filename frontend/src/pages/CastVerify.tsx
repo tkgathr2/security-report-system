@@ -178,7 +178,7 @@ export default function CastVerify() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">ほうこちゃん</div>
+          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
           <p>確認中...</p>
         </div>
       </div>
@@ -189,7 +189,7 @@ export default function CastVerify() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">ほうこちゃん</div>
+          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
           <h1>エラー</h1>
           <p className="cast-message error">{error}</p>
           <a href="/cast/register" className="cast-button">
@@ -203,7 +203,7 @@ export default function CastVerify() {
   return (
     <div className="cast-container">
       <div className="cast-card">
-        <div className="cast-logo">ほうこちゃん</div>
+        <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
         <h1>登録を完了する</h1>
         <p className="cast-subtitle">{email}</p>
 

@@ -135,7 +135,7 @@ export default function CastResetPin() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">ほうこちゃん</div>
+          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
           <h1>再設定完了</h1>
           <p className="cast-message success">
             暗証番号を再設定しました。
@@ -155,7 +155,7 @@ export default function CastResetPin() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">ほうこちゃん</div>
+          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
           <p style={{ textAlign: 'center' }}>読み込み中...</p>
         </div>
       </div>
@@ -166,7 +166,7 @@ export default function CastResetPin() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">ほうこちゃん</div>
+          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
           <h1>暗証番号の再設定</h1>
           {userName && <p className="cast-subtitle">{userName} 様</p>}
 
@@ -222,7 +222,7 @@ export default function CastResetPin() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">ほうこちゃん</div>
+          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
           <h1>エラー</h1>
           <p className="cast-message error">{error}</p>
           <a href="/cast/reset-pin" className="cast-button">
@@ -240,7 +240,7 @@ export default function CastResetPin() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">ほうこちゃん</div>
+          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
           <h1>メールを確認してください</h1>
           <p className="cast-message success">
             {requestEmail} に暗証番号の再設定リンクを送信しました。<br />
@@ -257,7 +257,7 @@ export default function CastResetPin() {
   return (
     <div className="cast-container">
       <div className="cast-card">
-        <div className="cast-logo">ほうこちゃん</div>
+        <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
         <h1>暗証番号の再設定</h1>
         <p className="cast-subtitle">登録済みのメールアドレスを入力してください</p>
 
