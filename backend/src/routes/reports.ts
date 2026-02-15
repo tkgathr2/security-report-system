@@ -88,7 +88,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     const projectResult = await pool.query(
       `SELECT p.id, p.status, p.url_expires_at, c.name as client_name_raw, p.work_date, p.work_title_raw,
-              p.location, p.work_name, c.emails as client_emails
+              p.location, p.work_name, c.emails as client_emails, c.contact_email
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
        WHERE p.unique_url = $1`,
@@ -285,7 +285,10 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
       // メール通知（独立したtry-catch）
       try {
-        const clientEmails = project.client_emails || [];
+        let clientEmails: string[] = Array.isArray(project.client_emails) ? project.client_emails : [];
+        if (clientEmails.length === 0 && project.contact_email) {
+          clientEmails = [project.contact_email];
+        }
         const castEmail = castUser.email;
         const displayWriterName = resolvedWriterName;
 
