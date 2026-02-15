@@ -23,12 +23,20 @@ export default function CastRegister() {
     return () => document.removeEventListener('keydown', handleCtrlEnter);
   }, [handleCtrlEnter]);
 
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
   const handleSubmit= async (e: React.FormEvent) => {
     e.preventDefault();
 
     setLoading(true);
     setError('');
     setMessage('');
+
+    if (!emailRegex.test(email.trim())) {
+      setError('正しいメールアドレスを入力してください');
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/cast/register`, {

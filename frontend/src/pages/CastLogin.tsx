@@ -33,10 +33,18 @@ export default function CastLogin() {
     return () => document.removeEventListener('keydown', handleCtrlEnter);
   }, [handleCtrlEnter]);
 
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    if (!emailRegex.test(email.trim())) {
+      setError('正しいメールアドレスを入力してください');
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/cast/login`, {
@@ -69,6 +77,12 @@ export default function CastLogin() {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    if (!emailRegex.test(email.trim())) {
+      setError('正しいメールアドレスを入力してください');
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/cast/magic-link`, {

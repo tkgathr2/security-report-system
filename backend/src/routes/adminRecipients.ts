@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
+import { isValidEmail } from '../utils/validation';
 
 const router = Router();
 
@@ -94,7 +95,15 @@ router.post('/', requireAdmin, async (req: Request, res: Response) => {
     return;
   }
 
-  // Normalize email
+  if (!isValidEmail(email)) {
+    res.status(400).json({
+      error: 'VALIDATION_ERROR',
+      message: '正しいメールアドレスを入力してください',
+      details: {}
+    });
+    return;
+  }
+
   const normalizedEmail = normalizeEmail(email);
 
   try {

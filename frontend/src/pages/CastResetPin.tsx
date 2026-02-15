@@ -97,10 +97,18 @@ export default function CastResetPin() {
     }
   };
 
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
   const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setRequestError('');
     setRequestLoading(true);
+
+    if (!emailRegex.test(requestEmail.trim())) {
+      setRequestError('正しいメールアドレスを入力してください');
+      setRequestLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/cast/reset-pin`, {
