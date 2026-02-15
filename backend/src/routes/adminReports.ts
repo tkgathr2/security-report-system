@@ -262,6 +262,7 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
   try {
     const reportResult = await pool.query(
       `SELECT r.*, c.name as client_name_raw, p.work_date, p.work_name, p.work_title_raw, p.location, c.emails as client_emails,
+              c.contact_name as client_contact_name, c.contact_title as client_contact_title, c.address as client_address,
               sm.display_name_kanji as writer_name
        FROM reports r 
        JOIN projects p ON r.project_id = p.id 
@@ -329,6 +330,9 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
       emailResult = await sendReportApprovalNotifications({
         reportId,
         companyName: report.client_name_raw,
+        contactName: report.client_contact_name || '',
+        contactTitle: report.client_contact_title || '',
+        clientAddress: report.client_address || '',
         workDate: workDateStr,
         projectName,
         clientEmails: report.client_emails || [],
