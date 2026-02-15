@@ -240,6 +240,13 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
       return;
     }
 
+    if (email) {
+      await pool.query(
+        `UPDATE cast_users SET email = $1, updated_at = CURRENT_TIMESTAMP WHERE staff_id = $2`,
+        [email, id]
+      );
+    }
+
     res.json({
       staff: result.rows[0]
     });
