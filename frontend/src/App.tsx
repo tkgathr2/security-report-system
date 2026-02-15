@@ -708,6 +708,26 @@ function AdminApp() {
       }
     }
 
+  const handleDeleteStaff = async (staffId: string, staffName: string) => {
+      if (!confirm(`${staffName} を削除しますか？関連するキャストユーザーも削除されます。この操作は取り消せません。`)) return
+      setError(null)
+      try {
+        const response = await fetch(`/api/admin/staff/${staffId}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        })
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.message || '削除に失敗しました')
+        }
+        setEditingStaff(null)
+        fetchStaff()
+        fetchDashboardStats()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '削除に失敗しました')
+      }
+    }
+
   const handleStaffCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -1658,31 +1678,42 @@ function AdminApp() {
                     {screen === 'reports' && (
                       <div>
                         <h2 style={styles.pageTitle}>報告書一覧</h2>
-                        <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap'}}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
                           <button
-                            style={{...styles.secondaryButton, padding: '8px 16px', fontSize: '16px'}}
+                            style={{ padding: '8px 16px', backgroundColor: COLORS.white, border: `1px solid ${COLORS.primary}`, color: COLORS.primary, borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
                             onClick={() => navigateReportDate(-1)}
+                            disabled={loading}
                           >
-                            ◀ 前日
+                            &#9664; 前日
                           </button>
+                          <input
+                            type="date"
+                            value={reportDate}
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                setReportDate(e.target.value)
+                                fetchReports(e.target.value)
+                              }
+                            }}
+                            disabled={loading}
+                            style={{ padding: '8px 12px', border: `1px solid ${COLORS.primary}`, borderRadius: '6px', fontSize: '16px', fontWeight: 'bold', color: COLORS.text, textAlign: 'center' }}
+                          />
                           <button
-                            style={{...styles.primaryButton, padding: '8px 20px'}}
-                            onClick={goToReportToday}
-                          >
-                            今日
-                          </button>
-                          <button
-                            style={{...styles.secondaryButton, padding: '8px 16px', fontSize: '16px'}}
+                            style={{ padding: '8px 16px', backgroundColor: COLORS.white, border: `1px solid ${COLORS.primary}`, color: COLORS.primary, borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
                             onClick={() => navigateReportDate(1)}
+                            disabled={loading}
                           >
-                            翌日 ▶
+                            翌日 &#9654;
                           </button>
-                          <span style={{fontSize: '18px', fontWeight: 'bold', color: COLORS.darkGray}}>
-                            {(() => {
-                              const p = parseDateParts(reportDate)
-                              return `${p.year}年${parseInt(p.month)}月${parseInt(p.day)}日（${p.dayOfWeek}）${p.isToday ? ' - 今日' : ''}`
-                            })()}
-                          </span>
+                          {reportDate !== todayStr && (
+                            <button
+                              style={{ padding: '8px 16px', backgroundColor: COLORS.primary, border: 'none', color: COLORS.white, borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
+                              onClick={goToReportToday}
+                              disabled={loading}
+                            >
+                              今日
+                            </button>
+                          )}
                         </div>
                         {loading ? (
                           <p>読み込み中...</p>
@@ -2104,7 +2135,7 @@ function AdminApp() {
                         {editingStaff && (
                           <div style={styles.modalOverlay} onClick={() => setEditingStaff(null)}>
                             <div style={styles.modal} onClick={e => e.stopPropagation()}>
-                              <h3 style={styles.modalTitle}>スタッフ編集</h3>
+                              <h3 style={styles.modalTitle}>キャスト編集</h3>
                               <div style={styles.formGroup}>
                                 <label style={styles.label}>氏名（漢字）</label>
                                 <input
@@ -2137,19 +2168,28 @@ function AdminApp() {
                               </div>
                               <div style={styles.modalActions}>
                                 <button
-                                  style={styles.cancelButton}
-                                  onClick={() => setEditingStaff(null)}
+                                  style={{...styles.cancelButton, backgroundColor: COLORS.danger, color: 'white'}}
+                                  onClick={() => handleDeleteStaff(editingStaff.id, editingStaff.display_name_kanji)}
                                   disabled={savingStaff}
                                 >
-                                  キャンセル
+                                  削除
                                 </button>
-                                <button
-                                  style={styles.primaryButton}
-                                  onClick={handleUpdateStaff}
-                                  disabled={savingStaff}
-                                >
-                                  {savingStaff ? '保存中...' : '保存'}
-                                </button>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    style={styles.cancelButton}
+                                    onClick={() => setEditingStaff(null)}
+                                    disabled={savingStaff}
+                                  >
+                                    キャンセル
+                                  </button>
+                                  <button
+                                    style={styles.primaryButton}
+                                    onClick={handleUpdateStaff}
+                                    disabled={savingStaff}
+                                  >
+                                    {savingStaff ? '保存中...' : '保存'}
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>

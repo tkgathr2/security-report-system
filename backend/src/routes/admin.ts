@@ -259,15 +259,18 @@ router.delete('/staff/:id', requireAdmin, async (req: Request, res: Response) =>
   try {
     const { id } = req.params;
 
-    const result = await pool.query(
-      `DELETE FROM staff_master WHERE id = $1 RETURNING id`,
+    const check = await pool.query(
+      `SELECT id FROM staff_master WHERE id = $1`,
       [id]
     );
 
-    if (result.rows.length === 0) {
+    if (check.rows.length === 0) {
       sendNotFound(res, 'スタッフが見つかりません');
       return;
     }
+
+    await pool.query(`DELETE FROM cast_users WHERE staff_id = $1`, [id]);
+    await pool.query(`DELETE FROM staff_master WHERE id = $1`, [id]);
 
     res.json({ ok: true });
   } catch (error) {
