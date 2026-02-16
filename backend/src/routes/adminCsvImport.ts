@@ -47,6 +47,10 @@ const HEADER_ALIASES: Record<string, string[]> = {
   '氏名': ['氏名', 'キャスト', 'スタッフ名', '名前', 'name', 'cast_name', 'staff_name'],
   'スタッフNo.': ['スタッフNo.', 'スタッフNo', 'スタッフ番号', 'staff_no', 'No.'],
   '監督者名': ['監督者名', '監督者', '現場監督', '責任者', 'supervisor_name', 'supervisor'],
+  '開始時間': ['開始（予定）時間', '開始(予定)時間', '開始時間', 'start_time'],
+  '終了時間': ['終了（予定）時間', '終了(予定)時間', '終了時間', 'end_time'],
+  '休憩時間': ['休憩時間', 'break_time'],
+  '業務内容': ['業務内容(2)', '業務内容', 'work_content'],
 };
 
 function normalizeForComparison(str: string): string {
@@ -73,6 +77,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
   
   if (STAFF_ASSIGNMENT_HEADERS.every(h => headerSet.has(h))) {
     const supervisorHeader = findHeaderMatch(headers, '監督者名');
+    const startTimeHeader = findHeaderMatch(headers, '開始時間');
+    const endTimeHeader = findHeaderMatch(headers, '終了時間');
+    const breakTimeHeader = findHeaderMatch(headers, '休憩時間');
+    const workContentHeader = findHeaderMatch(headers, '業務内容');
     return {
       format: 'staff_assignment',
       mapping: {
@@ -80,10 +88,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
         clientName: 'クライアント名',
         location: '実施場所',
         workDate: '実施日',
-        workContent: '業務内容(2)',
-        startTime: '開始時間',
-        endTime: '終了時間',
-        breakTime: '休憩時間',
+        workContent: workContentHeader || undefined,
+        startTime: startTimeHeader || undefined,
+        endTime: endTimeHeader || undefined,
+        breakTime: breakTimeHeader || undefined,
         staffNo: 'スタッフNo.',
         staffName: '氏名',
         supervisorName: supervisorHeader || undefined
@@ -98,6 +106,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
     const hasStaffInfo = staffNameHeader !== null;
     
     const supervisorHeader = findHeaderMatch(headers, '監督者名');
+    const startTimeHeader = findHeaderMatch(headers, '開始時間');
+    const endTimeHeader = findHeaderMatch(headers, '終了時間');
+    const breakTimeHeader = findHeaderMatch(headers, '休憩時間');
+    const workContentHeader = findHeaderMatch(headers, '業務内容');
     return {
       format: hasStaffInfo ? 'staff_assignment' : 'job_export',
       mapping: {
@@ -105,10 +117,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
         clientName: 'クライアント名',
         location: '実施場所',
         workDate: '実施日',
-        workContent: '業務内容(2)',
-        startTime: '開始時間',
-        endTime: '終了時間',
-        breakTime: '休憩時間',
+        workContent: workContentHeader || undefined,
+        startTime: startTimeHeader || undefined,
+        endTime: endTimeHeader || undefined,
+        breakTime: breakTimeHeader || undefined,
         staffNo: staffNoHeader || undefined,
         staffName: staffNameHeader || undefined,
         supervisorName: supervisorHeader || undefined
@@ -123,6 +135,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
   const staffNameHeader = findHeaderMatch(headers, '氏名');
   const staffNoHeader = findHeaderMatch(headers, 'スタッフNo.');
   const supervisorHeader = findHeaderMatch(headers, '監督者名');
+  const startTimeHeader = findHeaderMatch(headers, '開始時間');
+  const endTimeHeader = findHeaderMatch(headers, '終了時間');
+  const breakTimeHeader = findHeaderMatch(headers, '休憩時間');
+  const workContentHeader = findHeaderMatch(headers, '業務内容');
   
   if (projectNameHeader && clientNameHeader && locationHeader && workDateHeader) {
     const hasStaffInfo = staffNameHeader !== null;
@@ -133,6 +149,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
         clientName: clientNameHeader,
         location: locationHeader,
         workDate: workDateHeader,
+        workContent: workContentHeader || undefined,
+        startTime: startTimeHeader || undefined,
+        endTime: endTimeHeader || undefined,
+        breakTime: breakTimeHeader || undefined,
         staffNo: staffNoHeader || undefined,
         staffName: staffNameHeader || undefined,
         supervisorName: supervisorHeader || undefined
