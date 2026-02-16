@@ -541,45 +541,35 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                   errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingAssignment.rows[0].work_name}」に割り当て済みです（1日1現場まで）` });
                   duplicateCastAssignments++;
                 } else {
-                  const staffIdRow = await pool.query(
+                  let staffIdRow = await pool.query(
                     `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
                     [castName]
                   );
                   if (!staffIdRow.rows[0]) {
-                    errors.push({ row: rowNum, reason: `キャスト「${castName}」がスタッフマスタに登録されていません` });
-                  } else {
-                    await pool.query(
-                      `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index)
-                       VALUES ($1, $2, $3, $4)
-                       ON CONFLICT (project_id, staff_no) DO NOTHING`,
-                      [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i]
+                    const staffKana = castNameKana || castName;
+                    const newStaff = await pool.query(
+                      `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
+                       VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
+                       RETURNING id`,
+                      [castName, staffKana, adminUser.email]
                     );
-                    projectInfo.casts.add(castIdentifier);
+                    staffIdRow = newStaff;
+                    staffAutoAddedCount++;
+                    processedStaffKana.add(staffKana);
                   }
+                  await pool.query(
+                    `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index)
+                     VALUES ($1, $2, $3, $4)
+                     ON CONFLICT (project_id, staff_no) DO NOTHING`,
+                    [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i]
+                  );
+                  projectInfo.casts.add(castIdentifier);
                 }
               }
             }
             const staffKanaKey = castNameKana || castName;
-
             if (staffKanaKey && !processedStaffKana.has(staffKanaKey)) {
               processedStaffKana.add(staffKanaKey);
-              try {
-                const existingStaff = await pool.query(
-                  'SELECT id FROM staff_master WHERE display_name_kana = $1 AND deleted_at IS NULL',
-                  [staffKanaKey]
-                );
-
-                if (existingStaff.rows.length === 0) {
-                  await pool.query(
-                    `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
-                     VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)`,
-                    [castName, staffKanaKey, adminUser.email]
-                  );
-                  staffAutoAddedCount++;
-                }
-              } catch (staffError) {
-                console.error('Staff auto-add error:', staffError);
-              }
             }
           }
         }
