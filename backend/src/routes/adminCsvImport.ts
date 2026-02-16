@@ -4,6 +4,7 @@ import { parse } from 'csv-parse/sync';
 import Encoding from 'encoding-japanese';
 import crypto from 'crypto';
 import pool from '../db/pool';
+import { logAudit } from '../utils/auditLog';
 
 const router = Router();
 
@@ -615,6 +616,8 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
       staffWithoutEmail.push(row.display_name_kanji);
     }
   }
+
+  logAudit({ req, actorEmail: adminUser.email, action: 'CSV_IMPORT', targetType: 'csv_import', payload: { file_name: originalFileName, status: importStatus, created_projects: createdProjectsCount, skipped_rows: skippedRowsCount, staff_auto_added: staffAutoAddedCount, client_auto_created: clientAutoCreatedCount } });
 
   res.status(200).json({
     ok: true,

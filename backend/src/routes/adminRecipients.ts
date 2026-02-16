@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { isValidEmail } from '../utils/validation';
+import { logAudit } from '../utils/auditLog';
 
 const router = Router();
 
@@ -113,6 +114,9 @@ router.post('/', requireAdmin, async (req: Request, res: Response) => {
        RETURNING id, company_name, contact_name, email, is_active, created_at, updated_at`,
       [company_name.trim(), contact_name.trim(), normalizedEmail]
     );
+
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'CREATE_RECIPIENT', targetType: 'recipient', targetId: result.rows[0].id, payload: { company_name: company_name.trim(), contact_name: contact_name.trim(), email: normalizedEmail } });
 
     res.status(201).json({
       message: '送付先を登録しました',
@@ -227,6 +231,9 @@ router.post('/for-report/:reportId', requireAdmin, async (req: Request, res: Res
 
       // Get unique emails
       const uniqueEmails = [...new Set(savedResult.rows.map(r => normalizeEmail(r.email)))];
+
+      const adminUser = req.user as { email: string };
+      logAudit({ req, actorEmail: adminUser.email, action: 'SET_REPORT_RECIPIENTS', targetType: 'report_recipients', targetId: reportId, payload: { recipient_count: savedResult.rows.length, unique_email_count: uniqueEmails.length } });
 
       res.status(200).json({
         message: '宛先を保存しました',

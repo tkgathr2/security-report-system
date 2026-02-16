@@ -4,6 +4,7 @@ import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
 import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '../utils/errorHandler';
 import { isValidEmail } from '../utils/validation';
+import { logAudit } from '../utils/auditLog';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -213,6 +214,9 @@ router.post('/staff', requireAdmin, async (req: Request, res: Response) => {
       [display_name_kanji, display_name_kana]
     );
 
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'CREATE_STAFF', targetType: 'staff_master', targetId: result.rows[0].id, payload: { display_name_kanji, display_name_kana } });
+
     res.status(201).json({
       staff: result.rows[0]
     });
@@ -255,6 +259,9 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
         [email, id]
       );
     }
+
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_STAFF', targetType: 'staff_master', targetId: id, payload: { display_name_kanji, display_name_kana, email: email || null } });
 
     res.json({
       staff: result.rows[0]
@@ -519,6 +526,9 @@ router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => 
       return;
     }
 
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_CLIENT', targetType: 'client', targetId: id, payload: { name: name.trim(), contact_name, contact_email } });
+
     res.json({
       client: result.rows[0]
     });
@@ -586,6 +596,9 @@ router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
        RETURNING id, name, name_normalized, emails, is_active, created_at`,
       [name.trim(), nameNormalized, emails || []]
     );
+
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'CREATE_CLIENT', targetType: 'client', targetId: result.rows[0].id, payload: { name: name.trim() } });
 
     res.status(201).json({
       client: result.rows[0]
@@ -878,6 +891,10 @@ router.post('/projects/:projectId/casts', requireAdmin, async (req: Request, res
 
     const castRow = result.rows[0];
     const staffNameResult = castStaffId ? await pool.query('SELECT display_name_kanji FROM staff_master WHERE id = $1', [castStaffId]) : { rows: [] };
+
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'ADD_PROJECT_CAST', targetType: 'project_casts', targetId: castRow.id, payload: { project_id: projectId, staff_no, staff_id: castStaffId || null } });
+
     res.status(201).json({ cast: { ...castRow, cast_name: staffNameResult.rows[0]?.display_name_kanji || cast_name } });
   } catch (error) {
     handleDbError(res, error, 'Add project cast');
@@ -895,6 +912,10 @@ router.delete('/projects/:projectId/casts/:castId', requireAdmin, async (req: Re
       sendNotFound(res, 'キャスト割り当てが見つかりません');
       return;
     }
+
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'DELETE_PROJECT_CAST', targetType: 'project_casts', targetId: castId, payload: { project_id: projectId } });
+
     res.json({ deleted: true });
   } catch (error) {
     handleDbError(res, error, 'Delete project cast');

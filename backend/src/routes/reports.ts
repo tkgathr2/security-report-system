@@ -5,6 +5,7 @@ import { generateReportPdf } from '../services/pdfGenerator';
 import { authenticateCast } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
 import { sendBadRequest, sendNotFound, sendConflict, sendForbidden, sendExpired, sendInternalError } from '../utils/errorHandler';
+import { logAudit } from '../utils/auditLog';
 
 const router = Router();
 
@@ -178,6 +179,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     const reportId = reportResult.rows[0].id;
     console.log('[APPROVE] Report inserted successfully, id:', reportId);
+
+    logAudit({ req, actorEmail: castUser.email, actorType: 'cast', action: 'APPROVE_REPORT', targetType: 'report', targetId: reportId, payload: { project_id: project.id, supervisor_name: supervisor_name || '' } });
 
     // 即座にレスポンスを返す（高速化）
     res.status(201).json({

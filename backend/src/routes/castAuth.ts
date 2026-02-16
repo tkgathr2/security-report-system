@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import pool from '../db/pool';
 import { sendVerificationEmail, sendMagicLinkEmail, sendWelcomeEmail, sendPinResetEmail } from '../utils/email';
 import { isValidEmail } from '../utils/validation';
+import { logAudit } from '../utils/auditLog';
 
 const router = Router();
 
@@ -115,6 +116,8 @@ router.post('/register', async (req: Request, res: Response) => {
       return res.status(500).json({ message: 'メール送信に失敗しました。しばらく経ってから再度お試しください' });
     }
 
+    logAudit({ req, actorEmail: normalizedEmail, actorType: 'cast', action: 'CAST_REGISTER', targetType: 'cast_user', payload: { email: normalizedEmail } });
+
     res.json({ 
       message: '確認メールを送信しました。メールをご確認ください',
       email: normalizedEmail
@@ -188,6 +191,8 @@ router.post('/verify', async (req: Request, res: Response) => {
         [sessionToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), user.id]
       );
 
+      logAudit({ req, actorEmail: user.email, actorType: 'cast', action: 'CAST_VERIFY', targetType: 'cast_user', targetId: user.id, payload: { staff_id: staffId } });
+
       res.json({ 
         message: '登録が完了しました',
         token: sessionToken,
@@ -255,6 +260,8 @@ router.post('/login', async (req: Request, res: Response) => {
        WHERE id = $3`,
       [sessionToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), user.id]
     );
+
+    logAudit({ req, actorEmail: normalizedEmail, actorType: 'cast', action: 'CAST_LOGIN', targetType: 'cast_user', targetId: user.id, payload: {} });
 
     res.json({
       message: 'ログイン成功',
@@ -613,6 +620,8 @@ router.post('/reset-pin/confirm', async (req: Request, res: Response) => {
        WHERE id = $3`,
       [sessionToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), user.id]
     );
+
+    logAudit({ req, actorEmail: user.email, actorType: 'cast', action: 'CAST_PIN_RESET', targetType: 'cast_user', targetId: user.id, payload: {} });
 
     res.json({
       message: '暗証番号を再設定しました',
