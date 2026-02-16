@@ -138,6 +138,7 @@ interface ImportResult {
   status: string
   created_projects_count: number
   existing_projects_count: number
+  updated_projects_count: number
   skipped_rows_count: number
   pending_client_rows_count: number
   staff_auto_added_count: number
@@ -1478,7 +1479,12 @@ function AdminApp() {
                 {importResult && (
                   <div style={styles.resultBox}>
                     <h4 style={styles.resultTitle}>インポート結果</h4>
-                    {(importResult.existing_projects_count ?? 0) > 0 && (importResult.created_projects_count ?? 0) === 0 && (
+                    {(importResult.updated_projects_count ?? 0) > 0 && (
+                      <div style={styles.infoBox}>
+                        既存の案件を上書き更新しました（{importResult.updated_projects_count}件）
+                      </div>
+                    )}
+                    {(importResult.existing_projects_count ?? 0) > 0 && (importResult.created_projects_count ?? 0) === 0 && (importResult.updated_projects_count ?? 0) === 0 && (
                       <div style={styles.infoBox}>
                         このCSVの案件は既に登録されています（{importResult.existing_projects_count}件）
                       </div>
@@ -1489,8 +1495,8 @@ function AdminApp() {
                         <span style={styles.resultValue}>{importResult.created_projects_count ?? 0}件</span>
                       </div>
                       <div style={styles.resultItem}>
-                        <span style={styles.resultLabel}>既存（スキップ）</span>
-                        <span style={styles.resultValue}>{importResult.existing_projects_count ?? 0}件</span>
+                        <span style={styles.resultLabel}>上書き更新</span>
+                        <span style={styles.resultValue}>{importResult.updated_projects_count ?? 0}件</span>
                       </div>
                       <div style={styles.resultItem}>
                         <span style={styles.resultLabel}>自動追加スタッフ</span>
