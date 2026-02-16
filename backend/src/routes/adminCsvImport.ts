@@ -379,15 +379,6 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
       const supervisorName = (mapping.supervisorName && row[mapping.supervisorName]?.trim()) || null;
       const qualifierHint = extractQualifierHint(validProjectName);
 
-      // Check required time fields
-      const timeEmptyFields: string[] = [];
-      if (!startTime) timeEmptyFields.push('開始時間');
-      if (!endTime) timeEmptyFields.push('終了時間');
-      
-      if (timeEmptyFields.length > 0) {
-        errors.push({ row: rowNum, reason: `以下の項目が空です: ${timeEmptyFields.join(', ')}` });
-      }
-
       try {
         if (!projectMap.has(projectKey)) {
           const existingProject = await pool.query(
