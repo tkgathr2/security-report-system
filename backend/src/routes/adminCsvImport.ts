@@ -491,13 +491,17 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                     `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
                     [castName]
                   );
-                  await pool.query(
-                    `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index)
-                     VALUES ($1, $2, $3, $4)
-                     ON CONFLICT (project_id, staff_no) DO NOTHING`,
-                    [projectInfo.projectId, castIdentifier, staffIdRow.rows[0]?.id || null, i]
-                  );
-                  projectInfo.casts.add(castIdentifier);
+                  if (!staffIdRow.rows[0]) {
+                    errors.push({ row: rowNum, reason: `キャスト「${castName}」がスタッフマスタに登録されていません` });
+                  } else {
+                    await pool.query(
+                      `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index)
+                       VALUES ($1, $2, $3, $4)
+                       ON CONFLICT (project_id, staff_no) DO NOTHING`,
+                      [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i]
+                    );
+                    projectInfo.casts.add(castIdentifier);
+                  }
                 }
               }
             }
