@@ -1514,7 +1514,12 @@ function AdminApp() {
                     )}
                     {importResult.errors && importResult.errors.length > 0 && (
                       <div style={styles.warningBox}>
-                        エラー: {importResult.errors.map((e: { row: number; reason: string }) => `行${e.row}: ${e.reason}`).join(', ')}
+                        <strong>エラー（{importResult.errors.length}件）:</strong>
+                        <ul style={{ margin: '8px 0 0', paddingLeft: '20px', listStyle: 'disc' }}>
+                          {importResult.errors.map((e: { row: number; reason: string }, idx: number) => (
+                            <li key={idx} style={{ marginBottom: '4px' }}>行{e.row}: {e.reason}</li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>
