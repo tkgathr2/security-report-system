@@ -47,6 +47,10 @@ const HEADER_ALIASES: Record<string, string[]> = {
   '氏名': ['氏名', 'キャスト', 'スタッフ名', '名前', 'name', 'cast_name', 'staff_name'],
   'スタッフNo.': ['スタッフNo.', 'スタッフNo', 'スタッフ番号', 'staff_no', 'No.'],
   '監督者名': ['監督者名', '監督者', '現場監督', '責任者', 'supervisor_name', 'supervisor'],
+  '開始時間': ['開始（予定）時間', '開始(予定)時間', '開始時間', 'start_time'],
+  '終了時間': ['終了（予定）時間', '終了(予定)時間', '終了時間', 'end_time'],
+  '休憩時間': ['休憩時間', 'break_time'],
+  '業務内容': ['業務内容(2)', '業務内容', 'work_content'],
 };
 
 function normalizeForComparison(str: string): string {
@@ -73,6 +77,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
   
   if (STAFF_ASSIGNMENT_HEADERS.every(h => headerSet.has(h))) {
     const supervisorHeader = findHeaderMatch(headers, '監督者名');
+    const startTimeHeader = findHeaderMatch(headers, '開始時間');
+    const endTimeHeader = findHeaderMatch(headers, '終了時間');
+    const breakTimeHeader = findHeaderMatch(headers, '休憩時間');
+    const workContentHeader = findHeaderMatch(headers, '業務内容');
     return {
       format: 'staff_assignment',
       mapping: {
@@ -80,10 +88,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
         clientName: 'クライアント名',
         location: '実施場所',
         workDate: '実施日',
-        workContent: '業務内容(2)',
-        startTime: '開始時間',
-        endTime: '終了時間',
-        breakTime: '休憩時間',
+        workContent: workContentHeader || undefined,
+        startTime: startTimeHeader || undefined,
+        endTime: endTimeHeader || undefined,
+        breakTime: breakTimeHeader || undefined,
         staffNo: 'スタッフNo.',
         staffName: '氏名',
         supervisorName: supervisorHeader || undefined
@@ -98,6 +106,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
     const hasStaffInfo = staffNameHeader !== null;
     
     const supervisorHeader = findHeaderMatch(headers, '監督者名');
+    const startTimeHeader = findHeaderMatch(headers, '開始時間');
+    const endTimeHeader = findHeaderMatch(headers, '終了時間');
+    const breakTimeHeader = findHeaderMatch(headers, '休憩時間');
+    const workContentHeader = findHeaderMatch(headers, '業務内容');
     return {
       format: hasStaffInfo ? 'staff_assignment' : 'job_export',
       mapping: {
@@ -105,10 +117,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
         clientName: 'クライアント名',
         location: '実施場所',
         workDate: '実施日',
-        workContent: '業務内容(2)',
-        startTime: '開始時間',
-        endTime: '終了時間',
-        breakTime: '休憩時間',
+        workContent: workContentHeader || undefined,
+        startTime: startTimeHeader || undefined,
+        endTime: endTimeHeader || undefined,
+        breakTime: breakTimeHeader || undefined,
         staffNo: staffNoHeader || undefined,
         staffName: staffNameHeader || undefined,
         supervisorName: supervisorHeader || undefined
@@ -123,6 +135,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
   const staffNameHeader = findHeaderMatch(headers, '氏名');
   const staffNoHeader = findHeaderMatch(headers, 'スタッフNo.');
   const supervisorHeader = findHeaderMatch(headers, '監督者名');
+  const startTimeHeader = findHeaderMatch(headers, '開始時間');
+  const endTimeHeader = findHeaderMatch(headers, '終了時間');
+  const breakTimeHeader = findHeaderMatch(headers, '休憩時間');
+  const workContentHeader = findHeaderMatch(headers, '業務内容');
   
   if (projectNameHeader && clientNameHeader && locationHeader && workDateHeader) {
     const hasStaffInfo = staffNameHeader !== null;
@@ -133,6 +149,10 @@ function detectCsvFormat(headers: string[]): { format: CsvFormat; mapping: Heade
         clientName: clientNameHeader,
         location: locationHeader,
         workDate: workDateHeader,
+        workContent: workContentHeader || undefined,
+        startTime: startTimeHeader || undefined,
+        endTime: endTimeHeader || undefined,
+        breakTime: breakTimeHeader || undefined,
         staffNo: staffNoHeader || undefined,
         staffName: staffNameHeader || undefined,
         supervisorName: supervisorHeader || undefined
@@ -284,7 +304,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   const { format, mapping } = formatInfo;
   const errors: Array<{ row: number; reason: string }> = [];
   let createdProjectsCount = 0;
-  let existingProjectsCount = 0;
+  let updatedProjectsCount = 0;
   let skippedRowsCount = 0;
   let pendingClientRowsCount = 0;
   let staffAutoAddedCount = 0;
@@ -359,15 +379,6 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
       const supervisorName = (mapping.supervisorName && row[mapping.supervisorName]?.trim()) || null;
       const qualifierHint = extractQualifierHint(validProjectName);
 
-      // Check required time fields
-      const timeEmptyFields: string[] = [];
-      if (!startTime) timeEmptyFields.push('開始時間');
-      if (!endTime) timeEmptyFields.push('終了時間');
-      
-      if (timeEmptyFields.length > 0) {
-        errors.push({ row: rowNum, reason: `以下の項目が空です: ${timeEmptyFields.join(', ')}` });
-      }
-
       try {
         if (!projectMap.has(projectKey)) {
           const existingProject = await pool.query(
@@ -376,13 +387,47 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
           );
 
           if (existingProject.rows.length > 0) {
-            const existingCasts = await pool.query(
-              'SELECT staff_no FROM project_casts WHERE project_id = $1 AND deleted_at IS NULL',
-              [existingProject.rows[0].id]
+            const existingProjectId = existingProject.rows[0].id;
+            const clientNameNormalized = normalizeClientName(validClientNameRaw);
+            const clientResult = await pool.query(
+              'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true AND deleted_at IS NULL',
+              [clientNameNormalized]
             );
-            const castSet = new Set(existingCasts.rows.map((c: { staff_no: string }) => c.staff_no));
-            projectMap.set(projectKey, { projectId: existingProject.rows[0].id, casts: castSet });
-            existingProjectsCount++;
+            let clientId: string | null = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
+            if (!clientId) {
+              const newClient = await pool.query(
+                `INSERT INTO clients (name, name_normalized, emails, is_active)
+                 VALUES ($1, $2, $3, true)
+                 ON CONFLICT DO NOTHING
+                 RETURNING id`,
+                [validClientNameRaw, clientNameNormalized, []]
+              );
+              if (newClient.rows.length > 0) {
+                clientId = newClient.rows[0].id;
+                clientAutoCreatedCount++;
+              } else {
+                const retryResult = await pool.query(
+                  'SELECT id FROM clients WHERE name_normalized = $1 AND deleted_at IS NULL',
+                  [clientNameNormalized]
+                );
+                clientId = retryResult.rows.length > 0 ? retryResult.rows[0].id : null;
+              }
+            }
+            await pool.query(
+              `UPDATE projects SET client_id = $1, work_name = $2, location = $3,
+               start_time = $4, end_time = $5, break_time = $6,
+               work_title_raw = $7, qualifier_hint = $8, supervisor_name = $9,
+               updated_at = NOW()
+               WHERE id = $10`,
+              [clientId, workName, validLocation, startTime, endTime, breakTime,
+               validProjectName, qualifierHint, supervisorName, existingProjectId]
+            );
+            await pool.query(
+              `UPDATE project_casts SET deleted_at = NOW() WHERE project_id = $1 AND deleted_at IS NULL`,
+              [existingProjectId]
+            );
+            projectMap.set(projectKey, { projectId: existingProjectId, casts: new Set() });
+            updatedProjectsCount++;
           } else {
             const clientNameNormalized = normalizeClientName(validClientNameRaw);
             const clientResult = await pool.query(
@@ -487,41 +532,35 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                   errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingAssignment.rows[0].work_name}」に割り当て済みです（1日1現場まで）` });
                   duplicateCastAssignments++;
                 } else {
-                  const staffIdRow = await pool.query(
+                  let staffIdRow = await pool.query(
                     `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
                     [castName]
                   );
+                  if (!staffIdRow.rows[0]) {
+                    const staffKana = castNameKana || castName;
+                    const newStaff = await pool.query(
+                      `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
+                       VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
+                       RETURNING id`,
+                      [castName, staffKana, adminUser.email]
+                    );
+                    staffIdRow = newStaff;
+                    staffAutoAddedCount++;
+                    processedStaffKana.add(staffKana);
+                  }
                   await pool.query(
                     `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index)
                      VALUES ($1, $2, $3, $4)
                      ON CONFLICT (project_id, staff_no) DO NOTHING`,
-                    [projectInfo.projectId, castIdentifier, staffIdRow.rows[0]?.id || null, i]
+                    [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i]
                   );
                   projectInfo.casts.add(castIdentifier);
                 }
               }
             }
             const staffKanaKey = castNameKana || castName;
-
             if (staffKanaKey && !processedStaffKana.has(staffKanaKey)) {
               processedStaffKana.add(staffKanaKey);
-              try {
-                const existingStaff = await pool.query(
-                  'SELECT id FROM staff_master WHERE display_name_kana = $1 AND deleted_at IS NULL',
-                  [staffKanaKey]
-                );
-
-                if (existingStaff.rows.length === 0) {
-                  await pool.query(
-                    `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
-                     VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)`,
-                    [castName, staffKanaKey, adminUser.email]
-                  );
-                  staffAutoAddedCount++;
-                }
-              } catch (staffError) {
-                console.error('Staff auto-add error:', staffError);
-              }
             }
           }
         }
@@ -623,7 +662,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     ok: true,
     status: importStatus,
     created_projects_count: createdProjectsCount,
-    existing_projects_count: existingProjectsCount,
+    updated_projects_count: updatedProjectsCount,
     skipped_rows_count: skippedRowsCount,
     pending_client_rows_count: pendingClientRowsCount,
     staff_auto_added_count: staffAutoAddedCount,
