@@ -53,7 +53,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN project_casts pc ON pc.project_id = p.id
        LEFT JOIN staff_master sm_pc ON pc.staff_id = sm_pc.id
-       WHERE p.work_date >= $1 AND p.work_date <= $2
+       WHERE p.work_date >= $1 AND p.work_date <= $2 AND p.deleted_at IS NULL
        GROUP BY ${groupBy}
        ORDER BY p.work_date ASC, p.created_at DESC`;
       params = [start_date, end_date];
@@ -66,7 +66,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN project_casts pc ON pc.project_id = p.id
        LEFT JOIN staff_master sm_pc ON pc.staff_id = sm_pc.id
-       WHERE p.work_date = $1
+       WHERE p.work_date = $1 AND p.deleted_at IS NULL
        GROUP BY ${groupBy}
        ORDER BY p.created_at DESC`;
       params = [date];
@@ -79,6 +79,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN project_casts pc ON pc.project_id = p.id
        LEFT JOIN staff_master sm_pc ON pc.staff_id = sm_pc.id
+       WHERE p.deleted_at IS NULL
        GROUP BY ${groupBy}
        ORDER BY p.work_date DESC, p.created_at DESC
        LIMIT 100`;
@@ -116,7 +117,7 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response) => {
          JOIN projects p ON r.project_id = p.id
          LEFT JOIN clients c ON p.client_id = c.id
          LEFT JOIN staff_master sm_w ON r.writer_staff_id = sm_w.id
-         WHERE p.work_date = $1
+         WHERE p.work_date = $1 AND r.deleted_at IS NULL
          ORDER BY r.approved_at DESC, r.created_at DESC`,
         [dateFilter]
       );
@@ -131,6 +132,7 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response) => {
          JOIN projects p ON r.project_id = p.id
          LEFT JOIN clients c ON p.client_id = c.id
          LEFT JOIN staff_master sm_w ON r.writer_staff_id = sm_w.id
+         WHERE r.deleted_at IS NULL
          ORDER BY r.approved_at DESC, r.created_at DESC
          LIMIT 100`
       );
@@ -180,7 +182,8 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
       `SELECT sm.id, sm.display_name_kanji, sm.display_name_kana, sm.email, sm.created_at, sm.updated_at,
               cu.email as registered_email, cu.id as cast_user_id
        FROM staff_master sm
-       LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true
+       LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true AND cu.deleted_at IS NULL
+       WHERE sm.deleted_at IS NULL
        ORDER BY sm.display_name_kana
        LIMIT 500`
     );
@@ -262,11 +265,14 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
 });
 
 router.delete('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
+    const adminUser = req.user as { id: string; email: string };
 
-    const check = await pool.query(
-      `SELECT id FROM staff_master WHERE id = $1`,
+    const check = await client.query(
+      `SELECT sm.id, sm.display_name_kanji, sm.display_name_kana, sm.email
+       FROM staff_master sm WHERE sm.id = $1 AND sm.deleted_at IS NULL`,
       [id]
     );
 
@@ -275,12 +281,42 @@ router.delete('/staff/:id', requireAdmin, async (req: Request, res: Response) =>
       return;
     }
 
-    await pool.query(`DELETE FROM cast_users WHERE staff_id = $1`, [id]);
-    await pool.query(`DELETE FROM staff_master WHERE id = $1`, [id]);
+    const staff = check.rows[0];
 
+    await client.query('BEGIN');
+
+    await client.query(
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, target_id, payload_json)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        adminUser.email,
+        'DELETE_STAFF',
+        'staff_master',
+        id,
+        JSON.stringify({
+          deleted_name_kanji: staff.display_name_kanji,
+          deleted_name_kana: staff.display_name_kana,
+          deleted_email: staff.email
+        })
+      ]
+    );
+
+    await client.query(
+      `UPDATE cast_users SET deleted_at = NOW() WHERE staff_id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    await client.query(
+      `UPDATE staff_master SET deleted_at = NOW() WHERE id = $1`,
+      [id]
+    );
+
+    await client.query('COMMIT');
     res.json({ ok: true });
   } catch (error) {
+    await client.query('ROLLBACK');
     handleDbError(res, error, 'Staff delete');
+  } finally {
+    client.release();
   }
 });
 
@@ -292,6 +328,7 @@ router.get('/cast-users', requireAdmin, async (req: Request, res: Response) => {
               sm.display_name_kana as staff_name_kana
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.deleted_at IS NULL
        ORDER BY cu.updated_at DESC
        LIMIT 200`
     );
@@ -314,7 +351,7 @@ router.delete('/cast-users/:id', requireAdmin, async (req: Request, res: Respons
       `SELECT cu.email, sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.id = $1`,
+       WHERE cu.id = $1 AND cu.deleted_at IS NULL`,
       [id]
     );
 
@@ -340,7 +377,7 @@ router.delete('/cast-users/:id', requireAdmin, async (req: Request, res: Respons
       ]
     );
 
-    await pool.query(`DELETE FROM cast_users WHERE id = $1`, [id]);
+    await pool.query(`UPDATE cast_users SET deleted_at = NOW() WHERE id = $1`, [id]);
 
     res.json({ ok: true });
   } catch (error) {
@@ -358,7 +395,7 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
       `SELECT cu.email, cu.staff_id, sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.id = $1`,
+       WHERE cu.id = $1 AND cu.deleted_at IS NULL`,
       [id]
     );
 
@@ -413,6 +450,7 @@ router.get('/clients', requireAdmin, async (req: Request, res: Response) => {
               contact_name, contact_title, contact_email, address,
               created_at, updated_at
        FROM clients
+       WHERE deleted_at IS NULL
        ORDER BY name
        LIMIT 500`
     );
@@ -496,7 +534,7 @@ router.delete('/clients/:id', requireAdmin, async (req: Request, res: Response) 
     const adminUser = req.user as { id: string; email: string };
 
     const currentResult = await pool.query(
-      `SELECT name FROM clients WHERE id = $1`,
+      `SELECT name FROM clients WHERE id = $1 AND deleted_at IS NULL`,
       [id]
     );
 
@@ -517,7 +555,7 @@ router.delete('/clients/:id', requireAdmin, async (req: Request, res: Response) 
       ]
     );
 
-    await pool.query(`DELETE FROM clients WHERE id = $1`, [id]);
+    await pool.query(`UPDATE clients SET deleted_at = NOW() WHERE id = $1`, [id]);
 
     res.json({ ok: true });
   } catch (error) {
@@ -734,8 +772,8 @@ router.delete('/projects/without-casts', requireAdmin, async (req: Request, res:
     // First, get the count of projects without casts
     const countResult = await pool.query(
       `SELECT COUNT(*) as count FROM projects p
-       WHERE NOT EXISTS (
-         SELECT 1 FROM project_casts pc WHERE pc.project_id = p.id
+       WHERE p.deleted_at IS NULL AND NOT EXISTS (
+         SELECT 1 FROM project_casts pc WHERE pc.project_id = p.id AND pc.deleted_at IS NULL
        )`
     );
     const countToDelete = parseInt(countResult.rows[0].count, 10);
@@ -745,11 +783,10 @@ router.delete('/projects/without-casts', requireAdmin, async (req: Request, res:
       return;
     }
 
-    // Delete projects without casts (cascade will handle related records)
     const deleteResult = await pool.query(
-      `DELETE FROM projects p
-       WHERE NOT EXISTS (
-         SELECT 1 FROM project_casts pc WHERE pc.project_id = p.id
+      `UPDATE projects SET deleted_at = NOW()
+       WHERE deleted_at IS NULL AND NOT EXISTS (
+         SELECT 1 FROM project_casts pc WHERE pc.project_id = projects.id AND pc.deleted_at IS NULL
        )
        RETURNING id`
     );
@@ -794,7 +831,7 @@ router.get('/projects/:projectId/casts', requireAdmin, async (req: Request, res:
               sm.display_name_kanji as cast_name
        FROM project_casts pc
        LEFT JOIN staff_master sm ON pc.staff_id = sm.id
-       WHERE pc.project_id = $1
+       WHERE pc.project_id = $1 AND pc.deleted_at IS NULL
        ORDER BY pc.row_index`,
       [projectId]
     );
@@ -814,7 +851,7 @@ router.post('/projects/:projectId/casts', requireAdmin, async (req: Request, res
       return;
     }
 
-    const projectCheck = await pool.query('SELECT id FROM projects WHERE id = $1', [projectId]);
+    const projectCheck = await pool.query('SELECT id FROM projects WHERE id = $1 AND deleted_at IS NULL', [projectId]);
     if (projectCheck.rows.length === 0) {
       sendNotFound(res, '案件が見つかりません');
       return;
@@ -851,7 +888,7 @@ router.delete('/projects/:projectId/casts/:castId', requireAdmin, async (req: Re
   try {
     const { projectId, castId } = req.params;
     const result = await pool.query(
-      'DELETE FROM project_casts WHERE id = $1 AND project_id = $2 RETURNING id',
+      'UPDATE project_casts SET deleted_at = NOW() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL RETURNING id',
       [castId, projectId]
     );
     if (result.rows.length === 0) {
@@ -867,14 +904,42 @@ router.delete('/projects/:projectId/casts/:castId', requireAdmin, async (req: Re
 router.delete('/reports/:reportId', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { reportId } = req.params;
-    const result = await pool.query(
-      'DELETE FROM reports WHERE id = $1 RETURNING id, project_id',
+    const adminUser = req.user as { id: string; email: string };
+
+    const current = await pool.query(
+      `SELECT r.id, r.project_id, p.work_name, p.work_date, c.name as client_name
+       FROM reports r
+       JOIN projects p ON r.project_id = p.id
+       LEFT JOIN clients c ON p.client_id = c.id
+       WHERE r.id = $1 AND r.deleted_at IS NULL`,
       [reportId]
     );
-    if (result.rows.length === 0) {
+    if (current.rows.length === 0) {
       sendNotFound(res, '報告書が見つかりません');
       return;
     }
+
+    await pool.query(
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, target_id, payload_json)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        adminUser.email,
+        'DELETE_REPORT',
+        'report',
+        reportId,
+        JSON.stringify({
+          project_id: current.rows[0].project_id,
+          work_name: current.rows[0].work_name,
+          work_date: current.rows[0].work_date,
+          client_name: current.rows[0].client_name
+        })
+      ]
+    );
+
+    const result = await pool.query(
+      'UPDATE reports SET deleted_at = NOW() WHERE id = $1 RETURNING id, project_id',
+      [reportId]
+    );
     res.json({ deleted: true, report: result.rows[0] });
   } catch (error) {
     handleDbError(res, error, 'Delete report');

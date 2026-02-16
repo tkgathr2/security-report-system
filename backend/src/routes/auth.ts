@@ -41,7 +41,7 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     const existingUser = await pool.query(
-      'SELECT id, pin_hash, created_at FROM cast_users WHERE email = $1',
+      'SELECT id, pin_hash, created_at FROM cast_users WHERE email = $1 AND deleted_at IS NULL',
       [email]
     );
 
@@ -139,7 +139,7 @@ router.post('/login', async (req: Request, res: Response) => {
               sm.display_name_kanji as staff_name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.email = $1`,
+       WHERE cu.email = $1 AND cu.deleted_at IS NULL`,
       [email]
     );
 
@@ -213,7 +213,7 @@ router.post('/exchange-cast-token', async (req: Request, res: Response) => {
               sm.display_name_kanji as staff_name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW()`,
+       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW() AND cu.deleted_at IS NULL`,
       [cast_token]
     );
 

@@ -44,7 +44,7 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT id, company_name, contact_name, email, is_active, created_at, updated_at 
        FROM recipients 
-       WHERE is_active = true 
+       WHERE is_active = true AND deleted_at IS NULL
        ORDER BY company_name, contact_name`
     );
 
@@ -157,7 +157,7 @@ router.post('/for-report/:reportId', requireAdmin, async (req: Request, res: Res
   try {
     // Check if report exists
     const reportResult = await pool.query(
-      'SELECT id FROM reports WHERE id = $1',
+      'SELECT id FROM reports WHERE id = $1 AND deleted_at IS NULL',
       [reportId]
     );
 
@@ -177,7 +177,7 @@ router.post('/for-report/:reportId', requireAdmin, async (req: Request, res: Res
 
       // Delete existing recipients for this report
       await client.query(
-        'DELETE FROM report_recipients WHERE report_id = $1',
+        'UPDATE report_recipients SET deleted_at = NOW() WHERE report_id = $1 AND deleted_at IS NULL',
         [reportId]
       );
 
@@ -188,7 +188,7 @@ router.post('/for-report/:reportId', requireAdmin, async (req: Request, res: Res
 
         // Verify all recipient_ids exist and get their emails for deduplication
         const recipientsResult = await client.query(
-          `SELECT id, email FROM recipients WHERE id = ANY($1) AND is_active = true`,
+          `SELECT id, email FROM recipients WHERE id = ANY($1) AND is_active = true AND deleted_at IS NULL`,
           [uniqueRecipientIds]
         );
 
@@ -260,7 +260,7 @@ router.get('/for-report/:reportId', requireAdmin, async (req: Request, res: Resp
   try {
     // Check if report exists
     const reportResult = await pool.query(
-      'SELECT id FROM reports WHERE id = $1',
+      'SELECT id FROM reports WHERE id = $1 AND deleted_at IS NULL',
       [reportId]
     );
 
@@ -278,7 +278,7 @@ router.get('/for-report/:reportId', requireAdmin, async (req: Request, res: Resp
       `SELECT r.id, r.company_name, r.contact_name, r.email 
        FROM recipients r 
        INNER JOIN report_recipients rr ON r.id = rr.recipient_id 
-       WHERE rr.report_id = $1 
+       WHERE rr.report_id = $1 AND rr.deleted_at IS NULL AND r.deleted_at IS NULL
        ORDER BY r.company_name, r.contact_name`,
       [reportId]
     );

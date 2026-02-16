@@ -74,7 +74,7 @@ router.post('/register', async (req: Request, res: Response) => {
       `SELECT cu.id, cu.email_verified, cu.staff_id, sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.email = $1`,
+       WHERE cu.email = $1 AND cu.deleted_at IS NULL`,
       [normalizedEmail]
     );
 
@@ -139,7 +139,7 @@ router.post('/verify', async (req: Request, res: Response) => {
       `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.verification_token = $1 AND cu.verification_token_expires > NOW()`,
+       WHERE cu.verification_token = $1 AND cu.verification_token_expires > NOW() AND cu.deleted_at IS NULL`,
       [token]
     );
 
@@ -226,7 +226,7 @@ router.post('/login', async (req: Request, res: Response) => {
               sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.email = $1`,
+       WHERE cu.email = $1 AND cu.deleted_at IS NULL`,
       [normalizedEmail]
     );
 
@@ -283,7 +283,7 @@ router.post('/magic-link', async (req: Request, res: Response) => {
               sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.email = $1`,
+       WHERE cu.email = $1 AND cu.deleted_at IS NULL`,
       [normalizedEmail]
     );
 
@@ -330,7 +330,7 @@ router.get('/magic', async (req: Request, res: Response) => {
       `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW()`,
+       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW() AND cu.deleted_at IS NULL`,
       [token]
     );
 
@@ -373,7 +373,7 @@ router.get('/me', async (req: Request, res: Response) => {
       `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW()`,
+       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW() AND cu.deleted_at IS NULL`,
       [token]
     );
 
@@ -404,7 +404,7 @@ router.get('/today', async (req: Request, res: Response) => {
       `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as staff_name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW()`,
+       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW() AND cu.deleted_at IS NULL`,
       [token]
     );
 
@@ -431,9 +431,10 @@ router.get('/today', async (req: Request, res: Response) => {
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN project_casts pc ON p.id = pc.project_id
        LEFT JOIN staff_master sm2 ON pc.staff_id = sm2.id
-       LEFT JOIN reports r ON r.project_id = p.id
+       LEFT JOIN reports r ON r.project_id = p.id AND r.deleted_at IS NULL
        WHERE p.work_date = $1
          AND p.status = 'active'
+         AND p.deleted_at IS NULL
          AND r.id IS NULL
          AND (
            pc.staff_id = $2
@@ -471,12 +472,13 @@ router.get('/search-staff', async (req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT id, display_name_kanji, display_name_kana 
        FROM staff_master 
-       WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') ILIKE $1
+       WHERE deleted_at IS NULL
+         AND (REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') ILIKE $1
           OR display_name_kana ILIKE $2
           OR display_name_kanji ILIKE $2
           OR REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $1
-          OR REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $3
-       ORDER BY 
+          OR REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $3)
+       ORDER BY
          CASE 
            WHEN REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') ILIKE $2 THEN 0
            WHEN REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $2 THEN 1
@@ -510,7 +512,7 @@ router.post('/reset-pin', async (req: Request, res: Response) => {
               sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.email = $1`,
+       WHERE cu.email = $1 AND cu.deleted_at IS NULL`,
       [normalizedEmail]
     );
 
@@ -554,7 +556,7 @@ router.get('/reset-pin/verify', async (req: Request, res: Response) => {
       `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.pin_reset_token = $1 AND cu.pin_reset_token_expires > NOW()`,
+       WHERE cu.pin_reset_token = $1 AND cu.pin_reset_token_expires > NOW() AND cu.deleted_at IS NULL`,
       [token]
     );
 
@@ -587,7 +589,7 @@ router.post('/reset-pin/confirm', async (req: Request, res: Response) => {
       `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.pin_reset_token = $1 AND cu.pin_reset_token_expires > NOW()`,
+       WHERE cu.pin_reset_token = $1 AND cu.pin_reset_token_expires > NOW() AND cu.deleted_at IS NULL`,
       [token]
     );
 

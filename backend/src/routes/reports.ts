@@ -93,7 +93,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
               c.address as client_address
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
-       WHERE p.unique_url = $1`,
+       WHERE p.unique_url = $1 AND p.deleted_at IS NULL`,
       [project_unique_url]
     );
 
@@ -106,7 +106,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     // Check if report already exists for this project
     const existingReportResult = await pool.query(
-      'SELECT id FROM reports WHERE project_id = $1',
+      'SELECT id FROM reports WHERE project_id = $1 AND deleted_at IS NULL',
       [project.id]
     );
 
@@ -333,7 +333,7 @@ router.get('/:reportId/pdf', async (req: Request, res: Response) => {
   }
   try {
     const result = await pool.query(
-      'SELECT pdf_bytes, pdf_generation_status FROM reports WHERE id = $1',
+      'SELECT pdf_bytes, pdf_generation_status FROM reports WHERE id = $1 AND deleted_at IS NULL',
       [reportId]
     );
     if (result.rows.length === 0) {
