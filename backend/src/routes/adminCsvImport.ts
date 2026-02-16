@@ -284,7 +284,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   const { format, mapping } = formatInfo;
   const errors: Array<{ row: number; reason: string }> = [];
   let createdProjectsCount = 0;
-  let existingProjectsCount = 0;
+  let updatedProjectsCount = 0;
   let skippedRowsCount = 0;
   let pendingClientRowsCount = 0;
   let staffAutoAddedCount = 0;
@@ -376,13 +376,47 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
           );
 
           if (existingProject.rows.length > 0) {
-            const existingCasts = await pool.query(
-              'SELECT staff_no FROM project_casts WHERE project_id = $1 AND deleted_at IS NULL',
-              [existingProject.rows[0].id]
+            const existingProjectId = existingProject.rows[0].id;
+            const clientNameNormalized = normalizeClientName(validClientNameRaw);
+            const clientResult = await pool.query(
+              'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true AND deleted_at IS NULL',
+              [clientNameNormalized]
             );
-            const castSet = new Set(existingCasts.rows.map((c: { staff_no: string }) => c.staff_no));
-            projectMap.set(projectKey, { projectId: existingProject.rows[0].id, casts: castSet });
-            existingProjectsCount++;
+            let clientId: string | null = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
+            if (!clientId) {
+              const newClient = await pool.query(
+                `INSERT INTO clients (name, name_normalized, emails, is_active)
+                 VALUES ($1, $2, $3, true)
+                 ON CONFLICT DO NOTHING
+                 RETURNING id`,
+                [validClientNameRaw, clientNameNormalized, []]
+              );
+              if (newClient.rows.length > 0) {
+                clientId = newClient.rows[0].id;
+                clientAutoCreatedCount++;
+              } else {
+                const retryResult = await pool.query(
+                  'SELECT id FROM clients WHERE name_normalized = $1 AND deleted_at IS NULL',
+                  [clientNameNormalized]
+                );
+                clientId = retryResult.rows.length > 0 ? retryResult.rows[0].id : null;
+              }
+            }
+            await pool.query(
+              `UPDATE projects SET client_id = $1, work_name = $2, location = $3,
+               start_time = $4, end_time = $5, break_time = $6,
+               work_title_raw = $7, qualifier_hint = $8, supervisor_name = $9,
+               updated_at = NOW()
+               WHERE id = $10`,
+              [clientId, workName, validLocation, startTime, endTime, breakTime,
+               validProjectName, qualifierHint, supervisorName, existingProjectId]
+            );
+            await pool.query(
+              `UPDATE project_casts SET deleted_at = NOW() WHERE project_id = $1 AND deleted_at IS NULL`,
+              [existingProjectId]
+            );
+            projectMap.set(projectKey, { projectId: existingProjectId, casts: new Set() });
+            updatedProjectsCount++;
           } else {
             const clientNameNormalized = normalizeClientName(validClientNameRaw);
             const clientResult = await pool.query(
@@ -627,7 +661,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     ok: true,
     status: importStatus,
     created_projects_count: createdProjectsCount,
-    existing_projects_count: existingProjectsCount,
+    updated_projects_count: updatedProjectsCount,
     skipped_rows_count: skippedRowsCount,
     pending_client_rows_count: pendingClientRowsCount,
     staff_auto_added_count: staffAutoAddedCount,
