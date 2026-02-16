@@ -274,7 +274,7 @@ router.post('/request-access', async (req: Request, res: Response) => {
         </tr>
       </table>
       <div style="text-align:center;margin:25px 0;">
-        <a href="${BASE_URL}" style="display:inline-block;background-color:#e67e22;color:#ffffff;text-decoration:none;padding:12px 30px;border-radius:6px;font-size:15px;font-weight:bold;">管理画面で承認・拒否する</a>
+        <a href="${BASE_URL}/?screen=accounts" style="display:inline-block;background-color:#e67e22;color:#ffffff;text-decoration:none;padding:12px 30px;border-radius:6px;font-size:15px;font-weight:bold;">管理画面で承認・拒否する</a>
       </div>
       <p style="color:#6c757d;font-size:12px;text-align:center;margin:0;">ログイン後「アカウント管理」から申請を処理できます</p>
     </div>

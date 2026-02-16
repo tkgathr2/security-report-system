@@ -253,6 +253,15 @@ function AdminApp() {
         }
         window.history.replaceState({}, '', '/')
       }
+      const screenParam = params.get('screen') as Screen | null
+      if (screenParam) {
+        setScreen(screenParam)
+        if (screenParam === 'accounts') {
+          setLoadingAccounts(true)
+          Promise.all([fetchAccessRequests(), fetchAdminAccounts()]).finally(() => setLoadingAccounts(false))
+        }
+        window.history.replaceState({}, '', '/')
+      }
       checkAuth()
     }, [])
 
