@@ -4,6 +4,7 @@ import { Strategy as GoogleStrategy, Profile } from 'passport-google-oauth20';
 import crypto from 'crypto';
 import pool from '../db/pool';
 import { sendEmail } from '../services/notifications';
+import { logAudit } from '../utils/auditLog';
 
 const router = Router();
 
@@ -203,6 +204,8 @@ router.get('/google/callback',
           return;
         }
 
+        logAudit({ req, actorEmail: user.email, action: 'ADMIN_LOGIN', targetType: 'admin', targetId: user.id, payload: {} });
+
         // ログイン成功後、フロントエンドのダッシュボードにリダイレクト
         res.redirect('/');
       });
@@ -280,6 +283,8 @@ router.post('/request-access', async (req: Request, res: Response) => {
 </body>
 </html>`
     });
+
+    logAudit({ req, actorEmail: email, actorType: 'system', action: 'ACCESS_REQUEST', targetType: 'access_request', payload: { email, display_name: display_name || null } });
 
     res.json({ ok: true, message: '申請を送信しました。管理者の承認をお待ちください。' });
   } catch (error) {
@@ -383,6 +388,8 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
       console.error('[APPROVE] Email send failed (approval still succeeded):', emailError);
     }
 
+    logAudit({ req, actorEmail: adminUser.email, action: 'APPROVE_ACCESS_REQUEST', targetType: 'access_request', targetId: requestId, payload: { approved_email: request.email, role: assignRole } });
+
     res.json({ ok: true });
   } catch (error) {
     console.error('[APPROVE] Error:', error);
@@ -399,6 +406,8 @@ router.post('/access-requests/:requestId/reject', requireSuperAdmin, async (req:
       'UPDATE access_requests SET status = $1, reviewed_by = $2, reviewed_at = NOW() WHERE id = $3',
       ['rejected', adminUser.email, requestId]
     );
+
+    logAudit({ req, actorEmail: adminUser.email, action: 'REJECT_ACCESS_REQUEST', targetType: 'access_request', targetId: requestId, payload: {} });
 
     res.json({ ok: true });
   } catch (error) {
@@ -429,7 +438,11 @@ router.put('/admins/:adminId/role', requireSuperAdmin, async (req: Request, res:
       return;
     }
 
+    const adminUser = req.user as Express.User;
     await pool.query('UPDATE admin_allowlist SET role = $1 WHERE id = $2', [role, adminId]);
+
+    logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_ADMIN_ROLE', targetType: 'admin', targetId: adminId, payload: { new_role: role } });
+
     res.json({ ok: true });
   } catch (error) {
     console.error('[ROLE_UPDATE] Error:', error);
@@ -448,6 +461,9 @@ router.delete('/admins/:adminId', requireSuperAdmin, async (req: Request, res: R
     }
 
     await pool.query('UPDATE admin_allowlist SET is_active = false WHERE id = $1', [adminId]);
+
+    logAudit({ req, actorEmail: adminUser.email, action: 'DELETE_ADMIN', targetType: 'admin', targetId: adminId, payload: {} });
+
     res.json({ ok: true });
   } catch (error) {
     console.error('[ADMIN_DELETE] Error:', error);

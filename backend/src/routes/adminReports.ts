@@ -3,6 +3,7 @@ import PDFDocument from 'pdfkit';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
 import { sendReportApprovalNotifications, uploadPdfToSlack, sendSlackNotification } from '../services/notifications';
+import { logAudit } from '../utils/auditLog';
 
 const router = Router();
 
@@ -179,6 +180,9 @@ router.post('/:reportId/pdf/generate', requireAdmin, async (req: Request, res: R
         [pdfBuffer, PDF_STATUS.SUCCESS, reportId]
       );
 
+      const adminUser = req.user as { email: string };
+      logAudit({ req, actorEmail: adminUser.email, action: 'REGENERATE_PDF', targetType: 'report', targetId: reportId, payload: { pdf_size: pdfBuffer.length } });
+
       res.status(200).json({
         message: 'PDF生成が完了しました',
         reportId: reportId,
@@ -344,6 +348,9 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
         skipSlack: true
       });
     }
+
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'RESEND_REPORT', targetType: 'report', targetId: reportId, payload: { slack_sent: slackSent, email_sent: emailResult.emailSent } });
 
     res.json({
       ok: true,
