@@ -63,7 +63,7 @@ let seedError = '';
 let seedDetail = '';
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v86', seedStatus, seedError, seedDetail, castFixDetail, cleanupDetail });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v86b', seedStatus, seedError, seedDetail, castFixDetail, cleanupDetail });
 });
 
 app.use('/api/auth', authRouter);
@@ -235,13 +235,14 @@ let cleanupDetail = '';
 
 async function fixProjectCasts() {
   try {
+    await pool.query(`ALTER TABLE project_casts ADD COLUMN IF NOT EXISTS cast_name TEXT`);
+
     const pcCols = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'project_casts' ORDER BY ordinal_position`);
     const pcColNames = pcCols.rows.map((r: {column_name: string}) => r.column_name);
     castFixDetail = 'pc_cols:' + pcColNames.join(',');
 
-    const hasCastName = pcColNames.includes('cast_name');
     const hasStaffId = pcColNames.includes('staff_id');
-    castFixDetail += ` hasCastName:${hasCastName} hasStaffId:${hasStaffId}`;
+    castFixDetail += ` hasStaffId:${hasStaffId}`;
 
     if (!hasStaffId) { castFixDetail += ' no_staff_id_col'; return; }
 
@@ -251,17 +252,16 @@ async function fixProjectCasts() {
 
     if (parseInt(nullCount.rows[0].cnt, 10) === 0) return;
 
-    if (hasCastName) {
-      const fixed = await pool.query(`
-        UPDATE project_casts pc SET staff_id = sm.id
-        FROM staff_master sm
-        WHERE pc.staff_id IS NULL
-          AND pc.deleted_at IS NULL
-          AND sm.deleted_at IS NULL
-          AND REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '')
-      `);
-      castFixDetail += ` fixedByCastName:${fixed.rowCount}`;
-    }
+    const fixedByName = await pool.query(`
+      UPDATE project_casts pc SET staff_id = sm.id
+      FROM staff_master sm
+      WHERE pc.staff_id IS NULL
+        AND pc.deleted_at IS NULL
+        AND sm.deleted_at IS NULL
+        AND pc.cast_name IS NOT NULL
+        AND REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '')
+    `);
+    castFixDetail += ` fixedByCastName:${fixedByName.rowCount}`;
 
     const stillNull = await pool.query(`SELECT COUNT(*) as cnt FROM project_casts WHERE staff_id IS NULL AND deleted_at IS NULL`);
     castFixDetail += ` stillNull:${stillNull.rows[0].cnt}`;
@@ -276,7 +276,7 @@ async function cleanupData() {
     let deletedTest = 0;
     for (const name of testNames) {
       const r = await pool.query(
-        `DELETE FROM staff_master WHERE display_name_kanji = $1 AND display_name_kana = $1`,
+        `UPDATE staff_master SET deleted_at = NOW() WHERE display_name_kanji = $1 AND display_name_kana = $1 AND deleted_at IS NULL`,
         [name]
       );
       deletedTest += r.rowCount ?? 0;
@@ -305,7 +305,7 @@ async function cleanupData() {
           `UPDATE cast_users SET staff_id = $1 WHERE staff_id = $2`,
           [keepId, removeId]
         );
-        await pool.query(`DELETE FROM staff_master WHERE id = $1`, [removeId]);
+        await pool.query(`UPDATE staff_master SET deleted_at = NOW() WHERE id = $1`, [removeId]);
         mergedCount++;
       }
     }
@@ -317,7 +317,7 @@ async function cleanupData() {
     cleanupDetail += ` garbledImportsDeleted:${garbled.rowCount}`;
 
     const highKanji = await pool.query(
-      `DELETE FROM staff_master
+      `UPDATE staff_master SET deleted_at = NOW()
        WHERE display_name_kanji = display_name_kana
          AND display_name_kana !~ '[\u30A0-\u30FF]'
          AND display_name_kana ~ '[\u4E00-\u9FFF]'
