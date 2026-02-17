@@ -263,17 +263,6 @@ async function fixProjectCasts() {
     `);
     castFixDetail += ` fixedByCastName:${fixedByName.rowCount}`;
 
-    const fixedByStaffNo = await pool.query(`
-      UPDATE project_casts pc SET staff_id = sm.id
-      FROM staff_master sm
-      WHERE pc.staff_id IS NULL
-        AND pc.deleted_at IS NULL
-        AND sm.deleted_at IS NULL
-        AND pc.staff_no IS NOT NULL
-        AND REPLACE(REPLACE(pc.staff_no, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '')
-    `);
-    castFixDetail += ` fixedByStaffNo:${fixedByStaffNo.rowCount}`;
-
     const stillNull = await pool.query(`SELECT COUNT(*) as cnt FROM project_casts WHERE staff_id IS NULL AND deleted_at IS NULL`);
     castFixDetail += ` stillNull:${stillNull.rows[0].cnt}`;
   } catch (err: unknown) {
@@ -323,15 +312,15 @@ async function cleanupData() {
     cleanupDetail += ` dupesMerged:${mergedCount}`;
 
     const garbled = await pool.query(
-      `DELETE FROM csv_imports WHERE original_file_name ~ '[\\u00C0-\\u00FF][\\u0080-\\u00BF]'`
+      `DELETE FROM csv_imports WHERE original_file_name ~ '[\u00C0-\u00FF][\u0080-\u00BF]'`
     );
     cleanupDetail += ` garbledImportsDeleted:${garbled.rowCount}`;
 
     const highKanji = await pool.query(
       `UPDATE staff_master SET deleted_at = NOW()
        WHERE display_name_kanji = display_name_kana
-         AND display_name_kana !~ '[\\u30A0-\\u30FF]'
-         AND display_name_kana ~ '[\\u4E00-\\u9FFF]'
+         AND display_name_kana !~ '[\u30A0-\u30FF]'
+         AND display_name_kana ~ '[\u4E00-\u9FFF]'
          AND deleted_at IS NULL
          AND id NOT IN (SELECT DISTINCT staff_id FROM project_casts WHERE staff_id IS NOT NULL)
          AND id NOT IN (SELECT DISTINCT staff_id FROM cast_users WHERE staff_id IS NOT NULL)`
