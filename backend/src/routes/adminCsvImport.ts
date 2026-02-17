@@ -569,7 +569,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                   await pool.query(
                     `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index)
                      VALUES ($1, $2, $3, $4)
-                     ON CONFLICT (project_id, staff_no) DO NOTHING`,
+                     ON CONFLICT (project_id, staff_no) DO UPDATE SET staff_id = EXCLUDED.staff_id`,
                     [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i]
                   );
                   projectInfo.casts.add(castIdentifier);
