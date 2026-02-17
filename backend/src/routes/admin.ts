@@ -32,7 +32,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
 
     const castsAgg = `COALESCE(
       json_agg(
-        json_build_object('staff_no', pc.staff_no, 'cast_name', sm_pc.display_name_kanji)
+        json_build_object('staff_no', pc.staff_no, 'cast_name', COALESCE(sm_pc.display_name_kanji, 'No.' || pc.staff_no), 'staff_id', pc.staff_id)
         ORDER BY pc.row_index
       ) FILTER (WHERE pc.project_id IS NOT NULL),
       '[]'::json
@@ -841,7 +841,7 @@ router.get('/projects/:projectId/casts', requireAdmin, async (req: Request, res:
     const { projectId } = req.params;
     const result = await pool.query(
       `SELECT pc.id, pc.staff_no, pc.row_index, pc.staff_id,
-              sm.display_name_kanji as cast_name
+              COALESCE(sm.display_name_kanji, 'No.' || pc.staff_no) as cast_name
        FROM project_casts pc
        LEFT JOIN staff_master sm ON pc.staff_id = sm.id
        WHERE pc.project_id = $1 AND pc.deleted_at IS NULL
