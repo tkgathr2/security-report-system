@@ -64,7 +64,7 @@ let seedError = '';
 let seedDetail = '';
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v86b', seedStatus, seedError, seedDetail, castFixDetail, cleanupDetail });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v89', seedStatus, seedError, seedDetail, castFixDetail, cleanupDetail });
 });
 
 app.use('/api/auth', authRouter);
