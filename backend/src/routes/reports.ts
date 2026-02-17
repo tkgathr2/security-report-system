@@ -63,8 +63,13 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     } = req.body;
     console.log('[APPROVE] Request body parsed, project_unique_url:', project_unique_url);
 
-    if (!signature_png_base64) {
+    if (!signature_png_base64 || typeof signature_png_base64 !== 'string') {
       sendBadRequest(res, '署名は必須です');
+      return;
+    }
+
+    if (!/^[A-Za-z0-9+/=]+$/.test(signature_png_base64.replace(/^data:image\/[a-z]+;base64,/, ''))) {
+      sendBadRequest(res, '署名データの形式が不正です');
       return;
     }
 
