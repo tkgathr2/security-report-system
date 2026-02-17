@@ -160,7 +160,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         guard_other_text || null,
         null,
         has_qualifier || false,
-        Array.isArray(qualifier_name) ? JSON.stringify(qualifier_name) : (qualifier_name || null),
+        JSON.stringify(Array.isArray(qualifier_name) ? qualifier_name : (qualifier_name ? [qualifier_name] : [])),
         signaturePngBuffer,
         initialPdfBuffer,
         'approved',

@@ -816,7 +816,15 @@ router.delete('/projects/without-casts', requireAdmin, async (req: Request, res:
        RETURNING id`
     );
 
-    const deletedCount = deleteResult.rowCount || 0;
+    const deletedIds = deleteResult.rows.map((r: { id: string }) => r.id);
+    const deletedCount = deletedIds.length;
+
+    if (deletedCount > 0) {
+      await pool.query(
+        `UPDATE project_casts SET deleted_at = NOW() WHERE project_id = ANY($1) AND deleted_at IS NULL`,
+        [deletedIds]
+      );
+    }
 
     // Log the action
     const adminUser = req.user as { email: string };

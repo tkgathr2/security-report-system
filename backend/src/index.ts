@@ -29,7 +29,7 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // PostgreSQL session store for persistent sessions
 const PgSession = connectPgSimple(session);
@@ -38,7 +38,8 @@ app.use(session({
   store: new PgSession({
     pool: pool,
     tableName: 'session',
-    createTableIfMissing: true
+    createTableIfMissing: true,
+    pruneSessionInterval: 60 * 15
   }),
   secret: SESSION_SECRET,
   resave: false,

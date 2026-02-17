@@ -54,8 +54,9 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     );
 
     if (existingReportResult.rows.length > 0) {
-      res.status(303).json({
+      res.status(200).json({
         error: 'ALREADY_SUBMITTED',
+        already_submitted: true,
         message: 'この案件の報告書は既に提出されています',
         details: {}
       });
