@@ -83,8 +83,10 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
        WHERE p.deleted_at IS NULL
        GROUP BY ${groupBy}
        ORDER BY p.work_date DESC, p.created_at DESC
-       LIMIT 100`;
-      params = [];
+       LIMIT $1 OFFSET $2`;
+      const limit = Math.min(Math.max(parseInt(String(req.query.limit)) || 100, 1), 500);
+      const offset = Math.max(parseInt(String(req.query.offset)) || 0, 0);
+      params = [String(limit), String(offset)];
     }
 
     const result = await pool.query(query, params);
@@ -510,14 +512,13 @@ router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => 
     }
 
     const nameNormalized = name
-      .replace(/[（）\(\)]/g, '')
-      .replace(/[\s　]+/g, '')
       .replace(/株式会社|有限会社|合同会社/g, '')
+      .replace(/[\s　]+/g, '')
       .toLowerCase()
       .trim();
 
     const result = await pool.query(
-      `UPDATE clients 
+      `UPDATE clients
        SET name = $1, name_normalized = $2, contact_name = $3, contact_title = $4, 
            contact_email = $5, emails = $6, address = $7, updated_at = CURRENT_TIMESTAMP
        WHERE id = $8
@@ -596,9 +597,8 @@ router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
     const normalizedClientEmails = emailList.map((e: string) => String(e).trim().toLowerCase());
 
     const nameNormalized = name
-      .replace(/[（）\(\)]/g, '')
-      .replace(/[\s　]+/g, '')
       .replace(/株式会社|有限会社|合同会社/g, '')
+      .replace(/[\s　]+/g, '')
       .toLowerCase()
       .trim();
 
@@ -652,9 +652,8 @@ router.post('/clients/register-and-activate', requireAdmin, async (req: Request,
     }
 
     const nameNormalized = client_name_raw
-      .replace(/[（）\(\)]/g, '')
-      .replace(/[\s　]+/g, '')
       .replace(/株式会社|有限会社|合同会社/g, '')
+      .replace(/[\s　]+/g, '')
       .toLowerCase()
       .trim();
 
