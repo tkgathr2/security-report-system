@@ -296,13 +296,20 @@ router.post('/login', async (req: Request, res: Response) => {
 
     resetAttempts(normalizedEmail);
 
-    // Create session token
+    // Create session token and clear any old verification/magic link tokens
     const sessionToken = generateToken();
     await pool.query(
-      `UPDATE cast_users SET magic_link_token = $1, magic_link_expires = $2, last_login_at = NOW()
+      `UPDATE cast_users SET magic_link_token = $1, magic_link_expires = $2, last_login_at = NOW(),
+       verification_token = NULL, verification_token_expires = NULL
        WHERE id = $3`,
       [sessionToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), user.id]
     );
+
+    // Cleanup expired tokens for other users (background, non-blocking)
+    pool.query(
+      `UPDATE cast_users SET magic_link_token = NULL, magic_link_expires = NULL
+       WHERE magic_link_expires < NOW() AND magic_link_token IS NOT NULL AND deleted_at IS NULL`
+    ).catch(() => {});
 
     logAudit({ req, actorEmail: normalizedEmail, actorType: 'cast', action: 'CAST_LOGIN', targetType: 'cast_user', targetId: user.id, payload: {} });
 
@@ -567,6 +574,7 @@ router.post('/reset-pin', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0 || !result.rows[0].email_verified) {
+      logAudit({ req, actorEmail: normalizedEmail, actorType: 'cast', action: 'CAST_PIN_RESET_NOT_FOUND', targetType: 'cast_user', payload: { email: normalizedEmail } });
       return res.json({ message: 'メールを送信しました。メールをご確認ください' });
     }
 
