@@ -259,7 +259,18 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   }
 
   const buffer = req.file.buffer;
-  const originalFileName = req.file.originalname;
+  const rawFileName = req.file.originalname;
+  const fileNameBytes = Buffer.from(rawFileName, 'latin1');
+  const fnDetected = Encoding.detect(new Uint8Array(fileNameBytes));
+  let originalFileName = rawFileName;
+  if (fnDetected && fnDetected !== 'UTF8' && fnDetected !== 'ASCII') {
+    const converted = Encoding.convert(new Uint8Array(fileNameBytes), { to: 'UNICODE', from: fnDetected });
+    originalFileName = Encoding.codeToString(converted);
+  } else if (!/^[\x20-\x7E\u3000-\u9FFF\uFF00-\uFFEF\u30A0-\u30FF\u3040-\u309F\u4E00-\u9FAF._\-()\s]+$/.test(rawFileName)) {
+    try {
+      originalFileName = Buffer.from(rawFileName, 'latin1').toString('utf8');
+    } catch { /* keep original */ }
+  }
   const detectedEncoding = Encoding.detect(new Uint8Array(buffer)) || 'unknown';
   const csvText = convertToUtf8(buffer);
 
@@ -555,22 +566,32 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                     );
                   }
                   if (!staffIdRow.rows[0]) {
-                    const newStaff = await pool.query(
-                      `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
-                       VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
-                       ON CONFLICT (display_name_kana) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-                       RETURNING id`,
-                      [castName, staffKana, adminUser.email]
+                    const softDeleted = await pool.query(
+                      `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NOT NULL LIMIT 1`,
+                      [staffKana]
                     );
-                    staffIdRow = newStaff;
-                    staffAutoAddedCount++;
+                    if (softDeleted.rows[0]) {
+                      await pool.query(`UPDATE staff_master SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [softDeleted.rows[0].id]);
+                      staffIdRow = softDeleted;
+                    } else {
+                      const normalizedKana = staffKana.replace(/\s+/g, ' ').replace(/\u3000/g, ' ').trim();
+                      const newStaff = await pool.query(
+                        `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
+                         VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
+                         ON CONFLICT (display_name_kana) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+                         RETURNING id`,
+                        [castName, normalizedKana, adminUser.email]
+                      );
+                      staffIdRow = newStaff;
+                      staffAutoAddedCount++;
+                    }
                   }
                   processedStaffKana.add(staffKana);
                   await pool.query(
-                    `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index)
-                     VALUES ($1, $2, $3, $4)
-                     ON CONFLICT (project_id, staff_no) DO UPDATE SET staff_id = EXCLUDED.staff_id`,
-                    [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i]
+                    `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
+                     VALUES ($1, $2, $3, $4, $5)
+                     ON CONFLICT (project_id, staff_no) DO UPDATE SET staff_id = EXCLUDED.staff_id, cast_name = EXCLUDED.cast_name`,
+                    [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i, castName]
                   );
                   projectInfo.casts.add(castIdentifier);
                 }

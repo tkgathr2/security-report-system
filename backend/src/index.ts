@@ -63,7 +63,7 @@ let seedError = '';
 let seedDetail = '';
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v85', seedStatus, seedError, seedDetail, castFixDetail });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v86', seedStatus, seedError, seedDetail, castFixDetail, cleanupDetail });
 });
 
 app.use('/api/auth', authRouter);
@@ -231,6 +231,7 @@ async function seedStaffData() {
 }
 
 let castFixDetail = '';
+let cleanupDetail = '';
 
 async function fixProjectCasts() {
   try {
@@ -255,19 +256,82 @@ async function fixProjectCasts() {
         UPDATE project_casts pc SET staff_id = sm.id
         FROM staff_master sm
         WHERE pc.staff_id IS NULL
+          AND pc.deleted_at IS NULL
+          AND sm.deleted_at IS NULL
           AND REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '')
       `);
       castFixDetail += ` fixedByCastName:${fixed.rowCount}`;
     }
 
-    const sample = await pool.query(`SELECT pc.id, pc.staff_no, pc.staff_id FROM project_casts pc WHERE pc.deleted_at IS NULL LIMIT 5`);
-    castFixDetail += ' sample:' + JSON.stringify(sample.rows);
+    const stillNull = await pool.query(`SELECT COUNT(*) as cnt FROM project_casts WHERE staff_id IS NULL AND deleted_at IS NULL`);
+    castFixDetail += ` stillNull:${stillNull.rows[0].cnt}`;
   } catch (err: unknown) {
     castFixDetail += ' err:' + (err instanceof Error ? err.message : String(err));
   }
 }
 
-seedStaffData().then(() => fixProjectCasts()).then(() => {
+async function cleanupData() {
+  try {
+    const testNames = ['佐藤 花子', '田中 太郎', '鈴木 一郎'];
+    let deletedTest = 0;
+    for (const name of testNames) {
+      const r = await pool.query(
+        `DELETE FROM staff_master WHERE display_name_kanji = $1 AND display_name_kana = $1`,
+        [name]
+      );
+      deletedTest += r.rowCount ?? 0;
+    }
+    cleanupDetail = `testDeleted:${deletedTest}`;
+
+    const dupeResult = await pool.query(`
+      SELECT REPLACE(REPLACE(display_name_kana, ' ', ''), '\u3000', '') as norm_kana,
+             array_agg(id ORDER BY created_at ASC) as ids,
+             array_agg(display_name_kana ORDER BY created_at ASC) as kanas
+      FROM staff_master
+      WHERE deleted_at IS NULL
+      GROUP BY REPLACE(REPLACE(display_name_kana, ' ', ''), '\u3000', '')
+      HAVING COUNT(*) > 1
+    `);
+    let mergedCount = 0;
+    for (const row of dupeResult.rows) {
+      const keepId = row.ids[0];
+      const removeIds = row.ids.slice(1);
+      for (const removeId of removeIds) {
+        await pool.query(
+          `UPDATE project_casts SET staff_id = $1 WHERE staff_id = $2`,
+          [keepId, removeId]
+        );
+        await pool.query(
+          `UPDATE cast_users SET staff_id = $1 WHERE staff_id = $2`,
+          [keepId, removeId]
+        );
+        await pool.query(`DELETE FROM staff_master WHERE id = $1`, [removeId]);
+        mergedCount++;
+      }
+    }
+    cleanupDetail += ` dupesMerged:${mergedCount}`;
+
+    const garbled = await pool.query(
+      `DELETE FROM csv_imports WHERE original_file_name ~ '[\u00C0-\u00FF][\u0080-\u00BF]'`
+    );
+    cleanupDetail += ` garbledImportsDeleted:${garbled.rowCount}`;
+
+    const highKanji = await pool.query(
+      `DELETE FROM staff_master
+       WHERE display_name_kanji = display_name_kana
+         AND display_name_kana !~ '[\u30A0-\u30FF]'
+         AND display_name_kana ~ '[\u4E00-\u9FFF]'
+         AND deleted_at IS NULL
+         AND id NOT IN (SELECT DISTINCT staff_id FROM project_casts WHERE staff_id IS NOT NULL)
+         AND id NOT IN (SELECT DISTINCT staff_id FROM cast_users WHERE staff_id IS NOT NULL)`
+    );
+    cleanupDetail += ` kanjiOnlyKanaDeleted:${highKanji.rowCount}`;
+  } catch (err: unknown) {
+    cleanupDetail += ' err:' + (err instanceof Error ? err.message : String(err));
+  }
+}
+
+seedStaffData().then(() => fixProjectCasts()).then(() => cleanupData()).then(() => {
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
