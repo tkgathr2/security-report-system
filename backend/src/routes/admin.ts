@@ -587,6 +587,14 @@ router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
       return;
     }
 
+    const emailList: string[] = Array.isArray(emails) ? emails.filter((e: string) => e && typeof e === 'string' && e.trim()) : [];
+    const invalidClientEmails = emailList.filter((e: string) => !isValidEmail(String(e)));
+    if (invalidClientEmails.length > 0) {
+      sendBadRequest(res, '無効なメールアドレスが含まれています', { invalid: invalidClientEmails });
+      return;
+    }
+    const normalizedClientEmails = emailList.map((e: string) => String(e).trim().toLowerCase());
+
     const nameNormalized = name
       .replace(/[（）\(\)]/g, '')
       .replace(/[\s　]+/g, '')
@@ -598,7 +606,7 @@ router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
       `INSERT INTO clients (name, name_normalized, emails, is_active)
        VALUES ($1, $2, $3, true)
        RETURNING id, name, name_normalized, emails, is_active, created_at`,
-      [name.trim(), nameNormalized, emails || []]
+      [name.trim(), nameNormalized, normalizedClientEmails]
     );
 
     const adminUser = req.user as { email: string };

@@ -253,6 +253,10 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ message: '正しいメールアドレスを入力してください' });
     }
 
+    if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ message: 'PINコードは4桁の数字で入力してください' });
+    }
+
     const normalizedEmail = email.toLowerCase().trim();
 
     const rateCheck = checkRateLimit(normalizedEmail);
