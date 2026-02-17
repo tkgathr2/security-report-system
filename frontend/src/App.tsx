@@ -1537,7 +1537,12 @@ function AdminApp() {
                     {/* Projects List */}
                     {screen === 'projects' && (
                       <div>
-                        <h2 style={styles.pageTitle}>案件一覧</h2>
+                        <div style={styles.pageHeader}>
+                          <h2 style={{...styles.pageTitle, margin: 0}}>案件一覧</h2>
+                          <span style={{ color: COLORS.darkGray, fontSize: '14px' }}>
+                            {loading ? '' : `${projects.length}件`}
+                          </span>
+                        </div>
 
                         {/* Date Navigation */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
@@ -2045,11 +2050,9 @@ function AdminApp() {
                   value={staffSearchQuery}
                   onChange={(e) => setStaffSearchQuery(e.target.value)}
                 />
-                {staffSearchQuery && (
-                  <span style={{ marginLeft: '12px', color: COLORS.darkGray, fontSize: '14px' }}>
-                    {filteredStaff.length}件 / {staff.length}件
-                  </span>
-                )}
+                <span style={{ marginLeft: '12px', color: COLORS.darkGray, fontSize: '14px' }}>
+                  {staffSearchQuery ? `${filteredStaff.length}件 / ${staff.length}件` : `${staff.length}件`}
+                </span>
               </div>
 
                                                         {loading ? (
@@ -2432,11 +2435,9 @@ function AdminApp() {
                             value={clientSearchQuery}
                             onChange={(e) => setClientSearchQuery(e.target.value)}
                           />
-                          {clientSearchQuery && (
-                            <span style={{ marginLeft: '12px', color: COLORS.darkGray, fontSize: '14px' }}>
-                              {filteredClients.length}件 / {clients.length}件
-                            </span>
-                          )}
+                          <span style={{ marginLeft: '12px', color: COLORS.darkGray, fontSize: '14px' }}>
+                            {clientSearchQuery ? `${filteredClients.length}件 / ${clients.length}件` : `${clients.length}件`}
+                          </span>
                         </div>
                         {loading ? (
                           <p>読み込み中...</p>
