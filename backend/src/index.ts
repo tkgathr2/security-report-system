@@ -160,16 +160,6 @@ async function seedStaffData() {
     seedDetail += ` count:${count}`;
     if (count >= 10) { seedStatus = 'skipped-enough'; return; }
 
-    if (hasDeletedAt) {
-      const restored = await pool.query(`UPDATE staff_master SET deleted_at = NULL WHERE deleted_at IS NOT NULL`);
-      seedDetail += ` restored:${restored.rowCount}`;
-    }
-
-    const recount = await pool.query(`SELECT COUNT(*) as cnt FROM staff_master ${whereClause}`);
-    const recountVal = parseInt(recount.rows[0].cnt, 10);
-    seedDetail += ` afterRestore:${recountVal}`;
-    if (recountVal >= 10) { seedStatus = 'restored-' + recountVal; return; }
-
     const staffData = [
       ['e2a3ee29-fa62-4394-b5c5-4826f30cde30', '有澤 知子', 'アリサワ トモコ'],
       ['49972e7a-f311-4358-86cb-2b5c34081b69', '井上 誠司', 'イノウエ セイジ'],
@@ -201,6 +191,18 @@ async function seedStaffData() {
       ['a7f96a6a-907e-45b5-a1eb-462f95ccf57c', '峯 栄治', 'ミネ エイジ'],
       ['439a9918-4006-4fe7-b21f-94192a0144e1', '宮﨑 萌', 'ミヤザキ モエ'],
     ];
+
+    if (hasDeletedAt) {
+      const seedIds = staffData.map(s => s[0]);
+      const placeholders = seedIds.map((_, i) => `$${i + 1}`).join(', ');
+      const restored = await pool.query(`UPDATE staff_master SET deleted_at = NULL WHERE id IN (${placeholders}) AND deleted_at IS NOT NULL`, seedIds);
+      seedDetail += ` restored:${restored.rowCount}`;
+    }
+
+    const recount = await pool.query(`SELECT COUNT(*) as cnt FROM staff_master ${whereClause}`);
+    const recountVal = parseInt(recount.rows[0].cnt, 10);
+    seedDetail += ` afterRestore:${recountVal}`;
+    if (recountVal >= 10) { seedStatus = 'restored-' + recountVal; return; }
 
     let inserted = 0;
     for (const [id, kanji, kana] of staffData) {
@@ -272,6 +274,10 @@ async function fixProjectCasts() {
 
 async function cleanupData() {
   try {
+    const alreadyRan = await pool.query(`SELECT 1 FROM admin_audit_logs WHERE action = 'STARTUP_CLEANUP' AND created_at > NOW() - INTERVAL '1 hour' LIMIT 1`);
+    if (alreadyRan.rows.length > 0) { cleanupDetail = 'skipped-recent'; return; }
+    await pool.query(`INSERT INTO admin_audit_logs (admin_email, action, target_type, payload_json) VALUES ('system', 'STARTUP_CLEANUP', 'system', '{}'::jsonb)`);
+
     const testNames = ['佐藤 花子', '田中 太郎', '鈴木 一郎'];
     let deletedTest = 0;
     for (const name of testNames) {

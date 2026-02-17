@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { sendReportApprovalNotifications, sendSlackNotification, uploadPdfToSlack } from '../services/notifications';
 import { generateReportPdf } from '../services/pdfGenerator';
-import { authenticateCast } from '../middleware/auth';
+import { authenticateCast, requireAdmin } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
 import { sendBadRequest, sendNotFound, sendConflict, sendForbidden, sendExpired, sendInternalError } from '../utils/errorHandler';
 import { logAudit } from '../utils/auditLog';
@@ -105,17 +105,6 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     const project = projectResult.rows[0];
 
-    // Check if report already exists for this project
-    const existingReportResult = await pool.query(
-      'SELECT id FROM reports WHERE project_id = $1 AND deleted_at IS NULL',
-      [project.id]
-    );
-
-    if (existingReportResult.rows.length > 0) {
-      sendConflict(res, 'この案件の報告書は既に提出されています');
-      return;
-    }
-
     const now = new Date();
     const expiresAt = new Date(project.url_expires_at);
     if (expiresAt < now) {
@@ -149,18 +138,22 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     // pdf_bytesカラムはNOT NULL制約があるため、初期値としてダミーPDFを使用
     console.log('[APPROVE] Inserting report into database');
     const initialPdfBuffer = generateDummyPdf();
+    const writerStaffIdResult = await pool.query('SELECT staff_id FROM cast_users WHERE id = $1',[castUser.userId]);
+    const writerStaffId = writerStaffIdResult.rows[0]?.staff_id || null;
+
     const reportResult = await pool.query(
       `INSERT INTO reports (
         project_id, cast_user_id, supervisor_name, writer_staff_id, weather,
         guard_contents, guard_other_text, overtime_hours, has_qualifier, qualifier_name,
         signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+      WHERE NOT EXISTS (SELECT 1 FROM reports WHERE project_id = $1 AND deleted_at IS NULL)
       RETURNING id`,
       [
         project.id,
         castUser.userId,
         supervisor_name || '',
-        (await (async () => { const r = await pool.query('SELECT staff_id FROM cast_users WHERE id = $1',[castUser.userId]); return r.rows[0]?.staff_id || null; })()),
+        writerStaffId,
         weather || 'sunny',
         guard_contents,
         guard_other_text || null,
@@ -168,14 +161,19 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         has_qualifier || false,
         Array.isArray(qualifier_name) ? JSON.stringify(qualifier_name) : (qualifier_name || null),
         signaturePngBuffer,
-        initialPdfBuffer, // ダミーPDF（後で実際のPDFに更新）
+        initialPdfBuffer,
         'approved',
         now,
-        'pending', // PDF generation pending
+        'pending',
         null,
         Array.isArray(guards) ? JSON.stringify(guards) : null
       ]
     );
+
+    if (reportResult.rows.length === 0) {
+      sendConflict(res, 'この案件の報告書は既に提出されています');
+      return;
+    }
 
     const reportId = reportResult.rows[0].id;
     console.log('[APPROVE] Report inserted successfully, id:', reportId);
@@ -327,7 +325,16 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
   }
 });
 
-router.get('/:reportId/pdf', async (req: Request, res: Response) => {
+router.get('/:reportId/pdf', (req: Request, res: Response, next: () => void) => {
+  if (req.isAuthenticated && req.isAuthenticated()) {
+    return next();
+  }
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authenticateCast(req, res, next);
+  }
+  res.status(401).json({ error: 'UNAUTHORIZED', message: '認証が必要です' });
+}, async (req: Request, res: Response) => {
   const reportId = req.params.reportId as string;
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(reportId)) {

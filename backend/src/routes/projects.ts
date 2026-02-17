@@ -105,7 +105,13 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/test/create', async (req: Request, res: Response) => {
+router.post('/test/create', (req: Request, res: Response, next: () => void) => {
+  if (process.env.NODE_ENV === 'production') {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'このエンドポイントは本番環境では利用できません' });
+    return;
+  }
+  next();
+}, async (req: Request, res: Response) => {
   try {
     const { client_email } = req.body;
     const uniqueUrl = crypto.randomUUID();
