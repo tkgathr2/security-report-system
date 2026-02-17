@@ -30,6 +30,12 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
   try {
     const { unique_url } = req.params;
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(String(unique_url))) {
+      sendNotFound(res, '案件が見つかりません');
+      return;
+    }
+
     const result = await pool.query(
       `SELECT p.id, p.project_key, p.client_id, c.name as client_name_raw, p.work_date, p.work_name, 
               p.location, p.start_time, p.end_time, p.break_time, p.work_title_raw, 

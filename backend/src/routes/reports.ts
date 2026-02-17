@@ -87,6 +87,12 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       }
     }
 
+    const validWeathers = ['sunny', 'cloudy', 'rainy', 'snowy', 'windy', 'stormy', 'foggy', 'clear', '晴れ', '曇り', '雨', '雪', '風', '嵐', '霧'];
+    if (weather && !validWeathers.includes(weather)) {
+      sendBadRequest(res, `天候は次のいずれかを指定してください: ${validWeathers.join(', ')}`);
+      return;
+    }
+
     if (!project_unique_url) {
       sendBadRequest(res, 'project_unique_urlは必須です');
       return;
