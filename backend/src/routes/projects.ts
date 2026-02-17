@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import pool from '../db/pool';
 import { sendNotFound, sendForbidden, sendExpired, handleDbError } from '../utils/errorHandler';
+import { logAudit } from '../utils/auditLog';
 
 const router = Router();
 
@@ -86,6 +87,8 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
       sendExpired(res, '期限切れ');
       return;
     }
+
+    logAudit({ req, actorEmail: 'anonymous', actorType: 'cast', action: 'VIEW_PROJECT_URL', targetType: 'project', targetId: project.id, payload: { unique_url: unique_url } });
 
     res.status(200).json({
       project: {
