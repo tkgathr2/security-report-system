@@ -565,6 +565,11 @@ router.post('/reset-pin', async (req: Request, res: Response) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
+    const rateCheck = checkRateLimit(`reset:${normalizedEmail}`);
+    if (!rateCheck.allowed) {
+      return res.json({ message: 'メールを送信しました。メールをご確認ください' });
+    }
+
     const result = await pool.query(
       `SELECT cu.id, cu.email, cu.email_verified, cu.staff_id,
               sm.display_name_kanji as name
@@ -575,6 +580,7 @@ router.post('/reset-pin', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0 || !result.rows[0].email_verified) {
+      recordFailedAttempt(`reset:${normalizedEmail}`);
       logAudit({ req, actorEmail: normalizedEmail, actorType: 'cast', action: 'CAST_PIN_RESET_NOT_FOUND', targetType: 'cast_user', payload: { email: normalizedEmail } });
       return res.json({ message: 'メールを送信しました。メールをご確認ください' });
     }

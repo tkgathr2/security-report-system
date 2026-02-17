@@ -439,9 +439,13 @@ router.put('/admins/:adminId/role', requireSuperAdmin, async (req: Request, res:
     }
 
     const adminUser = req.user as Express.User;
+
+    const prev = await pool.query('SELECT role FROM admin_allowlist WHERE id = $1', [adminId]);
+    const oldRole = prev.rows[0]?.role ?? 'admin';
+
     await pool.query('UPDATE admin_allowlist SET role = $1 WHERE id = $2', [role, adminId]);
 
-    logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_ADMIN_ROLE', targetType: 'admin', targetId: adminId, payload: { new_role: role } });
+    logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_ADMIN_ROLE', targetType: 'admin', targetId: adminId, payload: { old_role: oldRole, new_role: role } });
 
     res.json({ ok: true });
   } catch (error) {

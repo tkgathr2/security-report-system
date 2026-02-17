@@ -149,8 +149,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     // pdf_bytesカラムはNOT NULL制約があるため、初期値としてダミーPDFを使用
     console.log('[APPROVE] Inserting report into database');
     const initialPdfBuffer = generateDummyPdf();
-    const writerStaffIdResult = await pool.query('SELECT staff_id FROM cast_users WHERE id = $1',[castUser.userId]);
-    const writerStaffId = writerStaffIdResult.rows[0]?.staff_id || null;
+    const writerStaffIdResult = await pool.query<{ staff_id: string | null }>('SELECT staff_id FROM cast_users WHERE id = $1',[castUser.userId]);
+    const writerStaffId: string | null = writerStaffIdResult.rows[0]?.staff_id ?? null;
 
     const reportResult = await pool.query(
       `INSERT INTO reports (
