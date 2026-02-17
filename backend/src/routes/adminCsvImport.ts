@@ -547,18 +547,25 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                     `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
                     [castName]
                   );
+                  const staffKana = castNameKana || castName;
                   if (!staffIdRow.rows[0]) {
-                    const staffKana = castNameKana || castName;
+                    staffIdRow = await pool.query(
+                      `SELECT id FROM staff_master WHERE display_name_kana = $1 AND deleted_at IS NULL LIMIT 1`,
+                      [staffKana]
+                    );
+                  }
+                  if (!staffIdRow.rows[0]) {
                     const newStaff = await pool.query(
                       `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
                        VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
+                       ON CONFLICT (display_name_kana) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
                        RETURNING id`,
                       [castName, staffKana, adminUser.email]
                     );
                     staffIdRow = newStaff;
                     staffAutoAddedCount++;
-                    processedStaffKana.add(staffKana);
                   }
+                  processedStaffKana.add(staffKana);
                   await pool.query(
                     `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index)
                      VALUES ($1, $2, $3, $4)
