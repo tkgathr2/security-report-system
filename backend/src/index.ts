@@ -63,7 +63,7 @@ let seedError = '';
 let seedDetail = '';
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v82', seedStatus, seedError, seedDetail });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v83', seedStatus, seedError, seedDetail, castFixDetail });
 });
 
 app.use('/api/auth', authRouter);
@@ -221,6 +221,7 @@ async function seedStaffData() {
     const newCount = await pool.query(`SELECT COUNT(*) as cnt FROM staff_master ${whereClause}`);
     seedStatus = 'done-' + newCount.rows[0].cnt;
     seedDetail += ` inserted:${inserted} after:${newCount.rows[0].cnt}`;
+
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error('[Seed] Error seeding staff data:', err);
@@ -229,7 +230,44 @@ async function seedStaffData() {
   }
 }
 
-seedStaffData().then(() => {
+let castFixDetail = '';
+
+async function fixProjectCasts() {
+  try {
+    const pcCols = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'project_casts' ORDER BY ordinal_position`);
+    const pcColNames = pcCols.rows.map((r: {column_name: string}) => r.column_name);
+    castFixDetail = 'pc_cols:' + pcColNames.join(',');
+
+    const hasCastName = pcColNames.includes('cast_name');
+    const hasStaffId = pcColNames.includes('staff_id');
+    castFixDetail += ` hasCastName:${hasCastName} hasStaffId:${hasStaffId}`;
+
+    if (!hasStaffId) { castFixDetail += ' no_staff_id_col'; return; }
+
+    const nullCount = await pool.query(`SELECT COUNT(*) as cnt FROM project_casts WHERE staff_id IS NULL AND deleted_at IS NULL`);
+    const totalCount = await pool.query(`SELECT COUNT(*) as cnt FROM project_casts WHERE deleted_at IS NULL`);
+    castFixDetail += ` null:${nullCount.rows[0].cnt}/${totalCount.rows[0].cnt}`;
+
+    if (parseInt(nullCount.rows[0].cnt, 10) === 0) return;
+
+    if (hasCastName) {
+      const fixed = await pool.query(`
+        UPDATE project_casts pc SET staff_id = sm.id
+        FROM staff_master sm
+        WHERE pc.staff_id IS NULL
+          AND REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '')
+      `);
+      castFixDetail += ` fixedByCastName:${fixed.rowCount}`;
+    }
+
+    const sample = await pool.query(`SELECT pc.id, pc.staff_no, pc.staff_id FROM project_casts pc WHERE pc.deleted_at IS NULL LIMIT 5`);
+    castFixDetail += ' sample:' + JSON.stringify(sample.rows);
+  } catch (err: unknown) {
+    castFixDetail += ' err:' + (err instanceof Error ? err.message : String(err));
+  }
+}
+
+seedStaffData().then(() => fixProjectCasts()).then(() => {
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });

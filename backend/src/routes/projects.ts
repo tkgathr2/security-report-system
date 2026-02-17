@@ -63,7 +63,7 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     }
 
     const castsResult = await pool.query(
-      `SELECT pc.staff_no, sm.display_name_kanji as cast_name
+      `SELECT pc.staff_no, COALESCE(sm.display_name_kanji, 'No.' || pc.staff_no) as cast_name
        FROM project_casts pc
        LEFT JOIN staff_master sm ON pc.staff_id = sm.id AND sm.deleted_at IS NULL
        WHERE pc.project_id = $1 AND pc.deleted_at IS NULL ORDER BY pc.row_index`,
