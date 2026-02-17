@@ -174,12 +174,23 @@ function convertToUtf8(buffer: Buffer): string {
     return buffer.toString('utf8');
   }
   
+  const sourceEncoding = detected || 'SJIS';
   const unicodeArray = Encoding.convert(uint8Array, {
     to: 'UNICODE',
-    from: detected || 'SJIS'
+    from: sourceEncoding
   });
   
-  return Encoding.codeToString(unicodeArray);
+  const result = Encoding.codeToString(unicodeArray);
+  
+  if (sourceEncoding !== 'SJIS' && !/[\u3040-\u9FFF\uFF00-\uFFEF]/.test(result.substring(0, 500))) {
+    const sjisArray = Encoding.convert(uint8Array, {
+      to: 'UNICODE',
+      from: 'SJIS'
+    });
+    return Encoding.codeToString(sjisArray);
+  }
+  
+  return result;
 }
 
 function normalizeClientName(name: string): string {
