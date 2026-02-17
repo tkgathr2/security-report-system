@@ -63,7 +63,7 @@ let seedError = '';
 let seedDetail = '';
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v81', seedStatus, seedError, seedDetail });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v82', seedStatus, seedError, seedDetail });
 });
 
 app.use('/api/auth', authRouter);
@@ -159,6 +159,16 @@ async function seedStaffData() {
     const count = parseInt(countResult.rows[0].cnt, 10);
     seedDetail += ` count:${count}`;
     if (count >= 10) { seedStatus = 'skipped-enough'; return; }
+
+    if (hasDeletedAt) {
+      const restored = await pool.query(`UPDATE staff_master SET deleted_at = NULL WHERE deleted_at IS NOT NULL`);
+      seedDetail += ` restored:${restored.rowCount}`;
+    }
+
+    const recount = await pool.query(`SELECT COUNT(*) as cnt FROM staff_master ${whereClause}`);
+    const recountVal = parseInt(recount.rows[0].cnt, 10);
+    seedDetail += ` afterRestore:${recountVal}`;
+    if (recountVal >= 10) { seedStatus = 'restored-' + recountVal; return; }
 
     const staffData = [
       ['e2a3ee29-fa62-4394-b5c5-4826f30cde30', '有澤 知子', 'アリサワ トモコ'],
