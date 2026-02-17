@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import pool from '../db/pool';
 import { CastJwtPayload, AuthenticatedCastRequest } from '../types';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
@@ -7,7 +8,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
   console.error('[SECURITY] AUTH_SECRET is not set in production! Authentication will fail.');
 }
 
-export function authenticateCast(req: Request, res: Response, next: NextFunction): void {
+export async function authenticateCast(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -23,6 +24,20 @@ export function authenticateCast(req: Request, res: Response, next: NextFunction
 
   try {
     const decoded = jwt.verify(token, AUTH_SECRET) as CastJwtPayload;
+
+    const userCheck = await pool.query(
+      'SELECT id FROM cast_users WHERE id = $1 AND magic_link_token IS NOT NULL AND deleted_at IS NULL',
+      [decoded.userId]
+    );
+    if (userCheck.rows.length === 0) {
+      res.status(401).json({
+        error: 'UNAUTHORIZED',
+        message: 'セッションが無効です。再度ログインしてください',
+        details: {}
+      });
+      return;
+    }
+
     (req as AuthenticatedCastRequest).castUser = decoded;
     next();
   } catch {

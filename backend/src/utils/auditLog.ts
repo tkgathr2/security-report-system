@@ -23,8 +23,8 @@ export async function logAudit(params: AuditLogParams): Promise<void> {
   } = params;
 
   const ipAddress = req
-    ? (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || null
-    : null;
+    ? (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'
+    : 'system';
 
   try {
     await pool.query(
