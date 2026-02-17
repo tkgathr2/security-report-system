@@ -195,9 +195,8 @@ function convertToUtf8(buffer: Buffer): string {
 
 function normalizeClientName(name: string): string {
   return name
-    .replace(/[（）\(\)]/g, '')
-    .replace(/[\s　]+/g, '')
     .replace(/株式会社|有限会社|合同会社/g, '')
+    .replace(/[\s　]+/g, '')
     .toLowerCase()
     .trim();
 }
@@ -628,7 +627,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
 
   // 全行がエラーの場合、または80%以上がエラーの場合は「形式が違う」エラーを返す
   const errorRate = skippedRowsCount / records.length;
-  if (skippedRowsCount === records.length || errorRate >= 0.8) {
+  if (skippedRowsCount === records.length || errorRate >= 0.5) {
     // どの項目が空だったかを集計
     const emptyFieldCounts: Record<string, number> = {};
     for (const err of errors) {
