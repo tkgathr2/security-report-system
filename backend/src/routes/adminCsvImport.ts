@@ -550,7 +550,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                   const staffKana = castNameKana || castName;
                   if (!staffIdRow.rows[0]) {
                     staffIdRow = await pool.query(
-                      `SELECT id FROM staff_master WHERE display_name_kana = $1 AND deleted_at IS NULL LIMIT 1`,
+                      `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
                       [staffKana]
                     );
                   }
@@ -664,7 +664,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     const noEmailResult = await pool.query(
             `SELECT sm.display_name_kanji FROM staff_master sm
              LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true AND cu.deleted_at IS NULL
-             WHERE sm.display_name_kana IN (${placeholders})
+             WHERE REPLACE(REPLACE(sm.display_name_kana, ' ', ''), E'\\u3000', '') IN (${placeholders})
          AND sm.deleted_at IS NULL
          AND cu.id IS NULL`,
       kanaList
