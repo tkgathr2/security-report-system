@@ -58,8 +58,12 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+let seedStatus = 'pending';
+let seedError = '';
+let seedDetail = '';
+
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v80' });
+  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v81', seedStatus, seedError, seedDetail });
 });
 
 app.use('/api/auth', authRouter);
@@ -144,10 +148,13 @@ if (process.env.NODE_ENV !== 'production') {
 
 async function seedStaffData() {
   try {
+    const colResult = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'staff_master' ORDER BY ordinal_position`);
+    seedDetail = 'cols:' + colResult.rows.map((r: {column_name: string}) => r.column_name).join(',');
     const countResult = await pool.query('SELECT COUNT(*) as cnt FROM staff_master WHERE deleted_at IS NULL');
     const count = parseInt(countResult.rows[0].cnt, 10);
     console.log(`[Seed] Current staff count: ${count}`);
-    if (count >= 10) return;
+    seedDetail += ` count:${count}`;
+    if (count >= 10) { seedStatus = 'skipped-enough'; return; }
     console.log('[Seed] Staff count < 10, inserting missing staff data...');
     await pool.query(`
       INSERT INTO staff_master (id, display_name_kanji, display_name_kana, email, created_by, created_at, updated_at)
@@ -185,8 +192,13 @@ async function seedStaffData() {
     `);
     const newCount = await pool.query('SELECT COUNT(*) as cnt FROM staff_master WHERE deleted_at IS NULL');
     console.log(`[Seed] Staff count after seed: ${newCount.rows[0].cnt}`);
-  } catch (err) {
+    seedStatus = 'done-' + newCount.rows[0].cnt;
+    seedDetail += ` after:${newCount.rows[0].cnt}`;
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('[Seed] Error seeding staff data:', err);
+    seedStatus = 'error';
+    seedError = errMsg;
   }
 }
 
