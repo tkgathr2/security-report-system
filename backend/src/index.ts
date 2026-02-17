@@ -58,8 +58,22 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-15-v77' });
+app.get('/version', async (_req: Request, res: Response) => {
+  try {
+    const dbHost = process.env.DATABASE_URL?.match(/@([^:/]+)/)?.[1] ?? 'unknown';
+    const staffResult = await pool.query('SELECT COUNT(*) as cnt FROM staff_master WHERE deleted_at IS NULL');
+    const migResult = await pool.query('SELECT name FROM pgmigrations ORDER BY run_on DESC LIMIT 3');
+    const sampleResult = await pool.query('SELECT id, display_name_kanji FROM staff_master WHERE deleted_at IS NULL LIMIT 3');
+    res.json({
+      spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v78-diag',
+      db_host: dbHost,
+      staff_count: staffResult.rows[0]?.cnt,
+      recent_migrations: migResult.rows.map((r: { name: string }) => r.name),
+      sample_staff: sampleResult.rows
+    });
+  } catch (err) {
+    res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v78-diag', db_error: String(err) });
+  }
 });
 
 app.use('/api/auth', authRouter);
