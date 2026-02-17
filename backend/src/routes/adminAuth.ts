@@ -332,9 +332,9 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
     const assignRole = role || 'viewer';
     const adminUser = req.user as Express.User;
 
-    const requestResult = await pool.query('SELECT * FROM access_requests WHERE id = $1', [requestId]);
+    const requestResult = await pool.query('SELECT * FROM access_requests WHERE id = $1 AND status = $2', [requestId, 'pending']);
     if (requestResult.rows.length === 0) {
-      res.status(404).json({ error: 'NOT_FOUND', message: '申請が見つかりません' });
+      res.status(404).json({ error: 'NOT_FOUND', message: '保留中の申請が見つかりません' });
       return;
     }
 
@@ -461,6 +461,11 @@ router.delete('/admins/:adminId', requireSuperAdmin, async (req: Request, res: R
     }
 
     await pool.query('UPDATE admin_allowlist SET is_active = false WHERE id = $1', [adminId]);
+
+    await pool.query(
+      `DELETE FROM session WHERE sess::text LIKE $1`,
+      [`%${adminId}%`]
+    ).catch(() => {});
 
     logAudit({ req, actorEmail: adminUser.email, action: 'DELETE_ADMIN', targetType: 'admin', targetId: adminId, payload: {} });
 

@@ -68,7 +68,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       return;
     }
 
-    if (!guard_contents || !Array.isArray(guard_contents) || guard_contents.length === 0) {
+    if (!guard_contents || !Array.isArray(guard_contents) || guard_contents.filter((g: string) => typeof g === 'string' && g.trim() !== '').length === 0) {
       sendBadRequest(res, '警備内容は1件以上必須です');
       return;
     }
@@ -148,6 +148,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json
       ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
       WHERE NOT EXISTS (SELECT 1 FROM reports WHERE project_id = $1 AND deleted_at IS NULL)
+        AND EXISTS (SELECT 1 FROM projects WHERE id = $1 AND url_expires_at > NOW() AND deleted_at IS NULL)
       RETURNING id`,
       [
         project.id,
@@ -171,7 +172,12 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     );
 
     if (reportResult.rows.length === 0) {
-      sendConflict(res, 'この案件の報告書は既に提出されています');
+      const dupCheck = await pool.query('SELECT 1 FROM reports WHERE project_id = $1 AND deleted_at IS NULL', [project.id]);
+      if (dupCheck.rows.length > 0) {
+        sendConflict(res, 'この案件の報告書は既に提出されています');
+      } else {
+        sendExpired(res, 'この案件のURLは期限切れです');
+      }
       return;
     }
 
@@ -217,8 +223,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         });
         console.log(`[ASYNC] Generated PDF: ${pdfBuffer.length} bytes`);
       } catch (pdfError) {
-        console.error('[ASYNC] PDF generation failed, using dummy PDF:', pdfError);
-        pdfBuffer = generateDummyPdf();
+        console.error('[ASYNC] PDF generation failed:', pdfError);
+        pdfBuffer = Buffer.alloc(0);
         pdfGenerationStatus = 'failed';
       }
 

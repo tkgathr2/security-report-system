@@ -313,6 +313,10 @@ router.delete('/staff/:id', requireAdmin, async (req: Request, res: Response) =>
       [id]
     );
     await client.query(
+      `UPDATE project_casts SET deleted_at = NOW() WHERE staff_id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    await client.query(
       `UPDATE staff_master SET deleted_at = NOW() WHERE id = $1`,
       [id]
     );
@@ -335,7 +339,7 @@ router.get('/cast-users', requireAdmin, async (req: Request, res: Response) => {
               sm.display_name_kana as staff_name_kana
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.deleted_at IS NULL
+       WHERE cu.deleted_at IS NULL AND cu.email_verified = true
        ORDER BY cu.updated_at DESC
        LIMIT 200`
     );
