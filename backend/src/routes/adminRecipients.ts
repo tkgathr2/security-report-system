@@ -224,7 +224,7 @@ router.post('/for-report/:reportId', requireAdmin, async (req: Request, res: Res
         `SELECT r.id, r.company_name, r.contact_name, r.email 
          FROM recipients r 
          INNER JOIN report_recipients rr ON r.id = rr.recipient_id 
-         WHERE rr.report_id = $1 
+         WHERE rr.report_id = $1 AND rr.deleted_at IS NULL AND r.deleted_at IS NULL
          ORDER BY r.company_name, r.contact_name`,
         [reportId]
       );

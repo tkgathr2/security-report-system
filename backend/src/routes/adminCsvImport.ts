@@ -338,6 +338,10 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   const processedWorkDates = new Map<string, Set<string>>();
   const castDateAssignments = new Map<string, string>();
 
+  const dbClient = await pool.connect();
+  try {
+  await dbClient.query('BEGIN');
+
   for (let i = 0; i < records.length; i++) {
     const row = records[i];
     const rowNum = i + 2;
@@ -403,7 +407,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
 
       try {
         if (!projectMap.has(projectKey)) {
-          const existingProject = await pool.query(
+          const existingProject = await dbClient.query(
             'SELECT id FROM projects WHERE project_key = $1 AND deleted_at IS NULL',
             [projectKey]
           );
@@ -411,13 +415,13 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
           if (existingProject.rows.length > 0) {
             const existingProjectId = existingProject.rows[0].id;
             const clientNameNormalized = normalizeClientName(validClientNameRaw);
-            const clientResult = await pool.query(
+            const clientResult = await dbClient.query(
               'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true AND deleted_at IS NULL',
               [clientNameNormalized]
             );
             let clientId: string | null = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
             if (!clientId) {
-              const newClient = await pool.query(
+              const newClient = await dbClient.query(
                 `INSERT INTO clients (name, name_normalized, emails, is_active)
                  VALUES ($1, $2, $3, true)
                  ON CONFLICT DO NOTHING
@@ -428,14 +432,14 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                 clientId = newClient.rows[0].id;
                 clientAutoCreatedCount++;
               } else {
-                const retryResult = await pool.query(
+                const retryResult = await dbClient.query(
                   'SELECT id FROM clients WHERE name_normalized = $1 AND deleted_at IS NULL',
                   [clientNameNormalized]
                 );
                 clientId = retryResult.rows.length > 0 ? retryResult.rows[0].id : null;
               }
             }
-            await pool.query(
+            await dbClient.query(
               `UPDATE projects SET client_id = $1, work_name = $2, location = $3,
                start_time = $4, end_time = $5, break_time = $6,
                work_title_raw = $7, qualifier_hint = $8, supervisor_name = $9,
@@ -444,7 +448,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
               [clientId, workName, validLocation, startTime, endTime, breakTime,
                validProjectName, qualifierHint, supervisorName, existingProjectId]
             );
-            await pool.query(
+            await dbClient.query(
               `UPDATE project_casts SET deleted_at = NOW() WHERE project_id = $1 AND deleted_at IS NULL`,
               [existingProjectId]
             );
@@ -452,7 +456,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
             updatedProjectsCount++;
           } else {
             const clientNameNormalized = normalizeClientName(validClientNameRaw);
-            const clientResult = await pool.query(
+            const clientResult = await dbClient.query(
               'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true AND deleted_at IS NULL',
               [clientNameNormalized]
             );
@@ -461,7 +465,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
             const status = 'active';
 
             if (!clientId) {
-              const newClient = await pool.query(
+              const newClient = await dbClient.query(
                 `INSERT INTO clients (name, name_normalized, emails, is_active)
                  VALUES ($1, $2, $3, true)
                  ON CONFLICT DO NOTHING
@@ -472,7 +476,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                 clientId = newClient.rows[0].id;
                 clientAutoCreatedCount++;
               } else {
-                const retryResult = await pool.query(
+                const retryResult = await dbClient.query(
                   'SELECT id FROM clients WHERE name_normalized = $1 AND deleted_at IS NULL',
                   [clientNameNormalized]
                 );
@@ -488,7 +492,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
             urlExpiresAt.setDate(urlExpiresAt.getDate() + 3);
             urlExpiresAt.setHours(23, 59, 59, 999);
 
-            const insertResult = await pool.query(
+            const insertResult = await dbClient.query(
               `INSERT INTO projects (
                 project_key, client_id, work_date, work_name, location,
                 start_time, end_time, break_time, work_title_raw, qualifier_hint,
@@ -539,7 +543,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
 
             if (!castDateAssignments.has(castDateKey) || castDateAssignments.get(castDateKey) === workName) {
               if (!projectInfo.casts.has(castIdentifier)) {
-                const existingAssignment = await pool.query(
+                const existingAssignment = await dbClient.query(
                                     `SELECT p.work_name FROM project_casts pc
                                      JOIN projects p ON pc.project_id = p.id
                                      LEFT JOIN staff_master sm ON pc.staff_id = sm.id AND sm.deleted_at IS NULL
@@ -554,28 +558,28 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                   errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingAssignment.rows[0].work_name}」に割り当て済みです（1日1現場まで）` });
                   duplicateCastAssignments++;
                 } else {
-                  let staffIdRow = await pool.query(
+                  let staffIdRow = await dbClient.query(
                     `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
                     [castName]
                   );
                   const staffKana = castNameKana || castName;
                   if (!staffIdRow.rows[0]) {
-                    staffIdRow = await pool.query(
+                    staffIdRow = await dbClient.query(
                       `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
                       [staffKana]
                     );
                   }
                   if (!staffIdRow.rows[0]) {
-                    const softDeleted = await pool.query(
+                    const softDeleted = await dbClient.query(
                       `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NOT NULL LIMIT 1`,
                       [staffKana]
                     );
                     if (softDeleted.rows[0]) {
-                      await pool.query(`UPDATE staff_master SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [softDeleted.rows[0].id]);
+                      await dbClient.query(`UPDATE staff_master SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [softDeleted.rows[0].id]);
                       staffIdRow = softDeleted;
                     } else {
                       const normalizedKana = staffKana.replace(/\s+/g, ' ').replace(/\u3000/g, ' ').trim();
-                      const newStaff = await pool.query(
+                      const newStaff = await dbClient.query(
                         `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
                          VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
                          ON CONFLICT (display_name_kana) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
@@ -587,7 +591,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                     }
                   }
                   processedStaffKana.add(staffKana);
-                  await pool.query(
+                  await dbClient.query(
                     `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
                      VALUES ($1, $2, $3, $4, $5)
                      ON CONFLICT (project_id, staff_no) DO UPDATE SET staff_id = EXCLUDED.staff_id, cast_name = EXCLUDED.cast_name`,
@@ -610,6 +614,16 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
         skippedRowsCount++;
       }
     }
+  }
+
+  await dbClient.query('COMMIT');
+  } catch (txError) {
+    await dbClient.query('ROLLBACK');
+    console.error('CSV import transaction error:', txError);
+    res.status(500).json({ error: 'IMPORT_FAILED', message: 'インポート処理中にエラーが発生しました', details: { error: String(txError) } });
+    return;
+  } finally {
+    dbClient.release();
   }
 
   // 全行がエラーの場合、または80%以上がエラーの場合は「形式が違う」エラーを返す

@@ -30,6 +30,12 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
   try {
     const { unique_url } = req.params;
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(String(unique_url))) {
+      sendNotFound(res, '案件が見つかりません');
+      return;
+    }
+
     const result = await pool.query(
       `SELECT p.id, p.project_key, p.client_id, c.name as client_name_raw, p.work_date, p.work_name, 
               p.location, p.start_time, p.end_time, p.break_time, p.work_title_raw, 
@@ -54,8 +60,9 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     );
 
     if (existingReportResult.rows.length > 0) {
-      res.status(303).json({
+      res.status(200).json({
         error: 'ALREADY_SUBMITTED',
+        already_submitted: true,
         message: 'この案件の報告書は既に提出されています',
         details: {}
       });
@@ -105,7 +112,13 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/test/create', async (req: Request, res: Response) => {
+router.post('/test/create', (req: Request, res: Response, next: () => void) => {
+  if (process.env.NODE_ENV === 'production') {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'このエンドポイントは本番環境では利用できません' });
+    return;
+  }
+  next();
+}, async (req: Request, res: Response) => {
   try {
     const { client_email } = req.body;
     const uniqueUrl = crypto.randomUUID();

@@ -8,6 +8,35 @@ import { logAudit } from '../utils/auditLog';
 
 const router = Router();
 
+const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000;
+
+function checkRateLimit(key: string): { allowed: boolean; remainingMs?: number } {
+  const entry = loginAttempts.get(key);
+  if (!entry) return { allowed: true };
+  if (entry.lockedUntil > Date.now()) {
+    return { allowed: false, remainingMs: entry.lockedUntil - Date.now() };
+  }
+  if (entry.lockedUntil <= Date.now() && entry.count >= MAX_LOGIN_ATTEMPTS) {
+    loginAttempts.delete(key);
+  }
+  return { allowed: true };
+}
+
+function recordFailedAttempt(key: string): void {
+  const entry = loginAttempts.get(key) || { count: 0, lockedUntil: 0 };
+  entry.count++;
+  if (entry.count >= MAX_LOGIN_ATTEMPTS) {
+    entry.lockedUntil = Date.now() + LOCK_DURATION_MS;
+  }
+  loginAttempts.set(key, entry);
+}
+
+function resetAttempts(key: string): void {
+  loginAttempts.delete(key);
+}
+
 const KANJI_VARIANTS: Record<string, string> = {
   '\u9AD9': '\u9AD8', // 髙 → 高
   '\uFA30': '\u4FAE', // 侮 variant
@@ -224,7 +253,17 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ message: '正しいメールアドレスを入力してください' });
     }
 
+    if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ message: 'PINコードは4桁の数字で入力してください' });
+    }
+
     const normalizedEmail = email.toLowerCase().trim();
+
+    const rateCheck = checkRateLimit(normalizedEmail);
+    if (!rateCheck.allowed) {
+      const remainMin = Math.ceil((rateCheck.remainingMs || 0) / 60000);
+      return res.status(429).json({ message: `ログイン試行回数が上限を超えました。${remainMin}分後にお試しください` });
+    }
 
     const result = await pool.query(
       `SELECT cu.id, cu.email, cu.pin_hash, cu.email_verified, cu.staff_id,
@@ -236,6 +275,7 @@ router.post('/login', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
+      recordFailedAttempt(normalizedEmail);
       return res.status(401).json({ message: 'メールアドレスまたはPINコードが正しくありません' });
     }
 
@@ -250,8 +290,11 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const pinValid = await bcrypt.compare(pin, user.pin_hash);
     if (!pinValid) {
+      recordFailedAttempt(normalizedEmail);
       return res.status(401).json({ message: 'メールアドレスまたはPINコードが正しくありません' });
     }
+
+    resetAttempts(normalizedEmail);
 
     // Create session token
     const sessionToken = generateToken();

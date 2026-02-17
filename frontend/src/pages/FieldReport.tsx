@@ -127,6 +127,14 @@ export default function FieldReport() {
         setPageState('completed')
         return
       }
+
+      if (response.ok) {
+        const peek = await response.clone().json()
+        if (peek.already_submitted) {
+          setPageState('completed')
+          return
+        }
+      }
       
       if (response.status === 403) {
         setErrorMessage('この案件は会社が未登録のため、報告書を作成できません。管理者にお問い合わせください。')

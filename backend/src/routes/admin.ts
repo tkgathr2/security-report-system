@@ -313,6 +313,10 @@ router.delete('/staff/:id', requireAdmin, async (req: Request, res: Response) =>
       [id]
     );
     await client.query(
+      `UPDATE project_casts SET deleted_at = NOW() WHERE staff_id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    await client.query(
       `UPDATE staff_master SET deleted_at = NOW() WHERE id = $1`,
       [id]
     );
@@ -335,7 +339,7 @@ router.get('/cast-users', requireAdmin, async (req: Request, res: Response) => {
               sm.display_name_kana as staff_name_kana
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.deleted_at IS NULL
+       WHERE cu.deleted_at IS NULL AND cu.email_verified = true
        ORDER BY cu.updated_at DESC
        LIMIT 200`
     );
@@ -583,6 +587,14 @@ router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
       return;
     }
 
+    const emailList: string[] = Array.isArray(emails) ? emails.filter((e: string) => e && typeof e === 'string' && e.trim()) : [];
+    const invalidClientEmails = emailList.filter((e: string) => !isValidEmail(String(e)));
+    if (invalidClientEmails.length > 0) {
+      sendBadRequest(res, '無効なメールアドレスが含まれています', { invalid: invalidClientEmails });
+      return;
+    }
+    const normalizedClientEmails = emailList.map((e: string) => String(e).trim().toLowerCase());
+
     const nameNormalized = name
       .replace(/[（）\(\)]/g, '')
       .replace(/[\s　]+/g, '')
@@ -594,7 +606,7 @@ router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
       `INSERT INTO clients (name, name_normalized, emails, is_active)
        VALUES ($1, $2, $3, true)
        RETURNING id, name, name_normalized, emails, is_active, created_at`,
-      [name.trim(), nameNormalized, emails || []]
+      [name.trim(), nameNormalized, normalizedClientEmails]
     );
 
     const adminUser = req.user as { email: string };
@@ -804,7 +816,15 @@ router.delete('/projects/without-casts', requireAdmin, async (req: Request, res:
        RETURNING id`
     );
 
-    const deletedCount = deleteResult.rowCount || 0;
+    const deletedIds = deleteResult.rows.map((r: { id: string }) => r.id);
+    const deletedCount = deletedIds.length;
+
+    if (deletedCount > 0) {
+      await pool.query(
+        `UPDATE project_casts SET deleted_at = NOW() WHERE project_id = ANY($1) AND deleted_at IS NULL`,
+        [deletedIds]
+      );
+    }
 
     // Log the action
     const adminUser = req.user as { email: string };

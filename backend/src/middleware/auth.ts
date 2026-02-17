@@ -2,7 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { CastJwtPayload, AuthenticatedCastRequest } from '../types';
 
-const AUTH_SECRET = process.env.AUTH_SECRET || 'dev-secret-key';
+const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
+if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
+  console.error('[SECURITY] AUTH_SECRET is not set in production! Authentication will fail.');
+}
 
 export function authenticateCast(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
