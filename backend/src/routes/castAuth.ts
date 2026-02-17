@@ -497,6 +497,7 @@ router.get('/today', async (req: Request, res: Response) => {
            pc.staff_id = $2
            OR REPLACE(REPLACE(sm2.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($3, ' ', ''), E'\\u3000', '')
            OR TRANSLATE(REPLACE(REPLACE(sm2.display_name_kanji, ' ', ''), E'\\u3000', ''), E'\\u9AD9\\uFA11\\u5861\\u6FA4\\u9F8D\\u5EE3\\u6AFB\\u7027\\u90DE\\u9F4B\\u83EF\\u5B78', E'\\u9AD8\\u5D0E\\u5D0E\\u6CA2\\u7ADC\\u5E83\\u685C\\u6EDD\\u90CE\\u658E\\u82B1\\u5B66') = $4
+           OR (pc.staff_id IS NULL AND pc.cast_name IS NOT NULL AND REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($3, ' ', ''), E'\\u3000', ''))
          )
        ORDER BY p.work_date, p.work_name`,
      [today, user.staff_id, matchName, normalizedMatchName]
