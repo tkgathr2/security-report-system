@@ -338,8 +338,50 @@ async function cleanupData() {
   }
 }
 
+let server: ReturnType<typeof app.listen> | null = null;
+
+process.on('uncaughtException', (err: Error) => {
+  const ts = new Date().toISOString();
+  console.error(`[${ts}] UNCAUGHT EXCEPTION:`, err.message);
+  console.error(err.stack);
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+  const ts = new Date().toISOString();
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  console.error(`[${ts}] UNHANDLED REJECTION:`, msg);
+  if (stack) console.error(stack);
+  gracefulShutdown('unhandledRejection');
+});
+
+function gracefulShutdown(source: string) {
+  console.error(`[gracefulShutdown] triggered by ${source}. Closing server and DB pool...`);
+  const forceExit = setTimeout(() => {
+    console.error('[gracefulShutdown] Forced exit after timeout');
+    process.exit(1);
+  }, 10_000);
+  forceExit.unref();
+
+  const closeServer = server
+    ? new Promise<void>((resolve) => server!.close(() => resolve()))
+    : Promise.resolve();
+
+  closeServer
+    .then(() => pool.end())
+    .then(() => {
+      console.error('[gracefulShutdown] Clean exit');
+      process.exit(1);
+    })
+    .catch((err: unknown) => {
+      console.error('[gracefulShutdown] Error during shutdown:', err);
+      process.exit(1);
+    });
+}
+
 seedStaffData().then(() => fixProjectCasts()).then(() => cleanupData()).then(() => {
-  app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
 });
