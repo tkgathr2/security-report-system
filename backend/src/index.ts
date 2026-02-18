@@ -339,12 +339,13 @@ async function cleanupData() {
 }
 
 let server: ReturnType<typeof app.listen> | null = null;
+let isShuttingDown = false;
 
 process.on('uncaughtException', (err: Error) => {
   const ts = new Date().toISOString();
   console.error(`[${ts}] UNCAUGHT EXCEPTION:`, err.message);
   console.error(err.stack);
-  gracefulShutdown('uncaughtException');
+  gracefulShutdown('uncaughtException', 1);
 });
 
 process.on('unhandledRejection', (reason: unknown) => {
@@ -353,14 +354,30 @@ process.on('unhandledRejection', (reason: unknown) => {
   const stack = reason instanceof Error ? reason.stack : undefined;
   console.error(`[${ts}] UNHANDLED REJECTION:`, msg);
   if (stack) console.error(stack);
-  gracefulShutdown('unhandledRejection');
+  gracefulShutdown('unhandledRejection', 1);
 });
 
-function gracefulShutdown(source: string) {
+process.on('SIGTERM', () => {
+  console.log('[SIGTERM] received. Shutting down gracefully...');
+  gracefulShutdown('SIGTERM', 0);
+});
+
+process.on('SIGINT', () => {
+  console.log('[SIGINT] received. Shutting down gracefully...');
+  gracefulShutdown('SIGINT', 0);
+});
+
+function gracefulShutdown(source: string, exitCode: number) {
+  if (isShuttingDown) {
+    console.error(`[gracefulShutdown] already in progress, ignoring duplicate from ${source}`);
+    return;
+  }
+  isShuttingDown = true;
+
   console.error(`[gracefulShutdown] triggered by ${source}. Closing server and DB pool...`);
   const forceExit = setTimeout(() => {
     console.error('[gracefulShutdown] Forced exit after timeout');
-    process.exit(1);
+    process.exit(exitCode);
   }, 10_000);
   forceExit.unref();
 
@@ -371,12 +388,12 @@ function gracefulShutdown(source: string) {
   closeServer
     .then(() => pool.end())
     .then(() => {
-      console.error('[gracefulShutdown] Clean exit');
-      process.exit(1);
+      console.error(`[gracefulShutdown] Clean exit (code=${exitCode})`);
+      process.exit(exitCode);
     })
     .catch((err: unknown) => {
       console.error('[gracefulShutdown] Error during shutdown:', err);
-      process.exit(1);
+      process.exit(exitCode);
     });
 }
 
