@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
-import { isValidEmail } from '../utils/validation';
+import { isValidEmail, validateStringField, MAX_LENGTHS } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
 
 const router = Router();
@@ -95,6 +95,11 @@ router.post('/', requireAdmin, async (req: Request, res: Response) => {
     });
     return;
   }
+
+  const companyErr = validateStringField(company_name, '会社名', MAX_LENGTHS.COMPANY_NAME);
+  if (companyErr) { res.status(400).json({ error: 'VALIDATION_ERROR', message: companyErr, details: {} }); return; }
+  const contactErr = validateStringField(contact_name, '担当者名', MAX_LENGTHS.PERSON_NAME);
+  if (contactErr) { res.status(400).json({ error: 'VALIDATION_ERROR', message: contactErr, details: {} }); return; }
 
   if (!isValidEmail(email)) {
     res.status(400).json({

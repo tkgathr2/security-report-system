@@ -6,6 +6,7 @@ import { authenticateCast, requireAdmin } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
 import { sendBadRequest, sendNotFound, sendConflict, sendForbidden, sendExpired, sendInternalError } from '../utils/errorHandler';
 import { logAudit } from '../utils/auditLog';
+import { validateStringField, validateArrayItems, MAX_LENGTHS } from '../utils/validation';
 
 const router = Router();
 
@@ -76,6 +77,23 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     if (!guard_contents || !Array.isArray(guard_contents) || guard_contents.filter((g: string) => typeof g === 'string' && g.trim() !== '').length === 0) {
       sendBadRequest(res, '警備内容は1件以上必須です');
       return;
+    }
+
+    const supervisorErr = validateStringField(supervisor_name, '現場責任者名', MAX_LENGTHS.PERSON_NAME);
+    if (supervisorErr) { sendBadRequest(res, supervisorErr); return; }
+    const writerErr = validateStringField(writer_name, '報告者名', MAX_LENGTHS.PERSON_NAME);
+    if (writerErr) { sendBadRequest(res, writerErr); return; }
+    const guardOtherErr = validateStringField(guard_other_text, '警備内容その他', MAX_LENGTHS.GUARD_OTHER_TEXT);
+    if (guardOtherErr) { sendBadRequest(res, guardOtherErr); return; }
+    const gcErr = validateArrayItems(guard_contents, '警備内容', MAX_LENGTHS.GUARD_CONTENT_ITEM, MAX_LENGTHS.GUARD_CONTENTS_MAX_ITEMS);
+    if (gcErr) { sendBadRequest(res, gcErr); return; }
+    if (signature_png_base64 && signature_png_base64.length > MAX_LENGTHS.SIGNATURE_BASE64) {
+      sendBadRequest(res, '署名データが大きすぎます');
+      return;
+    }
+    if (Array.isArray(guards)) {
+      const guardsErr = validateArrayItems(guards.map((g: { name?: string }) => g?.name || ''), '警備員', MAX_LENGTHS.PERSON_NAME, MAX_LENGTHS.GUARDS_MAX_ITEMS);
+      if (guardsErr) { sendBadRequest(res, guardsErr); return; }
     }
 
     if (has_qualifier === true) {

@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
 import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '../utils/errorHandler';
-import { isValidEmail } from '../utils/validation';
+import { isValidEmail, validateStringField, validateArrayItems, MAX_LENGTHS } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
@@ -212,6 +212,10 @@ router.post('/staff', requireAdmin, async (req: Request, res: Response) => {
       sendBadRequest(res, '漢字名とカタカナ名は必須です');
       return;
     }
+    const kanjiErr = validateStringField(display_name_kanji, '漢字名', MAX_LENGTHS.PERSON_NAME);
+    if (kanjiErr) { sendBadRequest(res, kanjiErr); return; }
+    const kanaErr = validateStringField(display_name_kana, 'カタカナ名', MAX_LENGTHS.PERSON_NAME);
+    if (kanaErr) { sendBadRequest(res, kanaErr); return; }
 
     const result = await pool.query(
       `INSERT INTO staff_master (display_name_kanji, display_name_kana)
@@ -240,6 +244,10 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
       sendBadRequest(res, '漢字名とカタカナ名は必須です');
       return;
     }
+    const kanjiErr2 = validateStringField(display_name_kanji, '漢字名', MAX_LENGTHS.PERSON_NAME);
+    if (kanjiErr2) { sendBadRequest(res, kanjiErr2); return; }
+    const kanaErr2 = validateStringField(display_name_kana, 'カタカナ名', MAX_LENGTHS.PERSON_NAME);
+    if (kanaErr2) { sendBadRequest(res, kanaErr2); return; }
 
     if (email && !isValidEmail(email)) {
       sendBadRequest(res, '正しいメールアドレスを入力してください');
@@ -247,7 +255,7 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      `UPDATE staff_master 
+      `UPDATE staff_master
        SET display_name_kanji = $1, display_name_kana = $2, email = $3, updated_at = CURRENT_TIMESTAMP
        WHERE id = $4
        RETURNING id, display_name_kanji, display_name_kana, email, updated_at`,
@@ -407,6 +415,11 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
     const { id } = req.params;
     const { staff_id, staff_name_kanji, reason } = req.body;
     const adminUser = req.user as { id: string; email: string };
+
+    const nameErr = validateStringField(staff_name_kanji, 'スタッフ名', MAX_LENGTHS.PERSON_NAME);
+    if (nameErr) { sendBadRequest(res, nameErr); return; }
+    const reasonErr = validateStringField(reason, '理由', MAX_LENGTHS.REASON);
+    if (reasonErr) { sendBadRequest(res, reasonErr); return; }
 
     const currentResult = await pool.query(
       `SELECT cu.email, cu.staff_id, sm.display_name_kanji as name
@@ -569,6 +582,14 @@ router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => 
       sendBadRequest(res, '会社名は必須です');
       return;
     }
+    const clientNameErr = validateStringField(name, '会社名', MAX_LENGTHS.COMPANY_NAME);
+    if (clientNameErr) { sendBadRequest(res, clientNameErr); return; }
+    const contactNameErr = validateStringField(contact_name, '担当者名', MAX_LENGTHS.PERSON_NAME);
+    if (contactNameErr) { sendBadRequest(res, contactNameErr); return; }
+    const titleErr = validateStringField(contact_title, '役職', MAX_LENGTHS.CONTACT_TITLE);
+    if (titleErr) { sendBadRequest(res, titleErr); return; }
+    const addrErr = validateStringField(address, '住所', MAX_LENGTHS.ADDRESS);
+    if (addrErr) { sendBadRequest(res, addrErr); return; }
 
     if (contact_email && !isValidEmail(contact_email)) {
       sendBadRequest(res, '正しいメールアドレスを入力してください');
@@ -669,6 +690,8 @@ router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
       sendBadRequest(res, '会社名は必須です');
       return;
     }
+    const createClientNameErr = validateStringField(name, '会社名', MAX_LENGTHS.COMPANY_NAME);
+    if (createClientNameErr) { sendBadRequest(res, createClientNameErr); return; }
 
     const emailList: string[] = Array.isArray(emails) ? emails.filter((e: string) => e && typeof e === 'string' && e.trim()) : [];
     const invalidClientEmails = emailList.filter((e: string) => !isValidEmail(String(e)));
@@ -732,6 +755,8 @@ router.post('/clients/register-and-activate', requireAdmin, async (req: Request,
       sendBadRequest(res, '会社名は必須です');
       return;
     }
+    const regClientNameErr = validateStringField(client_name_raw, '会社名', MAX_LENGTHS.COMPANY_NAME);
+    if (regClientNameErr) { sendBadRequest(res, regClientNameErr); return; }
 
     const nameNormalized = client_name_raw
       .replace(/株式会社|有限会社|合同会社/g, '')
@@ -964,8 +989,10 @@ router.post('/projects/:projectId/casts', requireAdmin, async (req: Request, res
       sendBadRequest(res, 'staff_no は必須です');
       return;
     }
+    const staffNoErr = validateStringField(staff_no, 'staff_no', MAX_LENGTHS.STAFF_NO);
+    if (staffNoErr) { sendBadRequest(res, staffNoErr); return; }
 
-    const projectCheck = await pool.query('SELECT id FROM projects WHERE id = $1 AND deleted_at IS NULL', [projectId]);
+    const projectCheck= await pool.query('SELECT id FROM projects WHERE id = $1 AND deleted_at IS NULL', [projectId]);
     if (projectCheck.rows.length === 0) {
       sendNotFound(res, '案件が見つかりません');
       return;

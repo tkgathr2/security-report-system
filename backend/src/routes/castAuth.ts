@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import pool from '../db/pool';
 import { sendVerificationEmail, sendMagicLinkEmail, sendWelcomeEmail, sendPinResetEmail } from '../utils/email';
-import { isValidEmail } from '../utils/validation';
+import { isValidEmail, validateStringField, MAX_LENGTHS } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
 
 const router = Router();
@@ -186,6 +186,8 @@ router.post('/verify', async (req: Request, res: Response) => {
       if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
         return res.status(400).json({ message: 'PINコードは4桁の数字で入力してください' });
       }
+      const nameErr = validateStringField(name, '氏名', MAX_LENGTHS.PERSON_NAME);
+      if (nameErr) { return res.status(400).json({ message: nameErr }); }
 
       // Verify staff exists
       const staffCheck = await pool.query(

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { authenticateCast } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
+import { MAX_LENGTHS } from '../utils/validation';
 
 const router = Router();
 
@@ -15,6 +16,16 @@ router.put('/:project_unique_url', authenticateCast, async (req: Request, res: R
       res.status(400).json({
         error: 'INVALID_PAYLOAD',
         message: 'payload_json と client_updated_at は必須です',
+        details: {}
+      });
+      return;
+    }
+
+    const payloadStr = typeof payload_json === 'string' ? payload_json : JSON.stringify(payload_json);
+    if (payloadStr.length > MAX_LENGTHS.DRAFT_PAYLOAD) {
+      res.status(400).json({
+        error: 'INVALID_PAYLOAD',
+        message: '下書きデータが大きすぎます',
         details: {}
       });
       return;
