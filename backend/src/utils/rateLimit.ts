@@ -40,23 +40,22 @@ export async function checkRateLimitDb(key: string): Promise<{ allowed: boolean;
 
 export async function recordFailedAttemptDb(key: string): Promise<void> {
   await ensureTable();
-  const result = await pool.query('SELECT count FROM rate_limits WHERE key = $1', [key]);
-
-  if (result.rows.length === 0) {
-    const lockedUntil = 1 >= MAX_ATTEMPTS ? Date.now() + LOCK_DURATION_MS : 0;
-    await pool.query(
-      'INSERT INTO rate_limits (key, count, locked_until, updated_at) VALUES ($1, 1, $2, NOW())',
-      [key, lockedUntil]
-    );
-    return;
-  }
-
-  const newCount = result.rows[0].count + 1;
-  const lockedUntil = newCount >= MAX_ATTEMPTS ? Date.now() + LOCK_DURATION_MS : 0;
-  await pool.query(
-    'UPDATE rate_limits SET count = $1, locked_until = $2, updated_at = NOW() WHERE key = $3',
-    [newCount, lockedUntil, key]
+  const result = await pool.query(
+    `INSERT INTO rate_limits (key, count, locked_until, updated_at)
+     VALUES ($1, 1, 0, NOW())
+     ON CONFLICT (key) DO UPDATE
+       SET count = rate_limits.count + 1,
+           updated_at = NOW()
+     RETURNING count`,
+    [key]
   );
+  const newCount = result.rows[0].count;
+  if (newCount >= MAX_ATTEMPTS) {
+    await pool.query(
+      'UPDATE rate_limits SET locked_until = $1 WHERE key = $2',
+      [Date.now() + LOCK_DURATION_MS, key]
+    );
+  }
 }
 
 export async function resetAttemptsDb(key: string): Promise<void> {
