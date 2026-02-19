@@ -10,7 +10,7 @@
 
 ### 設定する環境変数（4つ）
 
-Railway ダッシュボード → プロジェクト「zippy-strength」→ サービス → Variables タブで以下を追加:
+Railway ダッシュボード → プロジェクト「respectful-embrace」→ サービス → Variables タブで以下を追加:
 
 #### Backend 用（ランタイムで参照）
 
@@ -34,7 +34,7 @@ Railway ダッシュボード → プロジェクト「zippy-strength」→ サ�
 ### 設定手順（クリック手順）
 
 1. https://railway.app にログイン
-2. プロジェクト「zippy-strength」を開く
+2. プロジェクト「respectful-embrace」を開く
 3. サービスをクリック → 「Variables」タブ
 4. 「+ New Variable」で上記4つを1つずつ追加
 5. 「Deploy」をクリック（再デプロイが走る）
@@ -184,6 +184,53 @@ Sentry ダッシュボード (https://takagigr.sentry.io/) で:
    - プロジェクト名
    - Environment: production
    - Sentry Issue へのリンク
+
+---
+
+## D) テスト Issue の整理（人間が実施）
+
+### 対象
+
+初回通知テストで作成された以下の2件を Resolve する:
+
+- **HOUKO-BACKEND-4**: `Backend notification test: verify Slack #重大_システムエラー receives alert`
+- **HOUKO-FRONTEND-3**: `Frontend notification test: verify Slack #重大_システムエラー receives alert`
+
+### 手順（クリック手順）
+
+1. https://takagigr.sentry.io/ にログイン
+2. 左メニュー → **Issues**
+3. プロジェクトフィルタで **houko-backend** を選択
+4. `Backend notification test` の Issue をクリック
+5. 右上の **Resolve** ボタンをクリック
+6. プロジェクトフィルタを **houko-frontend** に切り替え
+7. `Frontend notification test` の Issue をクリック
+8. 右上の **Resolve** ボタンをクリック
+
+Resolve 後は Issues 一覧から消える（フィルタで「Resolved」を選べば再表示可能）。
+
+---
+
+## E) Alert Rule の Environment を production に絞る（人間が実施）
+
+### 背景
+
+初回設定時は Sentry に `production` 環境がまだ存在しなかったため、Alert Rule は「All Environments」で保存された。
+2026-02-19 の通知テストで `production` 環境のイベントが送信済みのため、現在は `production` が選択可能。
+
+### 手順（クリック手順）
+
+1. https://takagigr.sentry.io/ にログイン
+2. 左メニュー → **Alerts**
+3. **[Backend] Production Error → Slack** の行をクリック → 右上の **Edit Rule**（または鉛筆アイコン）
+4. **Environment** ドロップダウンを `All Environments` → `production` に変更
+5. **Save Rule** をクリック
+6. **[Frontend] Production Error → Slack** でも同じ手順を繰り返す
+
+### production が選べない場合
+
+`production` 環境は、`SENTRY_ENVIRONMENT=production`（または `VITE_SENTRY_ENVIRONMENT=production`）が設定された状態でイベントが1件以上送信されると自動的に登録される。
+選択肢に表示されない場合は、本番検証 Runbook（Section B）の手順でテストイベントを1件送信すれば表示されるようになる。
 
 ---
 

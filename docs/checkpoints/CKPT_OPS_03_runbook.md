@@ -15,7 +15,7 @@
 ### Railwayダッシュボードから
 
 1. Railway ダッシュボードにログイン
-2. プロジェクト「zippy-strength」を選択
+2. プロジェクト「respectful-embrace」を選択
 3. サービスの「...」メニュー → 「Restart」をクリック
 4. ログで `Server is running on port {PORT}` を確認
 
@@ -204,6 +204,51 @@ psql $DATABASE_URL < backup_YYYYMMDD.sql
 
 ---
 
+## 9. Sentry エラー監視（#重大_システムエラー）
+
+### 動作確認済み
+
+- **確認日**: 2026-02-19
+- **実施内容**:
+  - Backend: `node -e` で `Sentry.captureException(new Error(...))` を送信 → Sentry → Slack 到着確認
+  - Frontend: 本番サイトの DevTools Console で `setTimeout(() => { throw new Error(...) })` を実行 → Sentry → Slack 到着確認
+- **期待結果**: `#重大_システムエラー` に Sentry からの通知が届く
+- **結果**: Backend（HOUKO-BACKEND-4）、Frontend（HOUKO-FRONTEND-3）の両方で Slack 通知を確認
+
+### 通知対象
+
+| 対象 | 対象外 |
+|------|--------|
+| level = `error` 以上 | 400 Bad Request（クライアント起因） |
+| uncaughtException / unhandledRejection | 404 Not Found |
+| フロントエンドの runtime error | 意図的な警告・info レベル |
+
+### 障害検知時の対応フロー
+
+```
+1. #重大_システムエラー に通知が届く
+   ↓
+2. 通知内のリンクをクリック → Sentry Issue 詳細を開く
+   ↓
+3. 一次切り分け:
+   - stack trace でエラー箇所を特定
+   - environment / release タグで影響範囲を確認
+   - 同じ Issue の発生頻度を確認（1回だけか、連続か）
+   ↓
+4. 対応判断:
+   - 単発: Issue を監視（Sentry 上で Assignee を設定）
+   - 連続発生: 即座に修正対応、必要なら Railway で Rollback
+   - サービス影響あり: Railway ダッシュボードで Restart → 原因調査
+```
+
+### 関連ドキュメント
+
+- Sentry 設定詳細: `docs/checkpoints/CKPT_SENTRY_01_railway_setup.md`
+  - Section D: テスト Issue の Resolve 手順
+  - Section E: Alert Rule の Environment を production に絞る手順
+
+---
+
 ## 付録: 環境変数一覧
 
 | 変数名 | 必須 | 用途 |
@@ -220,3 +265,7 @@ psql $DATABASE_URL < backup_YYYYMMDD.sql
 | SMTP_PASS | 任意 | メール通知 |
 | SMTP_FROM | 任意 | メール通知 |
 | SLACK_WEBHOOK_URL | 任意 | Slack通知 |
+| SENTRY_DSN | 任意 | Sentry エラー送信先（backend） |
+| SENTRY_ENVIRONMENT | 任意 | Sentry 環境タグ（backend） |
+| VITE_SENTRY_DSN | 任意 | Sentry エラー送信先（frontend、ビルド時） |
+| VITE_SENTRY_ENVIRONMENT | 任意 | Sentry 環境タグ（frontend、ビルド時） |
