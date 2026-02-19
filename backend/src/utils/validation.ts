@@ -9,3 +9,38 @@ export function isValidEmail(email: string): boolean {
   if (localPart.startsWith('.') || localPart.endsWith('.') || localPart.includes('..')) return false;
   return true;
 }
+
+export const MAX_LENGTHS = {
+  PERSON_NAME: 100,
+  COMPANY_NAME: 200,
+  ADDRESS: 500,
+  GUARD_CONTENT_ITEM: 200,
+  GUARD_OTHER_TEXT: 1000,
+  REASON: 500,
+  CONTACT_TITLE: 100,
+  STAFF_NO: 50,
+  SIGNATURE_BASE64: 7_000_000,
+  DRAFT_PAYLOAD: 1_000_000,
+  DISPLAY_NAME: 100,
+  GUARD_CONTENTS_MAX_ITEMS: 30,
+  QUALIFIER_NAME_MAX_ITEMS: 10,
+  GUARDS_MAX_ITEMS: 30,
+} as const;
+
+export function validateStringField(value: unknown, fieldName: string, maxLength: number): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') return `${fieldName}は文字列で入力してください`;
+  if (value.length > maxLength) return `${fieldName}は${maxLength}文字以内で入力してください`;
+  return null;
+}
+
+export function validateArrayItems(arr: unknown[], fieldName: string, maxItemLength: number, maxItems: number): string | null {
+  if (arr.length > maxItems) return `${fieldName}は${maxItems}件以内で入力してください`;
+  for (let i = 0; i < arr.length; i++) {
+    const item = arr[i];
+    if (typeof item === 'string' && item.length > maxItemLength) {
+      return `${fieldName}の各項目は${maxItemLength}文字以内で入力してください`;
+    }
+  }
+  return null;
+}

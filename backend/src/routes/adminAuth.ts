@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import pool from '../db/pool';
 import { sendEmail } from '../services/notifications';
 import { logAudit } from '../utils/auditLog';
+import { validateStringField, MAX_LENGTHS } from '../utils/validation';
 
 const router = Router();
 
@@ -221,6 +222,8 @@ router.post('/request-access', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'INVALID_PAYLOAD', message: 'メールアドレスは必須です' });
       return;
     }
+    const dnErr = validateStringField(display_name, '表示名', MAX_LENGTHS.DISPLAY_NAME);
+    if (dnErr) { res.status(400).json({ error: 'INVALID_PAYLOAD', message: dnErr }); return; }
 
     const existing = await pool.query(
       'SELECT id, status FROM access_requests WHERE LOWER(email) = LOWER($1) AND status = $2',
