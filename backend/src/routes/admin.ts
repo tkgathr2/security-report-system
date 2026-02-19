@@ -1,10 +1,14 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
 import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '../utils/errorHandler';
 import { isValidEmail } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
+
+const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -450,6 +454,84 @@ router.put('/cast-users/:id/name', requireAdmin, async (req: Request, res: Respo
     });
   } catch (error) {
     handleDbError(res, error, 'Cast user name update');
+  }
+});
+
+// POST /api/admin/cast-users/:id/test-token - テスト用キャスト認証トークン発行（管理者限定・TEST_対象限定）
+router.post('/cast-users/:id/test-token', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const adminUser = req.user as { email: string };
+
+    const castResult = await pool.query(
+      `SELECT cu.id, cu.email, cu.staff_id
+       FROM cast_users cu
+       WHERE cu.id = $1 AND cu.deleted_at IS NULL`,
+      [id]
+    );
+
+    if (castResult.rows.length === 0) {
+      sendNotFound(res, 'キャストユーザーが見つかりません');
+      return;
+    }
+
+    const castUser = castResult.rows[0];
+
+    const isTestEmail = castUser.email.toLowerCase().startsWith('test_');
+
+    let isTestClient = false;
+    if (castUser.staff_id) {
+      const testCheck = await pool.query(
+        `SELECT 1 FROM project_casts pc
+         JOIN projects p ON pc.project_id = p.id
+         JOIN clients c ON p.client_id = c.id
+         WHERE pc.staff_id = $1 AND c.name LIKE 'TEST_%' AND p.deleted_at IS NULL
+         LIMIT 1`,
+        [castUser.staff_id]
+      );
+      isTestClient = testCheck.rows.length > 0;
+    }
+
+    if (!isTestEmail && !isTestClient) {
+      sendBadRequest(res, 'TEST_対象のキャストユーザーのみトークン発行可能です');
+      return;
+    }
+
+    const magicToken = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await pool.query(
+      `UPDATE cast_users
+       SET magic_link_token = $1, magic_link_expires = $2, email_verified = true, last_login_at = NOW()
+       WHERE id = $3`,
+      [magicToken, expires, id]
+    );
+
+    const jwtToken = jwt.sign(
+      { userId: castUser.id, email: castUser.email },
+      AUTH_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    logAudit({
+      req,
+      actorEmail: adminUser.email,
+      action: 'ISSUE_TEST_TOKEN',
+      targetType: 'cast_user',
+      targetId: id,
+      payload: { cast_email: castUser.email, reason: 'E2E test token issuance' }
+    });
+
+    res.json({
+      ok: true,
+      cast_user_id: id,
+      cast_email: castUser.email,
+      jwt: jwtToken,
+      magic_link_token: magicToken,
+      expires: expires.toISOString()
+    });
+  } catch (error) {
+    handleDbError(res, error, 'Test token issue');
   }
 });
 
