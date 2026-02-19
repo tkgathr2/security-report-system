@@ -19,6 +19,7 @@ import adminCsvImportRouter from './routes/adminCsvImport';
 import staffRouter from './routes/staff';
 import castAuthRouter from './routes/castAuth';
 import pool from './db/pool';
+import { requestTimeout } from './middleware/requestTimeout';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 app.use(express.json({ limit: '10mb' }));
+app.use(requestTimeout);
 
 // PostgreSQL session store for persistent sessions
 const PgSession = connectPgSimple(session);
@@ -411,4 +413,6 @@ seedStaffData().then(() => fixProjectCasts()).then(() => cleanupData()).then(() 
   server = app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 70_000;
 });
