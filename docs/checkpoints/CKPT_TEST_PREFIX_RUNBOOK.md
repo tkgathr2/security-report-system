@@ -70,6 +70,50 @@
 実験時はこのエンドポイントのデータも `TEST_` 付きクライアントに紐づけるか、
 既存テストエンドポイントのデータは別途 `テスト株式会社` で検索して無効化する。
 
+### 3-D. テスト用キャスト認証トークン発行（E2E検証用）
+
+`POST /api/admin/cast-users/:id/test-token`
+
+メール認証をバイパスして、キャストユーザーに `magic_link_token` + JWT を発行する。
+
+#### 制約
+
+- **`requireAdmin` 必須**: 管理者セッションがないと 401
+- **TEST_対象限定**: `cast_users.email` が `test_` で始まる、または `TEST_` クライアントの案件に紐づくキャストのみ
+- **監査ログ**: `admin_audit_logs` に `ISSUE_TEST_TOKEN` アクションで記録
+- **副作用**: 対象キャストユーザーの `email_verified = true` をセット
+
+#### E2E検証手順
+
+```bash
+# 1. 管理画面にログイン済みのブラウザコンソールから実行
+# test-token発行
+fetch('/api/admin/cast-users/{cast_user_id}/test-token', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' }
+}).then(r => r.json()).then(d => console.log(d))
+
+# 2. 返却されたJWTで報告書承認
+fetch('/api/reports/approve', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer {jwt}'
+  },
+  body: JSON.stringify({
+    project_unique_url: '{unique_url}',
+    supervisor_name: 'TEST_監督',
+    writer_name: 'TEST_山田太郎',
+    weather: 'sunny',
+    guard_contents: ['TEST_警備内容1'],
+    has_qualifier: false,
+    qualifier_name: [],
+    guards: [{ name: 'TEST_山田太郎', from: '09:00', to: '18:00' }],
+    signature_png_base64: '{base64_png}'
+  })
+}).then(r => r.json()).then(d => console.log(d))
+```
+
 ---
 
 ## 4. 一括無効化SQL（ソフトデリート）
@@ -88,7 +132,9 @@ SELECT 'reports', COUNT(*) FROM reports WHERE project_id IN (SELECT id FROM proj
 UNION ALL
 SELECT 'report_recipients', COUNT(*) FROM report_recipients WHERE report_id IN (SELECT id FROM reports WHERE project_id IN (SELECT id FROM projects WHERE client_id IN (SELECT id FROM clients WHERE name LIKE 'TEST_%'))) AND deleted_at IS NULL
 UNION ALL
-SELECT 'cast_users', COUNT(*) FROM cast_users WHERE id IN (SELECT DISTINCT r.cast_user_id FROM reports r JOIN projects p ON r.project_id = p.id WHERE p.client_id IN (SELECT id FROM clients WHERE name LIKE 'TEST_%')) AND deleted_at IS NULL
+SELECT 'cast_users(レポート経由)', COUNT(*) FROM cast_users WHERE id IN (SELECT DISTINCT r.cast_user_id FROM reports r JOIN projects p ON r.project_id = p.id WHERE p.client_id IN (SELECT id FROM clients WHERE name LIKE 'TEST_%')) AND deleted_at IS NULL
+UNION ALL
+SELECT 'cast_users(email)', COUNT(*) FROM cast_users WHERE email LIKE 'test_%' AND deleted_at IS NULL
 UNION ALL
 SELECT 'recipients', COUNT(*) FROM recipients WHERE company_name LIKE 'TEST_%' AND deleted_at IS NULL
 UNION ALL
@@ -130,7 +176,7 @@ WHERE project_id IN (
 )
 AND deleted_at IS NULL;
 
--- Step 4: cast_users（テストプロジェクト経由で作成されたキャスト）
+-- Step 4a: cast_users（テストプロジェクト経由で作成されたキャスト）
 UPDATE cast_users
 SET deleted_at = NOW()
 WHERE id IN (
@@ -138,6 +184,12 @@ WHERE id IN (
   JOIN projects p ON r.project_id = p.id
   WHERE p.client_id IN (SELECT id FROM clients WHERE name LIKE 'TEST_%')
 )
+AND deleted_at IS NULL;
+
+-- Step 4b: cast_users（test_メールアドレスで直接登録されたキャスト）
+UPDATE cast_users
+SET deleted_at = NOW()
+WHERE email LIKE 'test_%'
 AND deleted_at IS NULL;
 
 -- Step 5: projects
@@ -201,7 +253,7 @@ WHERE project_id IN (
 )
 AND deleted_at IS NOT NULL;
 
--- Step 4: cast_users
+-- Step 4a: cast_users（レポート経由）
 UPDATE cast_users
 SET deleted_at = NULL
 WHERE id IN (
@@ -209,6 +261,12 @@ WHERE id IN (
   JOIN projects p ON r.project_id = p.id
   WHERE p.client_id IN (SELECT id FROM clients WHERE name LIKE 'TEST_%')
 )
+AND deleted_at IS NOT NULL;
+
+-- Step 4b: cast_users（test_メールアドレス）
+UPDATE cast_users
+SET deleted_at = NULL
+WHERE email LIKE 'test_%'
 AND deleted_at IS NOT NULL;
 
 -- Step 5: reports
@@ -308,3 +366,5 @@ COMMIT;
 | 日付 | 内容 |
 |------|------|
 | 2026-02-19 | 初版作成（Phase C: TEST_ プレフィックス運用） |
+| 2026-02-19 | Phase D-1: test-tokenエンドポイント追加 (Section 3-D) |
+| 2026-02-19 | Phase D-2: cast_users.email LIKE 'test_%' をcleanup/restore SQLに追加 |
