@@ -165,20 +165,49 @@ SELECT email, created_at FROM admin_allowlist ORDER BY created_at;
 
 ## 6. バックアップ・リストア
 
-### PostgreSQLバックアップ
+### Railway 自動バックアップ
 
-Railway PostgreSQLは自動バックアップが有効（設定による）
+Railway Managed PostgreSQL は **自動バックアップ** を提供（Pro Plan 以上）。
 
-手動バックアップ:
+**確認手順:**
+1. Railway ダッシュボード → PostgreSQL サービスを選択
+2. 「Backups」タブでバックアップ一覧を確認
+3. 最新バックアップの日時が直近24時間以内であることを確認
+
+**復元手順（Railway UI）:**
+1. 「Backups」タブ → 復元したいバックアップの「Restore」をクリック
+2. 新しいPostgreSQLインスタンスとして復元される
+3. DATABASE_URL を新インスタンスに切り替え → 再デプロイ
+
+### 手動バックアップ（推奨: 大規模変更前に実施）
+
 ```bash
-pg_dump $DATABASE_URL > backup_$(date +%Y%m%d).sql
+# フルバックアップ（Railway Shell または ローカル）
+pg_dump $DATABASE_URL > backup_$(date +%Y%m%d_%H%M).sql
+
+# テーブル指定バックアップ（軽量）
+pg_dump $DATABASE_URL -t reports -t projects -t staff_master > backup_core_$(date +%Y%m%d).sql
+
+# バックアップファイルサイズ確認
+ls -lh backup_*.sql
 ```
 
-### リストア
+### 手動リストア
 
 ```bash
-psql $DATABASE_URL < backup_YYYYMMDD.sql
+# フルリストア（注意: 既存データを上書き）
+psql $DATABASE_URL < backup_YYYYMMDD_HHMM.sql
+
+# 特定テーブルのみリストア
+pg_restore -d $DATABASE_URL -t reports backup_YYYYMMDD.dump
 ```
+
+### バックアップ確認チェックリスト（月次）
+
+- [ ] Railway「Backups」タブで自動バックアップが有効か確認
+- [ ] 最新バックアップの日時が直近24時間以内か確認
+- [ ] PostgreSQL ストレージ使用量を確認（Railway ダッシュボード → Metrics）
+- [ ] reports テーブルの `pdf_bytes` サイズ増加傾向を確認（`SELECT pg_size_pretty(pg_total_relation_size('reports'));`）
 
 ---
 
