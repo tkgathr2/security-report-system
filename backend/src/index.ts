@@ -1,3 +1,5 @@
+import './instrument';
+import * as Sentry from '@sentry/node';
 import express, { Request, Response } from 'express';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
@@ -92,6 +94,8 @@ console.log(`[Frontend] Index exists: ${frontendExists}`);
 if (frontendExists) {
   app.use(express.static(frontendDistPath));
 }
+
+Sentry.setupExpressErrorHandler(app);
 
 // SPA fallback - serve index.html for non-API routes (Express 5.x compatible syntax)
 app.get('/report/:uniqueUrl', (_req: Request, res: Response) => {

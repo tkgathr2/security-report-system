@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import * as Sentry from '@sentry/node';
 import { ErrorResponse } from '../types';
 
 export const ErrorCodes = {
@@ -58,5 +59,6 @@ export function sendExpired(res: Response, message: string = '期限切れ'): vo
 
 export function handleDbError(res: Response, error: unknown, context: string): void {
   console.error(`${context} error:`, error);
+  Sentry.captureException(error, { tags: { context } });
   sendInternalError(res);
 }
