@@ -755,6 +755,13 @@ router.post('/field-login', async (req: Request, res: Response) => {
       return;
     }
 
+    const sessionToken = generateToken();
+    const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      'UPDATE cast_users SET magic_link_token = $1, magic_link_expires = $2, updated_at = NOW() WHERE id = $3',
+      [sessionToken, sessionExpires, user.id]
+    );
+
     const token = jwt.sign(
       { userId: user.id, email: user.email },
       AUTH_SECRET,
@@ -821,9 +828,11 @@ router.post('/field-register', async (req: Request, res: Response) => {
       const existing = existingUser.rows[0];
       if (!existing.pin_hash) {
         const pinHash = await bcrypt.hash(pin, 10);
+        const sessionToken = generateToken();
+        const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await pool.query(
-          'UPDATE cast_users SET pin_hash = $1, updated_at = NOW() WHERE id = $2',
-          [pinHash, existing.id]
+          'UPDATE cast_users SET pin_hash = $1, magic_link_token = $2, magic_link_expires = $3, updated_at = NOW() WHERE id = $4',
+          [pinHash, sessionToken, sessionExpires, existing.id]
         );
 
         const token = jwt.sign(
@@ -852,10 +861,12 @@ router.post('/field-register', async (req: Request, res: Response) => {
     }
 
     const pinHash = await bcrypt.hash(pin, 10);
+    const sessionToken = generateToken();
+    const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const result = await pool.query(
-      'INSERT INTO cast_users (email, pin_hash) VALUES ($1, $2) RETURNING id, email, created_at',
-      [email, pinHash]
+      'INSERT INTO cast_users (email, pin_hash, magic_link_token, magic_link_expires) VALUES ($1, $2, $3, $4) RETURNING id, email, created_at',
+      [email, pinHash, sessionToken, sessionExpires]
     );
 
     const user = result.rows[0];
