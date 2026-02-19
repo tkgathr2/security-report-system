@@ -22,9 +22,15 @@ import pool from './db/pool';
 
 dotenv.config();
 
+if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
+  console.error('[FATAL] AUTH_SECRET is not set in production. Server cannot start safely.');
+  console.error('[FATAL] Set AUTH_SECRET environment variable in Railway and redeploy.');
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
-const SESSION_SECRET = process.env.AUTH_SECRET || 'dev-secret-key';
+const SESSION_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
 
 // Trust proxy for Railway (required for secure cookies behind reverse proxy)
 if (process.env.NODE_ENV === 'production') {
