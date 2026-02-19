@@ -177,7 +177,7 @@ export default function FieldReport() {
         let response: Response | null = null
 
         if (castToken) {
-          response = await fetch('/api/auth/exchange-cast-token', {
+          response = await fetch('/api/cast/exchange-cast-token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cast_token: castToken })
@@ -186,14 +186,14 @@ export default function FieldReport() {
 
         if (!response || !response.ok) {
           const pin = '0000'
-          response = await fetch('/api/auth/login', {
+          response = await fetch('/api/cast/field-login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, pin })
           })
 
           if (response.status === 401) {
-            response = await fetch('/api/auth/register', {
+            response = await fetch('/api/cast/field-register', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email, pin })

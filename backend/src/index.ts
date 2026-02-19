@@ -7,7 +7,6 @@ import passport from 'passport';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
-import authRouter from './routes/auth';
 import adminAuthRouter from './routes/adminAuth';
 import adminRouter from './routes/admin';
 import adminReportsRouter from './routes/adminReports';
@@ -77,7 +76,6 @@ app.get('/version', (_req: Request, res: Response) => {
   res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v89', seedStatus, seedError, seedDetail, castFixDetail, cleanupDetail });
 });
 
-app.use('/api/auth', authRouter);
 app.use('/api/admin/auth', adminAuthRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/admin/reports', adminReportsRouter);
