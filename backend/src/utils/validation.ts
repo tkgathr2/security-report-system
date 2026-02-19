@@ -27,12 +27,6 @@ export const MAX_LENGTHS = {
   GUARDS_MAX_ITEMS: 30,
 } as const;
 
-export function exceedsMaxLength(value: unknown, maxLength: number): boolean {
-  if (value === null || value === undefined) return false;
-  if (typeof value !== 'string') return false;
-  return value.length > maxLength;
-}
-
 export function validateStringField(value: unknown, fieldName: string, maxLength: number): string | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value !== 'string') return `${fieldName}は文字列で入力してください`;

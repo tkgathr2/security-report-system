@@ -992,7 +992,7 @@ router.post('/projects/:projectId/casts', requireAdmin, async (req: Request, res
     const staffNoErr = validateStringField(staff_no, 'staff_no', MAX_LENGTHS.STAFF_NO);
     if (staffNoErr) { sendBadRequest(res, staffNoErr); return; }
 
-    const projectCheck= await pool.query('SELECT id FROM projects WHERE id = $1 AND deleted_at IS NULL', [projectId]);
+    const projectCheck = await pool.query('SELECT id FROM projects WHERE id = $1 AND deleted_at IS NULL', [projectId]);
     if (projectCheck.rows.length === 0) {
       sendNotFound(res, '案件が見つかりません');
       return;

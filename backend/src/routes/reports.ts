@@ -103,6 +103,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         sendBadRequest(res, '資格者有の場合、資格者氏名は必須です');
         return;
       }
+      const qErr = validateArrayItems(validQNames, '資格者氏名', MAX_LENGTHS.PERSON_NAME, MAX_LENGTHS.QUALIFIER_NAME_MAX_ITEMS);
+      if (qErr) { sendBadRequest(res, qErr); return; }
     }
 
     const validWeathers = ['sunny', 'cloudy', 'rainy', 'snowy', 'windy', 'stormy', 'foggy', 'clear', '晴れ', '曇り', '雨', '雪', '風', '嵐', '霧'];
