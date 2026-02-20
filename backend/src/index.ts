@@ -350,6 +350,7 @@ async function cleanupData() {
 
 let server: ReturnType<typeof app.listen> | null = null;
 let isShuttingDown = false;
+let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
 process.on('uncaughtException', (err: Error) => {
   const ts = new Date().toISOString();
@@ -385,7 +386,7 @@ function gracefulShutdown(source: string, exitCode: number) {
   isShuttingDown = true;
 
   console.error(`[gracefulShutdown] triggered by ${source}. Closing server and DB pool...`);
-  clearInterval(cleanupTimer);
+  if (cleanupTimer) clearInterval(cleanupTimer);
   const forceExit = setTimeout(() => {
     console.error('[gracefulShutdown] Forced exit after timeout');
     process.exit(exitCode);
@@ -425,7 +426,7 @@ seedStaffData()
   });
 
 const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
-const cleanupTimer = setInterval(() => {
+cleanupTimer = setInterval(() => {
   console.log('[Scheduler] Running periodic cleanup...');
   cleanupData()
     .then(() => console.log('[Scheduler] Periodic cleanup completed:', cleanupDetail))
