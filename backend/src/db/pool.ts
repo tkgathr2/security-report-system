@@ -12,7 +12,23 @@ export function createPool(connectionString?: string): Pool {
   }
   const dbHost = connStr.match(/@([^:/]+)/)?.[1] ?? 'unknown';
   console.log(`[DB] Connecting to host: ${dbHost}`);
-  return new Pool({ connectionString: connStr });
+
+  const maxConnections = parseInt(process.env.DB_POOL_MAX || '10', 10);
+  const idleTimeoutMs = parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000', 10);
+  const connectionTimeoutMs = parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '5000', 10);
+
+  const p = new Pool({
+    connectionString: connStr,
+    max: maxConnections,
+    idleTimeoutMillis: idleTimeoutMs,
+    connectionTimeoutMillis: connectionTimeoutMs,
+  });
+
+  p.on('error', (err) => {
+    console.error('[DB] Unexpected pool error:', err.message);
+  });
+
+  return p;
 }
 
 function getPool(): Pool {

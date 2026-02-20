@@ -7,6 +7,7 @@ import { AuthenticatedCastRequest } from '../types';
 import { sendBadRequest, sendNotFound, sendConflict, sendForbidden, sendExpired, sendInternalError } from '../utils/errorHandler';
 import { logAudit } from '../utils/auditLog';
 import { validateStringField, validateArrayItems, MAX_LENGTHS } from '../utils/validation';
+import pdfStorage from '../services/pdfStorage';
 
 const router = Router();
 
@@ -259,15 +260,11 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         pdfGenerationStatus = 'failed';
       }
 
-      // PDFをDBに保存（独立したtry-catch：失敗してもメール送信は続行）
       try {
-        await pool.query(
-          `UPDATE reports SET pdf_bytes = $1, pdf_generation_status = $2, pdf_generated_at = $3 WHERE id = $4`,
-          [pdfBuffer, pdfGenerationStatus, new Date(), reportId]
-        );
-        console.log(`[ASYNC] PDF saved to database for report ${reportId}`);
+        await pdfStorage.savePdf(reportId, pdfBuffer, pdfGenerationStatus);
+        console.log(`[ASYNC] PDF saved for report ${reportId}`);
       } catch (dbError) {
-        console.error(`[ASYNC] PDF save to DB failed for report ${reportId}:`, dbError);
+        console.error(`[ASYNC] PDF save failed for report ${reportId}:`, dbError);
       }
 
       // Slack通知（PDF添付と通知テキストを1メッセージに統合）
@@ -379,22 +376,14 @@ router.get('/:reportId/pdf', (req: Request, res: Response, next: () => void) => 
     return;
   }
   try {
-    const result = await pool.query(
-      'SELECT pdf_bytes, pdf_generation_status FROM reports WHERE id = $1 AND deleted_at IS NULL',
-      [reportId]
-    );
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: 'NOT_FOUND', message: '報告書が見つかりません' });
-      return;
-    }
-    const { pdf_bytes, pdf_generation_status } = result.rows[0];
-    if (!pdf_bytes || pdf_bytes.length === 0 || pdf_generation_status !== 'success') {
-      res.status(404).json({ error: 'PDF_NOT_READY', message: 'PDFがまだ生成されていません' });
+    const pdf = await pdfStorage.getPdf(reportId);
+    if (!pdf) {
+      res.status(404).json({ error: 'PDF_NOT_READY', message: 'PDFが見つからないか、まだ生成されていません' });
       return;
     }
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="report-${reportId}.pdf"`);
-    res.send(pdf_bytes);
+    res.send(pdf.buffer);
   } catch (error) {
     console.error('[PDF] Download error:', error);
     res.status(500).json({ error: 'INTERNAL_ERROR', message: 'サーバーエラーが発生しました' });
