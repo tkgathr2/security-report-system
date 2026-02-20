@@ -1,6 +1,6 @@
 # ほうこちゃん（security-report-system）引き継ぎ資料
 
-**作成日**: 2026-02-18
+**作成日**: 2026-02-18（最終更新: 2026-02-20）
 **対象リポジトリ**: https://github.com/tkgathr2/security-report-system
 **本番URL**: https://security-report.up.railway.app
 **現在バージョン**: v89
@@ -66,6 +66,28 @@ QA検証で48件のバグを発見し、**全48件を修正済み**:
 
 22問の安全監査質問に対して、コードを根拠に事実のみで回答済み。
 
+### Phase 13: 引き継ぎ・運用基盤・中期タスク（PR #279〜#295）
+
+| PR | 区分 | 主な内容 |
+|----|------|----------|
+| #279 | docs | 引き継ぎ資料（HANDOVER.md）作成 |
+| #280 | §6.1-#1 | uncaughtException/unhandledRejection ハンドラ + graceful shutdown |
+| #281 | §6.1-#1' | gracefulShutdown 再入ガード + exit code整理 |
+| #282 | §6.1-#2,#5 | Sentry SDK導入（backend @sentry/node + frontend @sentry/react + ErrorBoundary） |
+| #283 | docs | Sentry Railway設定・本番検証・Slack通知設定 Runbook |
+| #284 | docs | Sentry運用固定（テストIssue整理・Alert Rule・障害対応フロー） |
+| #285 | Phase C | TEST_プレフィックス運用Runbook |
+| #286 | Phase D | 管理者限定テストトークン発行エンドポイント（E2E検証用） |
+| #287 | docs | Phase D Cleanup強化（cast_users.email追加・test-token手順） |
+| #288 | §6.1-#3,#6 | AUTH_SECRET未設定時process.exit + DBバックアップRunbook強化 |
+| #289 | §6.2-#7 | テキストフィールド文字数上限バリデーション |
+| #290 | §6.2-#8 | Expressリクエストタイムアウトミドルウェア（30s/60s） |
+| #291 | §6.2-#9 | レート制限をインメモリMapからPostgreSQL永続化に移行 |
+| #292 | §6.2-#10 | App.tsx分割（3679→1268行、8ページコンポーネント抽出） |
+| #293 | §6.2-#11 | GitHub Actions CIパイプライン追加 |
+| #294 | §6.2-#12 | 2つのキャスト認証パス統合（auth.ts → castAuth.tsに移行） |
+| #295 | bugfix | field-login/field-registerのmagic_link_token未設定バグ修正 |
+
 ---
 
 ## 3. アーキテクチャ上の重要ポイント
@@ -88,9 +110,8 @@ railway.json:
 
 ### 3.3 認証フロー
 - **管理者**: Google OAuth → express-session（PostgreSQL session store、`connect-pg-simple`）→ `requireAdmin`ミドルウェア。OAuth state検証あり。`admin_allowlist`テーブルで権限管理（`super_admin` / `admin` / `viewer`）
-- **キャスト（報告書入力者）**: 2つの認証パス:
-  - **auth.ts**: メール+PIN → JWT発行（`AUTH_SECRET`で署名、7日有効）。`exchange-cast-token`エンドポイントで既存castトークンをJWTに交換可能
-  - **castAuth.ts**: メール登録 → メール確認トークン → スタッフ選択+PIN設定 → ログイン（PIN or マジックリンク）。レート制限あり（5回失敗で15分ロック、インメモリMap）
+- **キャスト（報告書入力者）**: castAuth.tsに統合済み（PR #294で旧auth.ts削除）:
+  - **castAuth.ts**: メール登録 → メール確認トークン → スタッフ選択+PIN設定 → ログイン（PIN or マジックリンク）。`exchange-cast-token`・`field-login`・`field-register`もここに統合。レート制限あり（5回失敗で15分ロック、PostgreSQL永続化）
 - **JWT検証**: `authenticateCast`ミドルウェアでJWT検証後、さらにDBで`magic_link_token IS NOT NULL`を確認（ログアウト時にNULL化で即時無効化）
 
 ### 3.4 ソフトデリート
@@ -128,9 +149,9 @@ railway.json:
 | 3 | **cleanupData()のヒューリスティック** | 「漢字名＝カナ名 AND カタカナなし AND 漢字あり AND project_casts/cast_usersで参照なし」のスタッフを自動ソフトデリートする。1時間以内の再起動ではスキップ |
 | 4 | **テスト環境の分離なし** | 本番DBと開発DBの分離機構がコードにない。`DATABASE_URL`環境変数1本。本番で社内テストすると**テストデータが混入**する |
 | 5 | **express.json limit** | `10mb`に設定済み。署名画像のbase64受信のため大きめだが、DoS攻撃の余地あり |
-| 6 | **AUTH_SECRET二重利用** | `AUTH_SECRET`がexpress-sessionの暗号化キーとJWTの署名キーの両方に使われている。本番で未設定の場合、エラーログは出るが`process.exit`は呼ばれない（空文字列がフォールバック） |
+| 6 | **AUTH_SECRET二重利用** | `AUTH_SECRET`がexpress-sessionの暗号化キーとJWTの署名キーの両方に使われている。**未設定時はprocess.exit(1)で即停止**（PR #288で対応済み） |
 | 7 | **csv_importsの物理DELETE** | `cleanupData()`内で文字化けCSVインポートの物理DELETEを実行している。ソフトデリートトリガーとの整合性に注意 |
-| 8 | **2つのキャスト認証パス** | `auth.ts`（簡易PIN認証）と`castAuth.ts`（本格認証フロー）が並存。フロントのFieldReportは`auth.ts`経由で認証し、Cast系ページは`castAuth.ts`経由 |
+| 8 | ~~2つのキャスト認証パス~~ | **解消済み**（PR #294）。auth.ts削除、全エンドポイントをcastAuth.tsに統合 |
 
 ### 4.2 デプロイ時の注意
 
@@ -144,9 +165,9 @@ railway.json:
 ### 4.3 コード上の癖
 
 - `reports.ts`のPDF生成は`setImmediate`で非同期化（承認レスポンスを先に返す）
-- `castAuth.ts`のレート制限はインメモリ`Map`（サーバー再起動でリセット）
+- `castAuth.ts`のレート制限はPostgreSQL永続化済み（PR #291。`rate_limits`テーブル使用）
 - `pool.ts`はシングルトンパターン。`createPool`関数でテスト用にDI可能にファクトリ化済み
-- フロントエンドは`App.tsx`（3679行）が管理画面の全ページを含むSPA
+- フロントエンドは`App.tsx`（1268行）+ 8つのページコンポーネント（PR #292で分割済み）
 - `FieldReport.tsx`（1708行）が報告書入力画面
 - Cast系ページは`pages/`配下に分割済み（CastLogin, CastRegister, CastVerify, CastResetPin, CastMagic, CastToday）
 - 漢字異体字テーブル（`KANJI_VARIANTS`）が`castAuth.ts`にハードコードされている
@@ -185,27 +206,27 @@ railway.json:
 
 ## 6. 今後の展望（やるべきこと）
 
-### 6.1 最優先（本番公開前に必須）
+### 6.1 最優先（本番公開前に必須）— ✅全完了
 
-| # | タスク | 理由 |
-|---|--------|------|
-| 1 | **`process.on('uncaughtException')`/`process.on('unhandledRejection')`の追加** | 未キャッチ例外でプロセスが無言でクラッシュする |
-| 2 | **エラー監視ツール導入（Sentry等）** | 500エラーやフロントエラーを検知する手段がゼロ |
-| 3 | **DBバックアップの自動化・確認** | 手動pg_dumpのみ。Railway自動バックアップの設定確認が必要 |
-| 4 | **テスト環境のDB分離** | 本番DBでテストするとデータ汚染が不可逆 |
-| 5 | **フロントのErrorBoundary追加** | フロント側のエラーが完全にブラックボックス |
-| 6 | **AUTH_SECRET未設定時のprocess.exit追加** | 現在は空文字列フォールバックでサーバーが起動してしまう |
+| # | タスク | 状態 | PR |
+|---|--------|:---:|----|
+| 1 | `process.on('uncaughtException')`/`unhandledRejection`追加 | ✅ | #280, #281 |
+| 2 | エラー監視ツール導入（Sentry） | ✅ | #282 |
+| 3 | DBバックアップRunbook強化 | ✅ | #288 |
+| 4 | テスト環境のDB分離（TEST_プレフィックス運用） | ✅ | #285 |
+| 5 | フロントのErrorBoundary追加 | ✅ | #282 |
+| 6 | AUTH_SECRET未設定時のprocess.exit追加 | ✅ | #288 |
 
-### 6.2 中期（安定運用のために）
+### 6.2 中期（安定運用のために）— ✅全完了
 
-| # | タスク | 理由 |
-|---|--------|------|
-| 7 | **テキストフィールドの文字数上限バリデーション** | `supervisor_name`等に上限なし。DBのTEXT型は無制限 |
-| 8 | **Expressリクエストタイムアウト設定** | 現在はRailway側のリバースプロキシ依存 |
-| 9 | **レート制限のRedis化** | 現在はインメモリMap。サーバー再起動でリセット |
-| 10 | **フロントエンドのページ分割** | `App.tsx`が3679行。コード分割が必要 |
-| 11 | **CI/CDパイプライン強化** | 現在はRailway自動デプロイのみ。テスト実行なし |
-| 12 | **2つのキャスト認証パスの統合** | `auth.ts`と`castAuth.ts`が並存しており混乱のもと |
+| # | タスク | 状態 | PR |
+|---|--------|:---:|----|
+| 7 | テキストフィールドの文字数上限バリデーション | ✅ | #289 |
+| 8 | Expressリクエストタイムアウト設定（30s/60s） | ✅ | #290 |
+| 9 | レート制限のPostgreSQL永続化 | ✅ | #291 |
+| 10 | フロントエンドのページ分割（App.tsx→8コンポーネント） | ✅ | #292 |
+| 11 | GitHub Actions CIパイプライン | ✅ | #293 |
+| 12 | 2つのキャスト認証パスの統合 | ✅ | #294, #295 |
 
 ### 6.3 長期（スケーラビリティ）
 
@@ -234,6 +255,9 @@ railway.json:
 | `ADMIN_NOTIFICATION_EMAILS` | 任意 | 管理者通知メールアドレス（カンマ区切り） | アクセス申請通知・報告書提出通知 |
 | `RAILWAY_PUBLIC_DOMAIN` | 任意 | Railway公開ドメイン（PDF URLに使用） | デフォルト: `security-report.up.railway.app` |
 | `BASE_URL` | 任意 | アクセス申請メールのリンクURL | デフォルト: `https://security-report.up.railway.app` |
+| `SENTRY_DSN` | 任意 | Sentry Backend DSN | 未設定でSentry無効 |
+| `VITE_SENTRY_DSN` | 任意 | Sentry Frontend DSN | ビルド時に埋め込み |
+| `SENTRY_ENVIRONMENT` | 任意 | Sentry環境名 | デフォルト: `development` |
 | `NODE_ENV` | 推奨 | `production`でテストエンドポイント無効化・secure cookie・trust proxy有効化 | |
 | `PORT` | 任意 | サーバーポート | デフォルト: `3000` |
 
@@ -254,8 +278,7 @@ backend/
       adminCsvImport.ts   ← CSVインポート（SJIS自動検出・キャスト自動登録）
       adminRecipients.ts  ← 送信先管理
       adminReports.ts     ← 管理者向け報告書一覧
-      auth.ts             ← キャスト簡易認証（PIN登録・ログイン・castトークン交換）
-      castAuth.ts         ← キャスト本格認証（メール確認・マジックリンク・PIN・今日の案件）
+      castAuth.ts         ← キャスト認証統合（メール確認・マジックリンク・PIN・field-login/register・exchange-cast-token・今日の案件）
       drafts.ts           ← 報告書下書き
       projects.ts         ← 案件取得（キャスト向け・unique_url）
       reports.ts          ← 報告書承認・PDF生成・PDF取得
@@ -267,12 +290,16 @@ backend/
       auditLog.ts         ← 監査ログユーティリティ
       email.ts            ← メールテンプレート（確認・マジックリンク・ウェルカム・PINリセット）
       errorHandler.ts     ← エラーレスポンスユーティリティ（sendBadRequest等）
-      validation.ts       ← メールバリデーション
+      rateLimit.ts        ← レート制限（PostgreSQL永続化）
+      validation.ts       ← メール・文字数バリデーション（MAX_LENGTHS定数）
   migrations/             ← 30個のマイグレーションファイル
   assets/logo.png         ← PDF用ロゴ画像
 frontend/
   src/
-    App.tsx               ← 管理画面SPA（3679行、全管理ページ含む）
+    App.tsx               ← 管理画面SPA（1268行、ページコンポーネントに分割済み）
+    pages/admin/          ← 管理画面ページコンポーネント（8ファイル）
+      DashboardPage.tsx, CsvImportPage.tsx, ProjectsPage.tsx, ReportsPage.tsx,
+      StaffPage.tsx, ImportHistoryPage.tsx, ClientsPage.tsx, AccountsPage.tsx
     pages/
       FieldReport.tsx     ← 報告書入力画面（1708行）
       CastLogin.tsx       ← キャストログイン
@@ -312,6 +339,7 @@ docs/
 | `recipients` | 送信先マスタ | - |
 | `report_recipients` | 報告書-送信先紐付け | - |
 | `session` | express-session（connect-pg-simple） | - |
+| `rate_limits` | レート制限（PostgreSQL永続化） | - |
 
 ---
 
@@ -342,20 +370,22 @@ docs/
 メール送信: Resend API
 Slack通知: Webhook + Bot Token（PDF添付）
 
-未実装の重要項目:
-- process.on('uncaughtException') グローバルエラーハンドラ
-- Sentry等のエラー監視ツール
-- フロントのErrorBoundary
-- テスト環境のDB分離
-- DBバックアップ自動化確認
-- AUTH_SECRET未設定時のprocess.exit
+§6.1（最優先）全6件完了、§6.2（中期）全6件完了（PR #279〜#295）
+Sentry導入済み（backend+frontend）、Slack #重大_システムエラー 通知設定済み
+TEST_プレフィックス運用でテスト環境分離対応済み
+レート制限はPostgreSQL永続化済み（再起動でもリセットされない）
+App.tsxは1268行に分割済み（8ページコンポーネント）
+auth.ts削除済み（castAuth.tsに統合）
+AUTH_SECRET未設定時はprocess.exit(1)で即停止
+
+残タスク（§6.3 長期）:
+- #13: 報告書PDFのS3移行
+- #14: コネクションプーリング最適化（pgBouncer）
+- #15: バッチ処理の外部化（cleanupData等をcron化）
 
 注意点:
 - index.tsの起動時処理（seed/fix/cleanup）に副作用あり
 - マイグレーションは || true で非ブロック（30個）
-- レート制限はインメモリMap（再起動でリセット）
-- App.tsxが3679行のモノリシックSPA
-- auth.tsとcastAuth.tsの2つのキャスト認証パスが並存
 - AUTH_SECRETがsessionとJWT両方の署名に使われている
 - 日本語CSV=SJISフォールバック必須
 - csv_importsテーブルで物理DELETEが実行される箇所あり（ソフトデリートトリガーとの整合性注意）
