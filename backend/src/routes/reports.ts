@@ -50,6 +50,12 @@ startxref
 router.post('/approve', authenticateCast, async (req: Request, res: Response) => {
   try {
     console.log('[APPROVE] Starting approval process');
+
+    if (!req.body || typeof req.body !== 'object') {
+      sendBadRequest(res, 'リクエストボディはJSON形式で送信してください');
+      return;
+    }
+
     const castUser = (req as AuthenticatedCastRequest).castUser;
     const {
       project_unique_url,
@@ -64,11 +70,6 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       signature_png_base64
     } = req.body;
     console.log('[APPROVE] Request body parsed, project_unique_url:', project_unique_url);
-
-    if (!req.body || typeof req.body !== 'object') {
-      sendBadRequest(res, 'リクエストボディはJSON形式で送信してください');
-      return;
-    }
 
     if (!signature_png_base64 || typeof signature_png_base64 !== 'string') {
       sendBadRequest(res, '署名は必須です');
@@ -177,10 +178,6 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     const initialPdfBuffer = generateDummyPdf();
     const writerStaffIdResult = await pool.query<{ staff_id: string | null }>('SELECT staff_id FROM cast_users WHERE id = $1',[castUser.userId]);
     const writerStaffId: string | null = writerStaffIdResult.rows[0]?.staff_id ?? null;
-
-    await pool.query(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_project_id_active ON reports (project_id) WHERE deleted_at IS NULL`
-    );
 
     const reportResult = await pool.query(
       `INSERT INTO reports (
