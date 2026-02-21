@@ -50,6 +50,12 @@ startxref
 router.post('/approve', authenticateCast, async (req: Request, res: Response) => {
   try {
     console.log('[APPROVE] Starting approval process');
+
+    if (!req.body || typeof req.body !== 'object') {
+      sendBadRequest(res, 'リクエストボディはJSON形式で送信してください');
+      return;
+    }
+
     const castUser = (req as AuthenticatedCastRequest).castUser;
     const {
       project_unique_url,
@@ -179,8 +185,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         guard_contents, guard_other_text, overtime_hours, has_qualifier, qualifier_name,
         signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json
       ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
-      WHERE NOT EXISTS (SELECT 1 FROM reports WHERE project_id = $1 AND deleted_at IS NULL)
-        AND EXISTS (SELECT 1 FROM projects WHERE id = $1 AND url_expires_at > NOW() AND deleted_at IS NULL)
+      WHERE EXISTS (SELECT 1 FROM projects WHERE id = $1 AND url_expires_at > NOW() AND deleted_at IS NULL)
+      ON CONFLICT (project_id) WHERE deleted_at IS NULL DO NOTHING
       RETURNING id`,
       [
         project.id,

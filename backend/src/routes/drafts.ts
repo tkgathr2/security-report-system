@@ -48,68 +48,36 @@ router.put('/:project_unique_url', authenticateCast, async (req: Request, res: R
     const projectId = projectResult.rows[0].id;
     const clientUpdatedAtDate = new Date(client_updated_at);
 
-    const existingDraft = await pool.query(
-      'SELECT id, client_updated_at, server_updated_at FROM report_drafts WHERE project_id = $1 AND cast_user_id = $2',
-      [projectId, castUserId]
-    );
-
     const now = new Date();
 
-    if (existingDraft.rows.length === 0) {
-      await pool.query(
-        `INSERT INTO report_drafts (project_id, cast_user_id, payload_json, client_updated_at, server_updated_at)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [projectId, castUserId, payload_json, clientUpdatedAtDate, now]
-      );
+    const upsertResult = await pool.query(
+      `INSERT INTO report_drafts (project_id, cast_user_id, payload_json, client_updated_at, server_updated_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (project_id, cast_user_id) DO UPDATE
+         SET payload_json = EXCLUDED.payload_json,
+             client_updated_at = EXCLUDED.client_updated_at,
+             server_updated_at = EXCLUDED.server_updated_at
+         WHERE report_drafts.client_updated_at <= EXCLUDED.client_updated_at
+       RETURNING server_updated_at`,
+      [projectId, castUserId, payload_json, clientUpdatedAtDate, now]
+    );
 
+    if (upsertResult.rows.length > 0) {
       res.status(200).json({
         ok: true,
-        server_updated_at: now.toISOString()
+        server_updated_at: upsertResult.rows[0].server_updated_at
       });
-      return;
-    }
-
-    const existing = existingDraft.rows[0];
-    const existingClientUpdatedAt = new Date(existing.client_updated_at);
-
-    if (clientUpdatedAtDate > existingClientUpdatedAt) {
-      await pool.query(
-        `UPDATE report_drafts 
-         SET payload_json = $1, client_updated_at = $2, server_updated_at = $3
-         WHERE id = $4`,
-        [payload_json, clientUpdatedAtDate, now, existing.id]
+    } else {
+      const existing = await pool.query(
+        'SELECT server_updated_at FROM report_drafts WHERE project_id = $1 AND cast_user_id = $2',
+        [projectId, castUserId]
       );
-
       res.status(200).json({
-        ok: true,
-        server_updated_at: now.toISOString()
+        ok: false,
+        message: '競合により更新されませんでした（既存データの方が新しい）',
+        server_updated_at: existing.rows[0]?.server_updated_at
       });
-      return;
     }
-
-    if (clientUpdatedAtDate.getTime() === existingClientUpdatedAt.getTime()) {
-      const existingServerUpdatedAt = new Date(existing.server_updated_at);
-      if (now > existingServerUpdatedAt) {
-        await pool.query(
-          `UPDATE report_drafts 
-           SET payload_json = $1, client_updated_at = $2, server_updated_at = $3
-           WHERE id = $4`,
-          [payload_json, clientUpdatedAtDate, now, existing.id]
-        );
-
-        res.status(200).json({
-          ok: true,
-          server_updated_at: now.toISOString()
-        });
-        return;
-      }
-    }
-
-    res.status(200).json({
-      ok: false,
-      message: '競合により更新されませんでした（既存データの方が新しい）',
-      server_updated_at: existing.server_updated_at
-    });
 
   } catch (error) {
     console.error('Draft PUT error:', error);

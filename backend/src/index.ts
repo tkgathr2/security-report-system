@@ -19,6 +19,7 @@ import staffRouter from './routes/staff';
 import castAuthRouter from './routes/castAuth';
 import pool from './db/pool';
 import { requestTimeout } from './middleware/requestTimeout';
+import { sanitizeInput } from './utils/validation';
 
 dotenv.config();
 
@@ -38,6 +39,12 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 app.use(express.json({ limit: '10mb' }));
+app.use((req: Request, _res: Response, next: () => void) => {
+  if (req.body && typeof req.body === 'object') {
+    req.body = sanitizeInput(req.body);
+  }
+  next();
+});
 app.use(requestTimeout);
 
 // PostgreSQL session store for persistent sessions
@@ -414,6 +421,10 @@ server = app.listen(PORT, () => {
 });
 server.keepAliveTimeout = 65_000;
 server.headersTimeout = 70_000;
+
+pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_project_id_active ON reports (project_id) WHERE deleted_at IS NULL`)
+  .then(() => console.log('[Startup] Unique index on reports ensured'))
+  .catch((err: unknown) => console.error('[Startup] Index creation error:', err));
 
 seedStaffData()
   .then(() => fixProjectCasts())

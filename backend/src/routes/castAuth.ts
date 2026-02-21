@@ -715,16 +715,30 @@ router.post('/field-login', async (req: Request, res: Response) => {
       return;
     }
 
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const rateCheck = await checkRateLimitDb(normalizedEmail);
+    if (!rateCheck.allowed) {
+      const remainMin = Math.ceil((rateCheck.remainingMs || 0) / 60000);
+      res.status(429).json({
+        error: 'RATE_LIMITED',
+        message: `ログイン試行回数が上限を超えました。${remainMin}分後にお試しください`,
+        details: {}
+      });
+      return;
+    }
+
     const result = await pool.query(
       `SELECT cu.id, cu.email, cu.pin_hash, cu.created_at, cu.staff_id,
               sm.display_name_kanji as staff_name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
        WHERE cu.email = $1 AND cu.deleted_at IS NULL`,
-      [email]
+      [normalizedEmail]
     );
 
     if (result.rows.length === 0) {
+      await recordFailedAttemptDb(normalizedEmail);
       res.status(401).json({
         error: 'UNAUTHORIZED',
         message: 'メールアドレスまたはPINが正しくありません',
@@ -736,6 +750,7 @@ router.post('/field-login', async (req: Request, res: Response) => {
     const user = result.rows[0];
 
     if (!user.pin_hash) {
+      await recordFailedAttemptDb(normalizedEmail);
       res.status(401).json({
         error: 'UNAUTHORIZED',
         message: 'メールアドレスまたはPINが正しくありません',
@@ -747,6 +762,7 @@ router.post('/field-login', async (req: Request, res: Response) => {
     const isValidPin = await bcrypt.compare(pin, user.pin_hash);
 
     if (!isValidPin) {
+      await recordFailedAttemptDb(normalizedEmail);
       res.status(401).json({
         error: 'UNAUTHORIZED',
         message: 'メールアドレスまたはPINが正しくありません',
@@ -754,6 +770,8 @@ router.post('/field-login', async (req: Request, res: Response) => {
       });
       return;
     }
+
+    await resetAttemptsDb(normalizedEmail);
 
     const sessionToken = generateToken();
     const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
