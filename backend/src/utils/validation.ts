@@ -27,6 +27,23 @@ export const MAX_LENGTHS = {
   GUARDS_MAX_ITEMS: 30,
 } as const;
 
+export function stripNullBytes(value: string): string {
+  return value.replace(/\0/g, '');
+}
+
+export function sanitizeInput(value: unknown): unknown {
+  if (typeof value === 'string') return stripNullBytes(value);
+  if (Array.isArray(value)) return value.map(sanitizeInput);
+  if (value !== null && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      result[k] = sanitizeInput(v);
+    }
+    return result;
+  }
+  return value;
+}
+
 export function validateStringField(value: unknown, fieldName: string, maxLength: number): string | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value !== 'string') return `${fieldName}は文字列で入力してください`;
