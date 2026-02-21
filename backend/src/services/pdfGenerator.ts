@@ -478,10 +478,10 @@ export async function generateReportPdf(data: ReportData, design: PdfDesign = 'A
       drawCell(doc, colXs[0], totalRowY, colWs[0] + colWs[1], TOTAL_ROW_H, '計', 8, { align: 'center' });
 
       if (data.signaturePng && data.signaturePng.length > 0) {
-        const sigAreaTop = FORM_BOTTOM - 80;
+        const sigAreaH = 140;
+        const sigAreaTop = FORM_BOTTOM - sigAreaH - 15;
         const sigAreaLeft = ML + 10;
         const sigAreaW = LEFT_W - 20;
-        const sigAreaH = 70;
 
         try {
           doc.image(data.signaturePng, sigAreaLeft, sigAreaTop, {
