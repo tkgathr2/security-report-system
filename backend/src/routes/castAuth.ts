@@ -695,6 +695,15 @@ router.post('/logout', async (req: Request, res: Response) => {
 
 router.post('/field-login', async (req: Request, res: Response) => {
   try {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      res.status(400).json({
+        error: 'INVALID_PAYLOAD',
+        message: 'リクエストボディはJSON形式で送信してください',
+        details: {}
+      });
+      return;
+    }
+
     const { email, pin } = req.body;
 
     if (!email || !pin) {
@@ -808,6 +817,15 @@ router.post('/field-login', async (req: Request, res: Response) => {
 
 router.post('/field-register', async (req: Request, res: Response) => {
   try {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      res.status(400).json({
+        error: 'INVALID_PAYLOAD',
+        message: 'リクエストボディはJSON形式で送信してください',
+        details: {}
+      });
+      return;
+    }
+
     const { email, pin } = req.body;
 
     if (!email || !pin) {
@@ -828,7 +846,8 @@ router.post('/field-register', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!/^\d{4,6}$/.test(pin)) {
+    const pinStr = String(pin);
+    if (!/^\d{4,6}$/.test(pinStr)) {
       res.status(400).json({
         error: 'INVALID_PAYLOAD',
         message: 'PINは4〜6桁の数字である必要があります',
@@ -845,7 +864,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
     if (existingUser.rows.length > 0) {
       const existing = existingUser.rows[0];
       if (!existing.pin_hash) {
-        const pinHash = await bcrypt.hash(pin, 10);
+        const pinHash = await bcrypt.hash(pinStr, 10);
         const sessionToken = generateToken();
         const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await pool.query(
@@ -878,14 +897,26 @@ router.post('/field-register', async (req: Request, res: Response) => {
       return;
     }
 
-    const pinHash = await bcrypt.hash(pin, 10);
+    const pinHash = await bcrypt.hash(pinStr, 10);
     const sessionToken = generateToken();
     const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const result = await pool.query(
-      'INSERT INTO cast_users (email, pin_hash, magic_link_token, magic_link_expires) VALUES ($1, $2, $3, $4) RETURNING id, email, created_at',
+      `INSERT INTO cast_users (email, pin_hash, magic_link_token, magic_link_expires)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email) WHERE deleted_at IS NULL DO NOTHING
+       RETURNING id, email, created_at`,
       [email, pinHash, sessionToken, sessionExpires]
     );
+
+    if (result.rows.length === 0) {
+      res.status(400).json({
+        error: 'INVALID_PAYLOAD',
+        message: 'このメールアドレスは既に登録されています',
+        details: {}
+      });
+      return;
+    }
 
     const user = result.rows[0];
 
