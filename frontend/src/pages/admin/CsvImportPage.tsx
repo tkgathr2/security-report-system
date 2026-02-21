@@ -6,20 +6,24 @@ interface CsvImportPageProps {
   importResult: ImportResult | null
   importing: boolean
   isDragging: boolean
+  pendingFile: File | null
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
   handleDragOver: (e: React.DragEvent<HTMLDivElement>) => void
   handleDragLeave: (e: React.DragEvent<HTMLDivElement>) => void
   handleDrop: (e: React.DragEvent<HTMLDivElement>) => void
+  handleForceImport: () => void
 }
 
 export function CsvImportPage({
   importResult,
   importing,
   isDragging,
+  pendingFile,
   handleFileUpload,
   handleDragOver,
   handleDragLeave,
   handleDrop,
+  handleForceImport,
 }: CsvImportPageProps) {
   return (
     <div>
@@ -49,7 +53,35 @@ export function CsvImportPage({
             <span>{importing ? 'インポート中...' : (isDragging ? 'ここにドロップ' : 'CSVファイルを選択またはドラッグ＆ドロップ')}</span>
           </label>
         </div>
-        {importResult && (
+        {importResult && importResult.blocked && (
+          <div style={{ ...styles.resultBox, borderLeft: '4px solid #dc3545' }}>
+            <h4 style={{ ...styles.resultTitle, color: '#dc3545' }}>インポートをブロックしました</h4>
+            <div style={{ backgroundColor: '#f8d7da', color: '#721c24', border: '1px solid #f5c6cb', borderRadius: '6px', padding: '12px 16px', marginBottom: '16px' }}>
+              <strong>{importResult.message}</strong>
+              <p style={{ margin: '8px 0 0', fontSize: '14px' }}>ダブルブッキングを解消してCSVを修正するか、管理者として強制インポートしてください。</p>
+            </div>
+            {importResult.errors && importResult.errors.length > 0 && (
+              <div style={{ ...styles.warningBox, marginBottom: '16px' }}>
+                <strong>検出されたダブルブッキング（{importResult.errors.length}件）:</strong>
+                <ul style={{ margin: '8px 0 0', paddingLeft: '20px', listStyle: 'disc' }}>
+                  {importResult.errors.map((e: { row: number; reason: string }, idx: number) => (
+                    <li key={idx} style={{ marginBottom: '4px' }}>行{e.row}: {e.reason}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {pendingFile && (
+              <button
+                onClick={handleForceImport}
+                disabled={importing}
+                style={{ backgroundColor: '#dc3545', color: '#fff', border: 'none', borderRadius: '6px', padding: '10px 24px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                {importing ? '強制インポート中...' : '強制インポート（管理者権限）'}
+              </button>
+            )}
+          </div>
+        )}
+        {importResult && !importResult.blocked && (
           <div style={styles.resultBox}>
             <h4 style={styles.resultTitle}>インポート結果</h4>
             {(importResult.updated_projects_count ?? 0) > 0 && (

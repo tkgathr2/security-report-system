@@ -39,6 +39,7 @@ function AdminApp() {
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [importing, setImporting] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [showStaffModal, setShowStaffModal] = useState(false)
   const [newStaff, setNewStaff] = useState({ display_name_kanji: '', display_name_kana: '' })
@@ -607,12 +608,15 @@ function AdminApp() {
     }
   }
 
-  const uploadCsvFile = async (file: File) => {
+  const uploadCsvFile = async (file: File, forceImport = false) => {
     setImporting(true)
     setError(null)
     setImportResult(null)
     const formData = new FormData()
     formData.append('file', file)
+    if (forceImport) {
+      formData.append('force_import', 'true')
+    }
     try {
       const response = await fetch('/api/admin/csv/import', {
         method: 'POST',
@@ -629,13 +633,24 @@ function AdminApp() {
         }
         throw new Error(data.message || 'インポートに失敗しました')
       }
+      if (data.blocked) {
+        setPendingFile(file)
+      } else {
+        setPendingFile(null)
+      }
       setImportResult(data)
       fetchDashboardStats()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'インポートに失敗しました')
+      setPendingFile(null)
     } finally {
       setImporting(false)
     }
+  }
+
+  const handleForceImport = async () => {
+    if (!pendingFile) return
+    await uploadCsvFile(pendingFile, true)
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1092,10 +1107,12 @@ function AdminApp() {
               importResult={importResult}
               importing={importing}
               isDragging={isDragging}
+              pendingFile={pendingFile}
               handleFileUpload={handleFileUpload}
               handleDragOver={handleDragOver}
               handleDragLeave={handleDragLeave}
               handleDrop={handleDrop}
+              handleForceImport={handleForceImport}
             />
           )}
 
