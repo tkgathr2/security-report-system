@@ -772,7 +772,7 @@ router.post('/maintenance/cleanup-invalid-clients', requireAdmin, async (req: Re
         actorEmail: adminUser.email,
         action: 'CLEANUP_INVALID_CLIENTS',
         targetType: 'client',
-        targetId: null,
+        targetId: undefined,
         payload: {
           deleted_clients_count: clientsDel.rowCount,
           deleted_projects_count: projectsDel.rowCount,
