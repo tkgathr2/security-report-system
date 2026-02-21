@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
-import PDFDocument from 'pdfkit';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
 import { sendReportApprovalNotifications, uploadPdfToSlack, sendSlackNotification } from '../services/notifications';
 import { logAudit } from '../utils/auditLog';
+import { generateReportPdf } from '../services/pdfGenerator';
+import type { PdfLayout, PdfDesign } from '../services/pdfGenerator';
 
 const router = Router();
 
@@ -14,109 +15,8 @@ const PDF_STATUS = {
   FAILED: 'failed'
 } as const;
 
-interface ReportData {
-  id: string;
-  project_id: string;
-  cast_user_id: string;
-  supervisor_name: string;
-  writer_name: string;
-  weather: string;
-  guard_contents: string[];
-  guard_other_text: string | null;
-  overtime_hours: number | null;
-  has_qualifier: boolean;
-  qualifier_name: string | null;
-  signature_png: Buffer | null;
-  pdf_bytes: Buffer | null;
-  status: string;
-  approved_at: Date;
-  created_at: Date;
-  pdf_generation_status: string;
-  pdf_generated_at: Date | null;
-}
-
-interface ProjectData {
-  project_key: string;
-  client_name_raw: string;
-  work_date: Date;
-  work_name: string;
-  location: string;
-  start_time: string | null;
-  end_time: string | null;
-}
-
-// Generate PDF from report data
-async function generatePdfBuffer(report: ReportData, project: ProjectData): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    try {
-      const doc = new PDFDocument({ size: 'A4', margin: 50 });
-      const chunks: Buffer[] = [];
-
-      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
-
-      // Register Japanese font (use built-in Helvetica for now)
-      // For production, should use a Japanese font like NotoSansJP
-      
-      // Title
-      doc.fontSize(20).text('Security Report', { align: 'center' });
-      doc.moveDown();
-
-      // Report details
-      doc.fontSize(12);
-      doc.text(`Project: ${project.work_name}`);
-      doc.text(`Client: ${project.client_name_raw}`);
-      doc.text(`Location: ${project.location}`);
-      doc.text(`Date: ${project.work_date}`);
-      if (project.start_time && project.end_time) {
-        doc.text(`Time: ${project.start_time} - ${project.end_time}`);
-      }
-      doc.moveDown();
-
-      doc.text(`Supervisor: ${report.supervisor_name}`);
-      doc.text(`Writer: ${report.writer_name}`);
-      doc.text(`Weather: ${report.weather}`);
-      doc.moveDown();
-
-      doc.text('Guard Contents:');
-      report.guard_contents.forEach((content, index) => {
-        doc.text(`  ${index + 1}. ${content}`);
-      });
-      if (report.guard_other_text) {
-        doc.text(`  Other: ${report.guard_other_text}`);
-      }
-      doc.moveDown();
-
-      if (report.overtime_hours) {
-        doc.text(`Overtime Hours: ${report.overtime_hours}`);
-      }
-      if (report.has_qualifier && report.qualifier_name) {
-        doc.text(`Qualifier: ${report.qualifier_name}`);
-      }
-      doc.moveDown();
-
-      doc.text(`Status: ${report.status}`);
-      doc.text(`Created: ${report.created_at}`);
-      doc.text(`Approved: ${report.approved_at}`);
-      doc.moveDown();
-
-      // Signature
-      if (report.signature_png && report.signature_png.length > 0) {
-        doc.text('Signature:');
-        try {
-          doc.image(report.signature_png, { width: 200 });
-        } catch (imgErr) {
-          doc.text('[Signature image could not be rendered]');
-        }
-      }
-
-      doc.end();
-    } catch (error) {
-      reject(error);
-    }
-  });
-}
+const VALID_LAYOUTS: PdfLayout[] = ['classic', 'handwritten'];
+const VALID_DESIGNS: PdfDesign[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
 // POST /api/admin/reports/:reportId/pdf/generate
 router.post('/:reportId/pdf/generate', requireAdmin, async (req: Request, res: Response) => {
@@ -138,11 +38,10 @@ router.post('/:reportId/pdf/generate', requireAdmin, async (req: Request, res: R
       return;
     }
 
-    const report: ReportData = reportResult.rows[0];
+    const report = reportResult.rows[0];
 
-    // Get project data
     const projectResult = await pool.query(
-      `SELECT p.project_key, c.name as client_name_raw, p.work_date, p.work_name, p.location, p.start_time, p.end_time
+      `SELECT p.project_key, c.name as client_name_raw, p.work_date, p.work_name, p.work_title_raw, p.location, p.start_time, p.end_time
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
        WHERE p.id = $1`,
@@ -158,17 +57,74 @@ router.post('/:reportId/pdf/generate', requireAdmin, async (req: Request, res: R
       return;
     }
 
-    const project: ProjectData = projectResult.rows[0];
+    const project = projectResult.rows[0];
 
-    // Update status to pending
+    const reqDesign = req.body?.design as string | undefined;
+    const reqLayout = req.body?.layout as string | undefined;
+
+    let pdfLayout: PdfLayout = 'classic';
+    let pdfDesign: PdfDesign = 'A';
+
+    if (reqLayout && VALID_LAYOUTS.includes(reqLayout as PdfLayout)) {
+      pdfLayout = reqLayout as PdfLayout;
+    }
+    if (reqDesign && VALID_DESIGNS.includes(reqDesign as PdfDesign)) {
+      pdfDesign = reqDesign as PdfDesign;
+    }
+
+    if (!reqLayout || !reqDesign) {
+      try {
+        await pool.query(`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`);
+        if (!reqLayout) {
+          const layoutResult = await pool.query(`SELECT value FROM system_settings WHERE key = 'pdf_layout'`);
+          if (layoutResult.rows.length > 0 && VALID_LAYOUTS.includes(layoutResult.rows[0].value as PdfLayout)) {
+            pdfLayout = layoutResult.rows[0].value as PdfLayout;
+          }
+        }
+        if (!reqDesign) {
+          const designResult = await pool.query(`SELECT value FROM system_settings WHERE key = 'pdf_design'`);
+          if (designResult.rows.length > 0 && VALID_DESIGNS.includes(designResult.rows[0].value as PdfDesign)) {
+            pdfDesign = designResult.rows[0].value as PdfDesign;
+          }
+        }
+      } catch (settingsErr) {
+        console.warn('[REGEN] Failed to fetch PDF settings, using defaults:', settingsErr);
+      }
+    }
+
     await pool.query(
       'UPDATE reports SET pdf_generation_status = $1 WHERE id = $2',
       [PDF_STATUS.PENDING, reportId]
     );
 
+    const workDateStr = project.work_date instanceof Date
+      ? project.work_date.toISOString().split('T')[0]
+      : String(project.work_date).split('T')[0];
+
+    const writerName = report.writer_name || '';
+    const guardContents: string[] = Array.isArray(report.guard_contents) ? report.guard_contents : [];
+    const guards: { index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[] =
+      Array.isArray(report.guards_json) ? report.guards_json : [];
+    const signaturePng: Buffer | null = report.signature_png && report.signature_png.length > 0 ? report.signature_png : null;
+
     try {
-      // Generate PDF
-      const pdfBuffer = await generatePdfBuffer(report, project);
+      const pdfBuffer = await generateReportPdf({
+        companyName: project.client_name_raw || '',
+        workDate: workDateStr,
+        location: project.location || '',
+        workName: project.work_name || project.work_title_raw || '',
+        supervisorName: report.supervisor_name || '',
+        writerName,
+        guardContents,
+        guardOtherText: report.guard_other_text,
+        guards,
+        hasQualifier: report.has_qualifier || false,
+        qualifierName: report.qualifier_name,
+        signaturePng: signaturePng,
+        weather: report.weather || null,
+        layout: pdfLayout,
+        design: pdfDesign,
+      });
 
       // Update report with PDF data
       await pool.query(
