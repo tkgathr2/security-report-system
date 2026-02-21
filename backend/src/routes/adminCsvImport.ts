@@ -410,9 +410,6 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
         processedWorkDates.set(validProjectName, new Set());
       }
       const dateKey = workDate.toISOString().split('T')[0];
-      if (processedWorkDates.get(validProjectName)!.has(dateKey)) {
-        continue;
-      }
       processedWorkDates.get(validProjectName)!.add(dateKey);
 
       const workName = (mapping.workContent && row[mapping.workContent]?.trim()) || validProjectName;
