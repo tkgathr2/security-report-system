@@ -205,6 +205,19 @@ function normalizeClientName(name: string): string {
     .trim();
 }
 
+function isEmptyClientName(name: string | undefined | null): boolean {
+  if (!name) return true;
+
+  const trimmed = name.replace(/[\s　]+/g, '').trim();
+  if (trimmed === '') return true;
+  if (/^[-ー－―]+$/.test(trimmed)) return true;
+
+  const normalized = normalizeClientName(name);
+  if (normalized === '') return true;
+
+  return false;
+}
+
 function normalizeNameSpaces(name: string): string {
   // Convert full-width spaces to half-width spaces
   return name.replace(/　/g, ' ').replace(/\s+/g, ' ').trim();
@@ -357,7 +370,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
 
     const emptyFields: string[] = [];
     if (!projectName) emptyFields.push('案件名');
-    if (!clientNameRaw) emptyFields.push('クライアント名');
+    if (isEmptyClientName(clientNameRaw)) emptyFields.push('クライアント名');
     if (!location) emptyFields.push('実施場所');
     if (!workDateStr) emptyFields.push('実施日');
     
