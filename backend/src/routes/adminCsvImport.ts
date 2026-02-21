@@ -196,6 +196,10 @@ function convertToUtf8(buffer: Buffer): string {
 function normalizeClientName(name: string): string {
   return name
     .replace(/株式会社|有限会社|合同会社/g, '')
+    .replace(/[㈱㈲]/g, '')
+    .replace(/[（\(]株[）\)]/g, '')
+    .replace(/[（\(]有[）\)]/g, '')
+    .replace(/[（\(]合[）\)]/g, '')
     .replace(/[\s　]+/g, '')
     .toLowerCase()
     .trim();
@@ -247,6 +251,7 @@ function requireAdminAuth(req: Request, res: Response, next: () => void): void {
 
 router.post('/import', requireAdminAuth, upload.single('file'), async (req: Request, res: Response) => {
   const adminUser = req.user as AdminUser;
+  const forceImport = req.body?.force_import === 'true';
   
   if (!req.file) {
     res.status(400).json({
@@ -615,14 +620,30 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     }
   }
 
-  await dbClient.query('COMMIT');
-  } catch (txError) {
+  if (duplicateCastAssignments > 0 && !forceImport) {
     await dbClient.query('ROLLBACK');
+    dbClient.release();
+
+    const doubleBookingErrors = errors.filter(e => e.reason.includes('に既に「'));
+    res.status(200).json({
+      ok: false,
+      blocked: true,
+      blocked_reason: 'DOUBLE_BOOKING',
+      message: `ダブルブッキングが${duplicateCastAssignments}件検出されました。インポートをブロックしました。`,
+      duplicate_cast_assignments: duplicateCastAssignments,
+      errors: doubleBookingErrors.slice(0, 20)
+    });
+    return;
+  }
+
+  await dbClient.query('COMMIT');
+  dbClient.release();
+  } catch (txError) {
+    try { await dbClient.query('ROLLBACK'); } catch { /* already released */ }
+    try { dbClient.release(); } catch { /* already released */ }
     console.error('CSV import transaction error:', txError);
     res.status(500).json({ error: 'IMPORT_FAILED', message: 'インポート処理中にエラーが発生しました', details: { error: String(txError) } });
     return;
-  } finally {
-    dbClient.release();
   }
 
   // 全行がエラーの場合、または80%以上がエラーの場合は「形式が違う」エラーを返す

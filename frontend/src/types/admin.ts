@@ -99,6 +99,9 @@ export interface StaffMember {
 export interface ImportResult {
   ok: boolean
   status: string
+  blocked?: boolean
+  blocked_reason?: string
+  message?: string
   created_projects_count: number
   existing_projects_count: number
   updated_projects_count: number
