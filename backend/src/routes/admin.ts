@@ -14,6 +14,31 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
 
+function normalizeClientName(name: string): string {
+  return name
+    .replace(/株式会社|有限会社|合同会社/g, '')
+    .replace(/[㈱㈲]/g, '')
+    .replace(/[（\(]株[）\)]/g, '')
+    .replace(/[（\(]有[）\)]/g, '')
+    .replace(/[（\(]合[）\)]/g, '')
+    .replace(/[\s　]+/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function isEmptyClientName(name: string | undefined | null): boolean {
+  if (!name) return true;
+
+  const trimmed = String(name).replace(/[\s　]+/g, '').trim();
+  if (trimmed === '') return true;
+  if (/^[-ー－―]+$/.test(trimmed)) return true;
+
+  const normalized = normalizeClientName(String(name));
+  if (normalized === '') return true;
+
+  return false;
+}
+
 router.get('/me', (req: Request, res: Response) => {
   if (!req.isAuthenticated || !req.isAuthenticated() || !req.user) {
     sendUnauthorized(res, '管理者セッションがありません');
@@ -578,7 +603,7 @@ router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => 
     const { id } = req.params;
     const { name, contact_name, contact_title, contact_email, address, emails } = req.body;
 
-    if (!name || !name.trim()) {
+    if (isEmptyClientName(name)) {
       sendBadRequest(res, '会社名は必須です');
       return;
     }
@@ -614,11 +639,7 @@ router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => 
       }
     }
 
-    const nameNormalized = name
-      .replace(/株式会社|有限会社|合同会社/g, '')
-      .replace(/[\s　]+/g, '')
-      .toLowerCase()
-      .trim();
+    const nameNormalized = normalizeClientName(name);
 
     const result = await pool.query(
       `UPDATE clients
@@ -681,12 +702,110 @@ router.delete('/clients/:id', requireAdmin, async (req: Request, res: Response) 
   }
 });
 
+// POST /api/admin/maintenance/cleanup-invalid-clients - 会社名が空/「-」の不正データの論理削除
+router.post('/maintenance/cleanup-invalid-clients', requireAdmin, async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const adminUser = req.user as { email: string };
+    await client.query('BEGIN');
+
+    const invalidClients = await client.query(
+      `SELECT id, name, name_normalized
+       FROM clients
+       WHERE deleted_at IS NULL
+         AND (
+           regexp_replace(name, '[\\s　]+', '', 'g') = ''
+           OR regexp_replace(name, '[\\s　]+', '', 'g') ~ '^[-ー－―]+$'
+           OR name_normalized = ''
+         )
+       ORDER BY created_at ASC
+       LIMIT 500`
+    );
+
+    if (invalidClients.rows.length === 0) {
+      await client.query('COMMIT');
+      res.json({ ok: true, deleted_clients_count: 0, deleted_projects_count: 0, deleted_reports_count: 0 });
+      return;
+    }
+
+    const invalidClientIds = invalidClients.rows.map(r => r.id);
+
+    const castDel = await client.query(
+      `UPDATE project_casts
+       SET deleted_at = NOW()
+       WHERE deleted_at IS NULL
+         AND project_id IN (
+           SELECT id FROM projects WHERE deleted_at IS NULL AND client_id = ANY($1)
+         )`,
+      [invalidClientIds]
+    );
+
+    const reportsDel = await client.query(
+      `UPDATE reports
+       SET deleted_at = NOW()
+       WHERE deleted_at IS NULL
+         AND project_id IN (
+           SELECT id FROM projects WHERE deleted_at IS NULL AND client_id = ANY($1)
+         )`,
+      [invalidClientIds]
+    );
+
+    const projectsDel = await client.query(
+      `UPDATE projects
+       SET deleted_at = NOW()
+       WHERE deleted_at IS NULL AND client_id = ANY($1)`,
+      [invalidClientIds]
+    );
+
+    const clientsDel = await client.query(
+      `UPDATE clients
+       SET deleted_at = NOW()
+       WHERE deleted_at IS NULL AND id = ANY($1)`,
+      [invalidClientIds]
+    );
+
+    await client.query('COMMIT');
+
+    try {
+      logAudit({
+        req,
+        actorEmail: adminUser.email,
+        action: 'CLEANUP_INVALID_CLIENTS',
+        targetType: 'client',
+        targetId: undefined,
+        payload: {
+          deleted_clients_count: clientsDel.rowCount,
+          deleted_projects_count: projectsDel.rowCount,
+          deleted_reports_count: reportsDel.rowCount,
+          deleted_project_casts_count: castDel.rowCount,
+          sample: invalidClients.rows.slice(0, 10)
+        }
+      });
+    } catch {
+      // ignore audit log errors
+    }
+
+    res.json({
+      ok: true,
+      deleted_clients_count: clientsDel.rowCount,
+      deleted_projects_count: projectsDel.rowCount,
+      deleted_reports_count: reportsDel.rowCount,
+      deleted_project_casts_count: castDel.rowCount
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    handleDbError(res, error, 'Cleanup invalid clients');
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/admin/clients - クライアント登録
 router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { name, emails } = req.body;
 
-    if (!name || !name.trim()) {
+    if (isEmptyClientName(name)) {
       sendBadRequest(res, '会社名は必須です');
       return;
     }
@@ -701,11 +820,7 @@ router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
     }
     const normalizedClientEmails = emailList.map((e: string) => String(e).trim().toLowerCase());
 
-    const nameNormalized = name
-      .replace(/株式会社|有限会社|合同会社/g, '')
-      .replace(/[\s　]+/g, '')
-      .toLowerCase()
-      .trim();
+    const nameNormalized = normalizeClientName(name);
 
     const result = await pool.query(
       `INSERT INTO clients (name, name_normalized, emails, is_active)
@@ -751,18 +866,14 @@ router.post('/clients/register-and-activate', requireAdmin, async (req: Request,
     const { client_name_raw, emails } = req.body;
     const adminUser = req.user as { id: string; email: string };
 
-    if (!client_name_raw || !client_name_raw.trim()) {
+    if (isEmptyClientName(client_name_raw)) {
       sendBadRequest(res, '会社名は必須です');
       return;
     }
     const regClientNameErr = validateStringField(client_name_raw, '会社名', MAX_LENGTHS.COMPANY_NAME);
     if (regClientNameErr) { sendBadRequest(res, regClientNameErr); return; }
 
-    const nameNormalized = client_name_raw
-      .replace(/株式会社|有限会社|合同会社/g, '')
-      .replace(/[\s　]+/g, '')
-      .toLowerCase()
-      .trim();
+    const nameNormalized = normalizeClientName(client_name_raw);
 
     // クライアントを登録
     const clientResult = await pool.query(
