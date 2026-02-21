@@ -2,6 +2,18 @@ import { COLORS } from '../../constants/admin'
 import { styles } from '../../styles/adminStyles'
 import type { Client } from '../../types/admin'
 
+function isNew(createdAt: string): boolean {
+  const created = new Date(createdAt)
+  const threeDaysAgo = new Date()
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+  return created >= threeDaysAgo
+}
+
+function NewBadge({ createdAt }: { createdAt: string }) {
+  if (!createdAt || !isNew(createdAt)) return null
+  return <span style={styles.newBadge}>NEW</span>
+}
+
 interface ClientsPageProps {
   clients: Client[]
   filteredClients: Client[]
@@ -60,7 +72,7 @@ export function ClientsPage({
                                 <div style={styles.mobileCardBody}>
                                   <div style={styles.mobileCardRow}>
                                     <span style={styles.mobileCardLabel}>会社名</span>
-                                    <span style={styles.mobileCardValue}>{client.name}</span>
+                                    <span style={styles.mobileCardValue}>{client.name}<NewBadge createdAt={client.created_at} /></span>
                                   </div>
                                   <div style={styles.mobileCardRow}>
                                     <span style={styles.mobileCardLabel}>担当者名</span>
@@ -112,7 +124,7 @@ export function ClientsPage({
                               <tbody>
                                 {filteredClients.map(client => (
                                   <tr key={client.id} style={styles.tr}>
-                                    <td style={styles.td}>{client.name}</td>
+                                    <td style={styles.td}>{client.name}<NewBadge createdAt={client.created_at} /></td>
                                     <td style={styles.td}>{client.contact_name || '-'}</td>
                                     <td style={styles.td}>{client.contact_title || '-'}</td>
                                     <td style={styles.td}>{client.contact_email || '-'}</td>
