@@ -8,6 +8,15 @@ const router = Router();
 
 router.put('/:project_unique_url', authenticateCast, async (req: Request, res: Response) => {
   try {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      res.status(400).json({
+        error: 'INVALID_PAYLOAD',
+        message: 'リクエストボディはJSON形式で送信してください',
+        details: {}
+      });
+      return;
+    }
+
     const { project_unique_url } = req.params;
     const { payload_json, client_updated_at } = req.body;
     const castUserId = (req as AuthenticatedCastRequest).castUser.userId;
