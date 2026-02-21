@@ -251,7 +251,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           guards: Array.isArray(guards) ? guards : [],
           hasQualifier: has_qualifier || false,
           qualifierName: qualifier_name,
-          signaturePng: signaturePngBuffer
+          signaturePng: signaturePngBuffer,
+          weather: weather || null
         });
         console.log(`[ASYNC] Generated PDF: ${pdfBuffer.length} bytes`);
       } catch (pdfError) {
