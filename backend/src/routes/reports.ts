@@ -235,6 +235,19 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     setImmediate(async () => {
       console.log(`[ASYNC] Starting background processing for report ${reportId}`);
 
+      // PDF設定を取得
+      let pdfLayout = 'classic';
+      let pdfDesign = 'A';
+      try {
+        await pool.query(`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`);
+        const layoutResult = await pool.query(`SELECT value FROM system_settings WHERE key = 'pdf_layout'`);
+        if (layoutResult.rows.length > 0) pdfLayout = layoutResult.rows[0].value;
+        const designResult = await pool.query(`SELECT value FROM system_settings WHERE key = 'pdf_design'`);
+        if (designResult.rows.length > 0) pdfDesign = designResult.rows[0].value;
+      } catch (settingsErr) {
+        console.warn('[ASYNC] Failed to fetch PDF settings, using defaults:', settingsErr);
+      }
+
       // PDF生成を最初に実行（Slack通知にPDFリンクを含めるため）
       let pdfBuffer: Buffer;
       let pdfGenerationStatus = 'success';
@@ -252,7 +265,9 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           hasQualifier: has_qualifier || false,
           qualifierName: qualifier_name,
           signaturePng: signaturePngBuffer,
-          weather: weather || null
+          weather: weather || null,
+          layout: pdfLayout as 'classic' | 'handwritten',
+          design: pdfDesign as 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J',
         });
         console.log(`[ASYNC] Generated PDF: ${pdfBuffer.length} bytes`);
       } catch (pdfError) {

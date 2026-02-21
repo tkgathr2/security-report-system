@@ -1095,4 +1095,67 @@ router.delete('/reports/:reportId', requireAdmin, async (req: Request, res: Resp
   }
 });
 
+const ensureSettingsTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+};
+
+router.get('/settings/pdf-layout', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    await ensureSettingsTable();
+    const result = await pool.query(
+      `SELECT value FROM system_settings WHERE key = 'pdf_layout'`
+    );
+    const layout = result.rows.length > 0 ? result.rows[0].value : 'classic';
+    const designResult = await pool.query(
+      `SELECT value FROM system_settings WHERE key = 'pdf_design'`
+    );
+    const design = designResult.rows.length > 0 ? designResult.rows[0].value : 'A';
+    res.json({ layout, design });
+  } catch (error) {
+    handleDbError(res, error, 'Get PDF layout setting');
+  }
+});
+
+router.put('/settings/pdf-layout', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { layout, design } = req.body;
+    const validLayouts = ['classic', 'handwritten'];
+    const validDesigns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+    if (layout && !validLayouts.includes(layout)) {
+      sendBadRequest(res, `レイアウトは ${validLayouts.join(', ')} のいずれかを指定してください`);
+      return;
+    }
+    if (design && !validDesigns.includes(design)) {
+      sendBadRequest(res, `デザインは ${validDesigns.join(', ')} のいずれかを指定してください`);
+      return;
+    }
+    await ensureSettingsTable();
+    if (layout) {
+      await pool.query(
+        `INSERT INTO system_settings (key, value, updated_at) VALUES ('pdf_layout', $1, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+        [layout]
+      );
+    }
+    if (design) {
+      await pool.query(
+        `INSERT INTO system_settings (key, value, updated_at) VALUES ('pdf_design', $1, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+        [design]
+      );
+    }
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_PDF_SETTINGS', targetType: 'system_settings', targetId: 'pdf_layout', payload: { layout, design } });
+    res.json({ ok: true, layout: layout || undefined, design: design || undefined });
+  } catch (error) {
+    handleDbError(res, error, 'Update PDF layout setting');
+  }
+});
+
 export default router;

@@ -158,7 +158,23 @@ function drawCell(
   doc.text(displayText, x + pad, ty, { width: w - pad * 2, align, lineBreak: false });
 }
 
-export async function generateReportPdf(data: ReportData, design: PdfDesign = 'A'): Promise<Buffer> {
+export type PdfLayout = 'classic' | 'handwritten';
+
+interface ReportDataWithLayout extends ReportData {
+  layout?: PdfLayout;
+  design?: PdfDesign;
+}
+
+export async function generateReportPdf(data: ReportDataWithLayout): Promise<Buffer> {
+  const layout = data.layout || 'classic';
+  if (layout === 'classic') {
+    const { generateReportPdfClassic } = await import('./pdfGeneratorClassic');
+    return generateReportPdfClassic(data, data.design || 'A');
+  }
+  return generateReportPdfHandwritten(data);
+}
+
+async function generateReportPdfHandwritten(data: ReportData): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
