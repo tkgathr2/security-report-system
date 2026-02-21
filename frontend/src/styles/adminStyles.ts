@@ -903,5 +903,18 @@ export const styles: Record<string, React.CSSProperties> = {
     margin: '0 0 20px 0',
     color: COLORS.darkGray,
     fontSize: '14px'
+  },
+  newBadge: {
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: '4px',
+    fontSize: '11px',
+    fontWeight: 700,
+    color: COLORS.white,
+    backgroundColor: COLORS.danger,
+    marginLeft: '8px',
+    verticalAlign: 'middle',
+    lineHeight: '16px',
+    letterSpacing: '0.5px'
   }
 }

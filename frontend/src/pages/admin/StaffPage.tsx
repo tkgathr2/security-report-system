@@ -3,6 +3,18 @@ import { COLORS } from '../../constants/admin'
 import { styles } from '../../styles/adminStyles'
 import type { StaffMember } from '../../types/admin'
 
+function isNew(createdAt: string): boolean {
+  const created = new Date(createdAt)
+  const threeDaysAgo = new Date()
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+  return created >= threeDaysAgo
+}
+
+function NewBadge({ createdAt }: { createdAt: string }) {
+  if (!createdAt || !isNew(createdAt)) return null
+  return <span style={styles.newBadge}>NEW</span>
+}
+
 interface StaffPageProps {
   staff: StaffMember[]
   filteredStaff: StaffMember[]
@@ -113,7 +125,7 @@ export function StaffPage({
                                                                 <div style={styles.mobileCardBody}>
                                                                   <div style={styles.mobileCardRow}>
                                                                     <span style={styles.mobileCardLabel}>氏名（漢字）</span>
-                                                                    <span style={styles.mobileCardValue}>{member.display_name_kanji}</span>
+                                                                    <span style={styles.mobileCardValue}>{member.display_name_kanji}<NewBadge createdAt={member.created_at} /></span>
                                                                   </div>
                                                                   <div style={styles.mobileCardRow}>
                                                                     <span style={styles.mobileCardLabel}>氏名（カナ）</span>
@@ -155,7 +167,7 @@ export function StaffPage({
                                                                 <tbody>
                                                                   {filteredStaff.map(member => (
                                                                     <tr key={member.id} style={styles.tr}>
-                                                                      <td style={styles.td}>{member.display_name_kanji}</td>
+                                                                      <td style={styles.td}>{member.display_name_kanji}<NewBadge createdAt={member.created_at} /></td>
                                                                       <td style={styles.td}>{member.display_name_kana}</td>
                                                                       <td style={styles.td}>{member.registered_email || member.email || '-'}</td>
                                                                       <td style={styles.td}>{formatDate(member.created_at)}</td>
