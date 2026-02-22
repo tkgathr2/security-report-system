@@ -155,9 +155,9 @@ export default function FieldReport() {
         return
       }
 
-      const savedEmail = localStorage.getItem(`writer_email_${uniqueUrl}`)
       const queryEmail = searchParams.get('email')
-      const emailToUse = savedEmail || queryEmail
+      const savedEmail = localStorage.getItem(`writer_email_${uniqueUrl}`)
+      const emailToUse = queryEmail || savedEmail
       if (emailToUse) {
         setWriterEmail(emailToUse)
         setWriterName(emailToUse)
@@ -182,6 +182,15 @@ export default function FieldReport() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cast_token: castToken })
           })
+
+          if (response && response.ok) {
+            const peek = await response.clone().json()
+            if (peek.user?.email && peek.user.email.toLowerCase() !== email.toLowerCase()) {
+              response = null
+              localStorage.removeItem('castToken')
+              localStorage.removeItem('castUser')
+            }
+          }
         }
 
         if (!response || !response.ok) {

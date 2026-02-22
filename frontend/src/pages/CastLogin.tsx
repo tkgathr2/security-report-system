@@ -16,7 +16,21 @@ export default function CastLogin() {
   useEffect(() => {
     const token = localStorage.getItem('castToken');
     if (token) {
-      navigate('/cast/today');
+      fetch(`${API_BASE}/api/cast/me`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+        .then((res) => {
+          if (res.ok) {
+            navigate('/cast/today');
+          } else {
+            localStorage.removeItem('castToken');
+            localStorage.removeItem('castUser');
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem('castToken');
+          localStorage.removeItem('castUser');
+        });
     }
   }, [navigate]);
 
