@@ -183,6 +183,22 @@
   text-decoration: underline;
 }
 
+.cast-mailto-link {
+  display: inline-block;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #E67E22 !important;
+  transition: all 0.2s;
+}
+
+.cast-mailto-link:hover {
+  background: #fff3e0;
+  border-color: #E67E22;
+}
+
 .cast-logout {
   background: none;
   border: 1px solid #dc2626;
