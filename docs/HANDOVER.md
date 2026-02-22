@@ -88,6 +88,44 @@ QA検証で48件のバグを発見し、**全48件を修正済み**:
 | #294 | §6.2-#12 | 2つのキャスト認証パス統合（auth.ts → castAuth.tsに移行） |
 | #295 | bugfix | field-login/field-registerのmagic_link_token未設定バグ修正 |
 
+### Phase 14: 公開準備・UI改善・バグ修正・OAuth分離（PR #296〜#313）
+
+| PR | 区分 | 主な内容 |
+|----|------|----------|
+| #296 | §6.3 | バッチ処理非同期化・PDFストレージ抽象化・DBプール最適化 |
+| #297 | docs | 公開準備Runbook + スモークテスト証跡 |
+| #298 | feat | 警備報告書PDFレイアウト再設計（landscape A4） |
+| #299 | fix | 署名欄拡大（70px → 140px） |
+| #300 | feat | PDFデザイン選択機能（クラシック/手書き風） |
+| #301 | feat | NEW バッジ表示（会社管理・キャスト管理） |
+| #302 | feat | 会社名正規化（㈱対応）+ ダブルブッキング検知 |
+| #304 | fix | 空会社名拒否 + 不正データクリーンアップ |
+| #305 | fix | 同一案件複数キャストインポートバグ修正 |
+| #306 | fix | 管理者PDF再生成エンドポイント修正 |
+| #307 | fix | 100本ノック5件のバグ修正 |
+| #308 | fix | 200本ノック6件のバグ修正 |
+| #310 | feat | ファビコン設定（SVG/PNG + apple-touch-icon + webmanifest） |
+| #311 | feat | mailtoリンク追加 |
+| #312 | fix | ファビコンテキスト視認性改善 |
+| #313 | fix | 共有端末クロスユーザー認証漏れ修正 |
+
+### Phase 14b: OAuth分離（環境変数のみ・コード変更なし）
+
+**問題**: Google OAuth同意画面に「いりでくん」と表示される（ほうこちゃんなのに）
+
+**原因**: ほうこちゃんといりでくんが同じGCPプロジェクト（`takagi-iride-auth-484707`）のOAuth認証情報を共有していた。OAuth同意画面のアプリ名はGCPプロジェクト側の設定で決まるため、いりでくんのプロジェクト名が表示されていた。
+
+**修正**:
+1. Google Cloud Consoleで新規GCPプロジェクト `takagi-houkochan-auth` を作成
+2. OAuth同意画面をアプリ名「ほうこちゃん」で設定
+3. OAuth 2.0クライアントIDを新規作成（リダイレクトURI: `https://security-report.up.railway.app/api/admin/auth/google/callback`）
+4. Railway環境変数 `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` を新しい認証情報に更新
+5. Railwayでデプロイ
+
+**検証**: 50回のAPIテスト（`/api/admin/auth/google/start`）で100%新しいclient_idが返され、旧client_idは一度も検出されず。ブラウザでもOAuth同意画面に「ほうこちゃん」と正しく表示されることを確認。
+
+**教訓**: 複数システムでGoogle OAuthを使う場合、必ずシステムごとに別のGCPプロジェクトを作成すること。
+
 ---
 
 ## 3. アーキテクチャ上の重要ポイント
