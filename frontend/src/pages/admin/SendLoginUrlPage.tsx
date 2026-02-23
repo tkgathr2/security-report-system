@@ -14,12 +14,12 @@ export function SendLoginUrlPage({ staff, isMobile }: SendLoginUrlPageProps) {
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [castSearch, setCastSearch] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
+  const [pendingStaff, setPendingStaff] = useState<StaffMember | null>(null)
+  const [staffEmailInput, setStaffEmailInput] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const staffWithEmail = staff.filter(s => s.registered_email || s.email)
-
   const castMatches = castSearch.trim()
-    ? staffWithEmail.filter(s =>
+    ? staff.filter(s =>
         s.display_name_kanji.includes(castSearch.trim()) ||
         s.display_name_kana.includes(castSearch.trim()) ||
         (s.registered_email || s.email || '').includes(castSearch.trim())
@@ -36,7 +36,14 @@ export function SendLoginUrlPage({ staff, isMobile }: SendLoginUrlPageProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleSendByStaff = async (staffId: string) => {
+  const handleSendByStaff = async (s: StaffMember, overrideEmail?: string) => {
+    const staffEmail = overrideEmail || s.registered_email || s.email
+    if (!staffEmail) {
+      setPendingStaff(s)
+      setStaffEmailInput('')
+      setShowDropdown(false)
+      return
+    }
     setSending(true)
     setResult(null)
     try {
@@ -44,13 +51,15 @@ export function SendLoginUrlPage({ staff, isMobile }: SendLoginUrlPageProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ staff_id: staffId }),
+        body: JSON.stringify({ staff_id: s.id, email: overrideEmail || undefined }),
       })
       const data = await res.json()
       if (res.ok) {
         setResult({ ok: true, message: data.message })
         setCastSearch('')
         setShowDropdown(false)
+        setPendingStaff(null)
+        setStaffEmailInput('')
       } else {
         setResult({ ok: false, message: data.message || 'エラーが発生しました' })
       }
@@ -174,10 +183,10 @@ export function SendLoginUrlPage({ staff, isMobile }: SendLoginUrlPageProps) {
                     </div>
                     <button
                       style={{ ...styles.primaryButton, padding: '8px 20px', fontSize: '14px', marginLeft: '8px', borderRadius: '8px', opacity: sending ? 0.6 : 1 }}
-                      onClick={() => handleSendByStaff(s.id)}
+                      onClick={() => handleSendByStaff(s)}
                       disabled={sending}
                     >
-                      {sending ? '...' : '送信'}
+                      {sending ? '...' : (s.registered_email || s.email) ? '送信' : 'メール入力'}
                     </button>
                   </div>
                 ))
@@ -186,6 +195,36 @@ export function SendLoginUrlPage({ staff, isMobile }: SendLoginUrlPageProps) {
           )}
         </div>
       </div>
+
+      {pendingStaff && (
+        <div style={{ background: '#FFF8E1', borderRadius: '12px', padding: isMobile ? '20px' : '28px', marginBottom: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: `1px solid ${COLORS.primary}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <span style={{ fontSize: '20px' }}>&#9993;&#65039;</span>
+            <h3 style={{ margin: 0, fontSize: '17px', color: COLORS.text }}>
+              {pendingStaff.display_name_kanji} のメールアドレスを入力
+            </h3>
+            <button onClick={() => setPendingStaff(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: COLORS.darkGray }}>&#10005;</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' as const : 'row' as const, gap: '12px', alignItems: isMobile ? 'stretch' : 'center' }}>
+            <input
+              type="email"
+              value={staffEmailInput}
+              onChange={(e) => setStaffEmailInput(e.target.value)}
+              placeholder="example@email.com"
+              style={{ flex: 1, padding: '12px 16px', fontSize: '15px', border: `1px solid ${COLORS.gray}`, borderRadius: '10px', boxSizing: 'border-box' as const }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && staffEmailInput.trim()) handleSendByStaff(pendingStaff, staffEmailInput.trim()) }}
+              autoFocus
+            />
+            <button
+              style={{ ...styles.primaryButton, padding: '12px 24px', fontSize: '14px', borderRadius: '10px', opacity: (!staffEmailInput.trim() || sending) ? 0.6 : 1, whiteSpace: 'nowrap' as const }}
+              onClick={() => handleSendByStaff(pendingStaff, staffEmailInput.trim())}
+              disabled={!staffEmailInput.trim() || sending}
+            >
+              {sending ? '送信中...' : '送信'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ background: COLORS.white, borderRadius: '12px', padding: isMobile ? '20px' : '28px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
