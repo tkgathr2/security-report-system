@@ -1315,7 +1315,7 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
       const result = await pool.query(
         `SELECT cu.email, sm.display_name_kanji as name
          FROM cast_users cu
-         LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+         INNER JOIN staff_master sm ON cu.staff_id = sm.id AND sm.deleted_at IS NULL
          WHERE cu.email = $1 AND cu.email_verified = true AND cu.deleted_at IS NULL`,
         [normalizedEmail]
       );
