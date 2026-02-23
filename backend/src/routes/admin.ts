@@ -1288,10 +1288,13 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
 
     let targetEmail: string | null = null;
     let targetName: string | null = null;
+    let isRegistered = false;
 
     if (staff_id) {
       const result = await pool.query(
-        `SELECT sm.display_name_kanji as name, cu.email
+        `SELECT sm.display_name_kanji as name,
+                CASE WHEN sm.email = '' THEN NULL ELSE sm.email END as sm_email,
+                cu.email as cu_email
          FROM staff_master sm
          LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true AND cu.deleted_at IS NULL
          WHERE sm.id = $1 AND sm.deleted_at IS NULL`,
@@ -1302,7 +1305,8 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
         return;
       }
       targetName = result.rows[0].name;
-      targetEmail = result.rows[0].email;
+      isRegistered = !!result.rows[0].cu_email;
+      targetEmail = result.rows[0].cu_email || result.rows[0].sm_email;
     } else if (email) {
       const normalizedEmail = String(email).trim().toLowerCase();
       const emailErr = isValidEmail(normalizedEmail) ? null : 'メールアドレスの形式が正しくありません';
@@ -1318,9 +1322,11 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
       if (result.rows.length > 0) {
         targetEmail = result.rows[0].email;
         targetName = result.rows[0].name;
+        isRegistered = true;
       } else {
         targetEmail = normalizedEmail;
         targetName = null;
+        isRegistered = false;
       }
     } else {
       sendBadRequest(res, 'メールアドレスまたはスタッフIDが必要です');
@@ -1336,7 +1342,7 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const loginUrl = `${protocol}://${host}/cast/login`;
 
-    const emailResult = await sendLoginUrlEmail(targetEmail, targetName || '', loginUrl);
+    const emailResult = await sendLoginUrlEmail(targetEmail, targetName || '', loginUrl, isRegistered);
 
     if (!emailResult.success) {
       res.status(500).json({ message: 'メール送信に失敗しました', error: emailResult.error });
