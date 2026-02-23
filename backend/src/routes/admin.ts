@@ -326,6 +326,16 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
          )`,
         [email, id]
       );
+    } else {
+      await client.query(
+        `UPDATE cast_users SET email = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = (
+           SELECT id FROM cast_users
+           WHERE staff_id = $1 AND deleted_at IS NULL
+           ORDER BY updated_at DESC LIMIT 1
+         )`,
+        [id]
+      );
     }
 
     await client.query('COMMIT');
