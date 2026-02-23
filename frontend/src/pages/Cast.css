@@ -20,13 +20,11 @@
   max-width: 600px;
 }
 
-.cast-header {
+.cast-header-actions {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
   margin-bottom: 20px;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 
 .cast-logo {
@@ -37,9 +35,6 @@
   margin-bottom: 20px;
 }
 
-.cast-header .cast-logo {
-  margin-bottom: 0;
-}
 
 .cast-card h1 {
   font-size: 24px;
