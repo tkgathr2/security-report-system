@@ -352,6 +352,34 @@ async function cleanupData() {
     );
     cleanupDetail += ` kanjiOnlyKanaDeleted:${highKanji.rowCount}`;
 
+    const dupeEmails = await pool.query(`
+      SELECT email, array_agg(id ORDER BY staff_id IS NULL, created_at ASC) as ids,
+             array_agg(staff_id ORDER BY staff_id IS NULL, created_at ASC) as staff_ids,
+             array_agg(pin_hash IS NOT NULL ORDER BY staff_id IS NULL, created_at ASC) as has_pins
+      FROM cast_users WHERE deleted_at IS NULL
+      GROUP BY email HAVING COUNT(*) > 1
+    `);
+    let mergedCastUsers = 0;
+    for (const row of dupeEmails.rows) {
+      const keepId = row.ids[0];
+      const removeIds: string[] = row.ids.slice(1);
+      for (const removeId of removeIds) {
+        await pool.query(
+          `UPDATE cast_users SET
+             pin_hash = COALESCE(pin_hash, (SELECT pin_hash FROM cast_users WHERE id = $2)),
+             magic_link_token = COALESCE(magic_link_token, (SELECT magic_link_token FROM cast_users WHERE id = $2)),
+             magic_link_expires = COALESCE(magic_link_expires, (SELECT magic_link_expires FROM cast_users WHERE id = $2)),
+             staff_id = COALESCE(staff_id, (SELECT staff_id FROM cast_users WHERE id = $2)),
+             updated_at = NOW()
+           WHERE id = $1`,
+          [keepId, removeId]
+        );
+        await pool.query(`UPDATE cast_users SET deleted_at = NOW() WHERE id = $1`, [removeId]);
+        mergedCastUsers++;
+      }
+    }
+    cleanupDetail += ` mergedCastUsers:${mergedCastUsers}`;
+
     const orphanNoLink = await pool.query(
       `UPDATE cast_users SET deleted_at = NOW()
        WHERE deleted_at IS NULL
