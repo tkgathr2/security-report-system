@@ -2,11 +2,14 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
 import pool from '../db/pool';
-import { sendVerificationEmail, sendMagicLinkEmail, sendWelcomeEmail, sendPinResetEmail } from '../utils/email';
+import { sendVerificationEmail, sendMagicLinkEmail, sendWelcomeEmail, sendPinResetEmail, sendInquiryNotificationEmail } from '../utils/email';
 import { isValidEmail, validateStringField, MAX_LENGTHS } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
 import { checkRateLimitDb, recordFailedAttemptDb, resetAttemptsDb } from '../utils/rateLimit';
+
+const inquiryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
 const JWT_EXPIRES_IN = '7d';
@@ -986,6 +989,103 @@ router.post('/exchange-cast-token', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Exchange cast token error:', error);
     res.status(500).json({ error: 'INTERNAL_ERROR', message: 'トークン交換に失敗しました', details: {} });
+  }
+});
+
+const ADMIN_NOTIFICATION_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+
+router.post('/inquiry', inquiryUpload.single('screenshot'), async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: '認証が必要です' });
+    }
+
+    const token = authHeader.substring(7);
+
+    const userResult = await pool.query(
+      `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW() AND cu.deleted_at IS NULL`,
+      [token]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({ message: 'セッションが無効です' });
+    }
+
+    const user = userResult.rows[0];
+
+    const { category, message } = req.body;
+
+    if (!category || !message) {
+      return res.status(400).json({ message: 'カテゴリとメッセージは必須です' });
+    }
+
+    const validCategories = ['bug', 'unclear', 'other'];
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({ message: '無効なカテゴリです' });
+    }
+
+    const msgStr = String(message).trim();
+    if (msgStr.length === 0 || msgStr.length > 2000) {
+      return res.status(400).json({ message: 'メッセージは1〜2000文字で入力してください' });
+    }
+
+    const file = req.file;
+    let screenshotBytes: Buffer | null = null;
+    let screenshotMimeType: string | null = null;
+
+    if (file) {
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+      if (!allowedTypes.includes(file.mimetype)) {
+        return res.status(400).json({ message: '画像ファイル（PNG, JPEG, GIF, WebP）のみアップロードできます' });
+      }
+      screenshotBytes = file.buffer;
+      screenshotMimeType = file.mimetype;
+    }
+
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS inquiries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        cast_user_id UUID NOT NULL,
+        cast_email TEXT NOT NULL,
+        cast_name TEXT,
+        category TEXT NOT NULL,
+        message TEXT NOT NULL,
+        screenshot_bytes BYTEA,
+        screenshot_mime_type TEXT,
+        status TEXT NOT NULL DEFAULT 'new',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`
+    );
+
+    await pool.query(
+      `INSERT INTO inquiries (cast_user_id, cast_email, cast_name, category, message, screenshot_bytes, screenshot_mime_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [user.id, user.email, user.name || null, category, msgStr, screenshotBytes, screenshotMimeType]
+    );
+
+    const emailResult = await sendInquiryNotificationEmail({
+      adminEmails: ADMIN_NOTIFICATION_EMAILS,
+      senderName: user.name || user.email,
+      senderEmail: user.email,
+      category,
+      message: msgStr,
+      hasScreenshot: !!screenshotBytes,
+    });
+
+    if (!emailResult.success) {
+      console.log('[INQUIRY] Email notification failed:', emailResult.error);
+    }
+
+    logAudit({ req, actorEmail: user.email, actorType: 'cast', action: 'CAST_INQUIRY', targetType: 'inquiry', payload: { category, hasScreenshot: !!screenshotBytes } });
+
+    res.json({ ok: true, message: '問合せを送信しました。ありがとうございます。' });
+  } catch (error) {
+    console.error('Inquiry error:', error);
+    res.status(500).json({ message: '問合せの送信に失敗しました' });
   }
 });
 

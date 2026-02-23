@@ -10,6 +10,7 @@ import CastLogin from './pages/CastLogin'
 import CastToday from './pages/CastToday'
 import CastMagic from './pages/CastMagic'
 import CastResetPin from './pages/CastResetPin'
+import CastInquiry from './pages/CastInquiry'
 import './index.css'
 
 Sentry.init({
@@ -39,6 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/cast/today" element={<CastToday />} />
           <Route path="/cast/magic" element={<CastMagic />} />
           <Route path="/cast/reset-pin" element={<CastResetPin />} />
+          <Route path="/cast/inquiry" element={<CastInquiry />} />
           <Route path="/*" element={<App />} />
         </Routes>
       </BrowserRouter>

@@ -25,6 +25,7 @@ import { ImportHistoryPage } from './pages/admin/ImportHistoryPage'
 import { ClientsPage } from './pages/admin/ClientsPage'
 import { AccountsPage } from './pages/admin/AccountsPage'
 import { SendLoginUrlPage } from './pages/admin/SendLoginUrlPage'
+import { InquiriesPage } from './pages/admin/InquiriesPage'
 
 
 function AdminApp() {
@@ -1071,6 +1072,13 @@ function AdminApp() {
               <span style={styles.sidebarText}>URL送信</span>
             </button>
             <button
+              style={screen === 'inquiries' ? styles.sidebarItemActive : styles.sidebarItem}
+              onClick={() => navigateTo('inquiries')}
+            >
+              <span style={styles.sidebarIcon}>&#128172;</span>
+              <span style={styles.sidebarText}>問合せ</span>
+            </button>
+            <button
               style={screen === 'clients' ? styles.sidebarItemActive : styles.sidebarItem}
               onClick={() => navigateTo('clients')}
             >
@@ -1236,6 +1244,10 @@ function AdminApp() {
               staff={staff}
               isMobile={isMobile}
             />
+          )}
+
+          {screen === 'inquiries' && (
+            <InquiriesPage isMobile={isMobile} />
           )}
 
           {screen === 'accounts' && admin?.role === 'super_admin' && (

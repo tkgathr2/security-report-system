@@ -1340,4 +1340,59 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
   }
 });
 
+router.get('/inquiries', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, cast_user_id, cast_email, cast_name, category, message, status,
+              screenshot_mime_type IS NOT NULL as has_screenshot, created_at
+       FROM inquiries ORDER BY created_at DESC`
+    );
+    res.json({ inquiries: result.rows });
+  } catch (error) {
+    handleDbError(res, error, 'Fetch inquiries');
+  }
+});
+
+router.get('/inquiries/:id/screenshot', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT screenshot_bytes, screenshot_mime_type FROM inquiries WHERE id = $1`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0 || !result.rows[0].screenshot_bytes) {
+      sendNotFound(res, 'スクリーンショットが見つかりません');
+      return;
+    }
+    res.setHeader('Content-Type', result.rows[0].screenshot_mime_type);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(result.rows[0].screenshot_bytes);
+  } catch (error) {
+    handleDbError(res, error, 'Fetch inquiry screenshot');
+  }
+});
+
+router.put('/inquiries/:id/status', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ['new', 'read', 'resolved'];
+    if (!validStatuses.includes(status)) {
+      sendBadRequest(res, '無効なステータスです');
+      return;
+    }
+    const result = await pool.query(
+      `UPDATE inquiries SET status = $1 WHERE id = $2 RETURNING id`,
+      [status, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      sendNotFound(res, '問合せが見つかりません');
+      return;
+    }
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_INQUIRY_STATUS', targetType: 'inquiry', targetId: req.params.id, payload: { status } });
+    res.json({ ok: true });
+  } catch (error) {
+    handleDbError(res, error, 'Update inquiry status');
+  }
+});
+
 export default router;

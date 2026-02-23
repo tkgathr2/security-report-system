@@ -182,6 +182,65 @@ export async function sendLoginUrlEmail(email: string, name: string, loginUrl: s
   }
 }
 
+export async function sendInquiryNotificationEmail(params: {
+  adminEmails: string[];
+  senderName: string;
+  senderEmail: string;
+  category: string;
+  message: string;
+  hasScreenshot: boolean;
+  screenshotBase64?: string;
+}) {
+  if (!resend) {
+    console.log('RESEND_API_KEY not configured, skipping email');
+    return { success: false, error: 'Email not configured' };
+  }
+
+  if (params.adminEmails.length === 0) {
+    return { success: false, error: 'No admin emails configured' };
+  }
+
+  const categoryLabels: Record<string, string> = {
+    bug: 'バグ報告',
+    unclear: 'わかりにくい点',
+    other: 'その他',
+  };
+  const categoryLabel = categoryLabels[params.category] || params.category;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: params.adminEmails,
+      subject: `【${APP_NAME}・問合せ】${categoryLabel} - ${params.senderName}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #E67E22;">【${APP_NAME}】ユーザーからの問合せ</h2>
+          <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+            <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold; width: 120px;">送信者</td><td style="padding: 8px; border: 1px solid #ddd;">${params.senderName}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold;">メール</td><td style="padding: 8px; border: 1px solid #ddd;">${params.senderEmail}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold;">カテゴリ</td><td style="padding: 8px; border: 1px solid #ddd;">${categoryLabel}</td></tr>
+          </table>
+          <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 20px 0;">
+            <p style="margin: 0; white-space: pre-wrap;">${params.message}</p>
+          </div>
+          ${params.hasScreenshot ? '<p style="color: #666; font-size: 14px;">📎 スクリーンショットが添付されています（管理画面の問合せ一覧から確認できます）</p>' : ''}
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error('Failed to send inquiry notification email:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('Inquiry notification email sent:', data);
+    return { success: true, data };
+  } catch (error) {
+    console.error('Email send error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
 export async function sendWelcomeEmail(email: string, name: string, baseUrl: string) {
   if (!resend) {
     console.log('RESEND_API_KEY not configured, skipping email');

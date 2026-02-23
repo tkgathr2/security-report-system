@@ -137,9 +137,18 @@ export default function CastToday() {
       <div className="cast-card wide">
         <div className="cast-header">
           <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
-          <button className="cast-logout" onClick={handleLogout}>
-            ログアウト
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="cast-logout"
+              style={{ borderColor: '#E67E22', color: '#E67E22' }}
+              onClick={() => navigate('/cast/inquiry')}
+            >
+              お問合せ
+            </button>
+            <button className="cast-logout" onClick={handleLogout}>
+              ログアウト
+            </button>
+          </div>
         </div>
 
         <h1>{getDateLabel()}</h1>
