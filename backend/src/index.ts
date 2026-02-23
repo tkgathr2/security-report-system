@@ -380,6 +380,13 @@ async function cleanupData() {
     }
     cleanupDetail += ` mergedCastUsers:${mergedCastUsers}`;
 
+    const verifyFix = await pool.query(
+      `UPDATE cast_users SET email_verified = true, updated_at = NOW()
+       WHERE deleted_at IS NULL AND email_verified IS NOT TRUE
+         AND staff_id IS NOT NULL AND pin_hash IS NOT NULL`
+    );
+    cleanupDetail += ` emailVerifiedBackfill:${verifyFix.rowCount}`;
+
     const orphanNoLink = await pool.query(
       `UPDATE cast_users SET deleted_at = NOW()
        WHERE deleted_at IS NULL

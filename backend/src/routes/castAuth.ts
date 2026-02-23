@@ -898,7 +898,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
         const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         const staffId = existing.staff_id || matchedStaffId;
         await pool.query(
-          'UPDATE cast_users SET pin_hash = $1, magic_link_token = $2, magic_link_expires = $3, staff_id = COALESCE(staff_id, $5), updated_at = NOW() WHERE id = $4',
+          'UPDATE cast_users SET pin_hash = $1, magic_link_token = $2, magic_link_expires = $3, staff_id = COALESCE(staff_id, $5), email_verified = true, updated_at = NOW() WHERE id = $4',
           [pinHash, sessionToken, sessionExpires, existing.id, staffId]
         );
 
@@ -932,10 +932,10 @@ router.post('/field-register', async (req: Request, res: Response) => {
     const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const result = await pool.query(
-      `INSERT INTO cast_users (email, pin_hash, magic_link_token, magic_link_expires, staff_id)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (email) WHERE deleted_at IS NULL DO NOTHING
-       RETURNING id, email, created_at`,
+            `INSERT INTO cast_users (email, pin_hash, magic_link_token, magic_link_expires, staff_id, email_verified)
+             VALUES ($1, $2, $3, $4, $5, true)
+             ON CONFLICT (email) WHERE deleted_at IS NULL DO NOTHING
+             RETURNING id, email, created_at`,
       [email, pinHash, sessionToken, sessionExpires, matchedStaffId]
     );
 
