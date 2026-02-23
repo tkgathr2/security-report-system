@@ -220,6 +220,11 @@ router.post('/verify', async (req: Request, res: Response) => {
         [pinHash, staffId, user.id]
       );
 
+      await pool.query(
+        `UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2`,
+        [user.email, staffId]
+      );
+
       // Send welcome email
       const baseUrl = getBaseUrl(req);
       await sendWelcomeEmail(user.email, name.trim(), baseUrl);
@@ -919,6 +924,13 @@ router.post('/field-register', async (req: Request, res: Response) => {
           [pinHash, sessionToken, sessionExpires, existing.id, staffId]
         );
 
+        if (staffId) {
+          await pool.query(
+            'UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2',
+            [email, staffId]
+          );
+        }
+
         const token = jwt.sign(
           { userId: existing.id, email },
           AUTH_SECRET,
@@ -963,6 +975,13 @@ router.post('/field-register', async (req: Request, res: Response) => {
         details: {}
       });
       return;
+    }
+
+    if (matchedStaffId) {
+      await pool.query(
+        'UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2',
+        [email, matchedStaffId]
+      );
     }
 
     const user = result.rows[0];
