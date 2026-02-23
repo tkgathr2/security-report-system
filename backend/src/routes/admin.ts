@@ -213,7 +213,7 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT sm.id, sm.display_name_kanji, sm.display_name_kana, sm.email, sm.created_at, sm.updated_at,
-              cu.email as registered_email, cu.id as cast_user_id
+              CASE WHEN sm.email IS NOT NULL THEN sm.email ELSE cu.email END as registered_email, cu.id as cast_user_id
        FROM staff_master sm
        LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true AND cu.deleted_at IS NULL
        WHERE sm.deleted_at IS NULL
@@ -293,10 +293,12 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
       return;
     }
 
-    await pool.query(
-      `UPDATE cast_users SET email = $1, updated_at = CURRENT_TIMESTAMP WHERE staff_id = $2`,
-      [email || null, id]
-    );
+    if (email) {
+      await pool.query(
+        `UPDATE cast_users SET email = $1, updated_at = CURRENT_TIMESTAMP WHERE staff_id = $2`,
+        [email, id]
+      );
+    }
 
     const adminUser = req.user as { email: string };
     logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_STAFF', targetType: 'staff_master', targetId: id, payload: { display_name_kanji, display_name_kana, email: email || null } });
