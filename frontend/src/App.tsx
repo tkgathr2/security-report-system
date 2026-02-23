@@ -1072,13 +1072,6 @@ function AdminApp() {
               <span style={styles.sidebarText}>URL送信</span>
             </button>
             <button
-              style={screen === 'inquiries' ? styles.sidebarItemActive : styles.sidebarItem}
-              onClick={() => navigateTo('inquiries')}
-            >
-              <span style={styles.sidebarIcon}>&#128172;</span>
-              <span style={styles.sidebarText}>問合せ</span>
-            </button>
-            <button
               style={screen === 'clients' ? styles.sidebarItemActive : styles.sidebarItem}
               onClick={() => navigateTo('clients')}
             >
@@ -1094,6 +1087,13 @@ function AdminApp() {
                 <span style={styles.sidebarText}>アカウント管理</span>
               </button>
             )}
+            <button
+              style={screen === 'inquiries' ? styles.sidebarItemActive : styles.sidebarItem}
+              onClick={() => navigateTo('inquiries')}
+            >
+              <span style={styles.sidebarIcon}>&#128172;</span>
+              <span style={styles.sidebarText}>問合せ</span>
+            </button>
           </nav>
         </aside>
 
