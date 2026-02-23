@@ -217,7 +217,13 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
        FROM staff_master sm
        LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true AND cu.deleted_at IS NULL
        WHERE sm.deleted_at IS NULL
-       ORDER BY sm.display_name_kana
+       UNION ALL
+       SELECT cu2.id, cu2.email as display_name_kanji, cu2.email as display_name_kana, cu2.email, cu2.created_at, cu2.updated_at,
+              cu2.email as registered_email, cu2.id as cast_user_id
+       FROM cast_users cu2
+       WHERE cu2.deleted_at IS NULL AND cu2.email_verified = true AND cu2.pin_hash IS NOT NULL
+         AND cu2.staff_id IS NULL
+       ORDER BY display_name_kana
        LIMIT 500`
     );
 
