@@ -262,7 +262,7 @@ export function StaffPage({
                                   type="email"
                                   style={styles.input}
                                   value={editingStaff.email || ''}
-                                  onChange={e => setEditingStaff({ ...editingStaff, email: e.target.value || null })}
+                                  onChange={e => setEditingStaff({ ...editingStaff, email: e.target.value })}
                                   placeholder="例：yamada@example.com"
                                 />
                               </div>
