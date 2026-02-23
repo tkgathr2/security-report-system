@@ -515,7 +515,8 @@ async function generateReportPdfHandwritten(data: ReportData): Promise<Buffer> {
       }
 
       const now = new Date();
-      const generatedAt = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+      const generatedAt = `${jst.getUTCFullYear()}/${String(jst.getUTCMonth() + 1).padStart(2, '0')}/${String(jst.getUTCDate()).padStart(2, '0')} ${String(jst.getUTCHours()).padStart(2, '0')}:${String(jst.getUTCMinutes()).padStart(2, '0')}`;
       doc.fillColor('#999999').fontSize(5);
       doc.text(`生成: ${generatedAt} | ほうこちゃん`, ML, H - 15, { width: CW, align: 'right', lineBreak: false });
 

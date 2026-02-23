@@ -369,7 +369,8 @@ export async function generateReportPdfClassic(data: ReportData, design: PdfDesi
       const footerY = Math.max(doc.y + 10, 800);
       doc.save(); doc.rect(0, footerY, pageWidth, 1).fill(colors.primary); doc.restore();
       const now = new Date();
-      const generatedAt = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+      const generatedAt = `${jst.getUTCFullYear()}/${String(jst.getUTCMonth() + 1).padStart(2, '0')}/${String(jst.getUTCDate()).padStart(2, '0')} ${String(jst.getUTCHours()).padStart(2, '0')}:${String(jst.getUTCMinutes()).padStart(2, '0')}`;
       doc.fillColor('#999999').fontSize(6);
       doc.text(`生成日時: ${generatedAt}  |  Powered by デジタル警備報告書システム【ほうこちゃん】`, marginLeft, footerY + 4, { width: contentWidth, align: 'right' });
 
