@@ -1312,22 +1312,9 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
       const emailErr = isValidEmail(normalizedEmail) ? null : 'メールアドレスの形式が正しくありません';
       if (emailErr) { sendBadRequest(res, emailErr); return; }
 
-      const result = await pool.query(
-        `SELECT cu.email, sm.display_name_kanji as name
-         FROM cast_users cu
-         INNER JOIN staff_master sm ON cu.staff_id = sm.id AND sm.deleted_at IS NULL
-         WHERE cu.email = $1 AND cu.email_verified = true AND cu.deleted_at IS NULL`,
-        [normalizedEmail]
-      );
-      if (result.rows.length > 0) {
-        targetEmail = result.rows[0].email;
-        targetName = result.rows[0].name;
-        isRegistered = true;
-      } else {
-        targetEmail = normalizedEmail;
-        targetName = null;
-        isRegistered = false;
-      }
+      targetEmail = normalizedEmail;
+      targetName = null;
+      isRegistered = false;
     } else {
       sendBadRequest(res, 'メールアドレスまたはスタッフIDが必要です');
       return;
