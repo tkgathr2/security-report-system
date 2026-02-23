@@ -213,7 +213,7 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT sm.id, sm.display_name_kanji, sm.display_name_kana, sm.email, sm.created_at, sm.updated_at,
-              CASE WHEN sm.email IS NOT NULL THEN sm.email ELSE cu.email END as registered_email, cu.id as cast_user_id
+              sm.email as registered_email, cu.id as cast_user_id
        FROM staff_master sm
        LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true AND cu.deleted_at IS NULL
        WHERE sm.deleted_at IS NULL
