@@ -1137,7 +1137,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '80px',
     height: '80px',
     borderRadius: '50%',
-    backgroundColor: '#c87533',
+    backgroundColor: '#E67E22',
     color: 'white',
     fontSize: '48px',
     display: 'flex',
@@ -1150,7 +1150,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#f5f5f5'
   },
   header: {
-    backgroundColor: '#c87533',
+    backgroundColor: '#2C3E50',
     color: 'white',
     padding: '20px',
     textAlign: 'center'
@@ -1180,7 +1180,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 0 15px',
     fontSize: '16px',
     color: 'white',
-    backgroundColor: '#c87533',
+    backgroundColor: '#E67E22',
     padding: '10px 14px',
     borderRadius: '4px'
   },
@@ -1194,7 +1194,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   infoLabel: {
     fontSize: '12px',
-    color: '#c87533',
+    color: '#E67E22',
     fontWeight: 'bold',
     marginBottom: '2px'
   },
@@ -1319,7 +1319,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#fafafa'
   },
   signatureBoxFilled: {
-    border: '2px solid #c87533',
+    border: '2px solid #E67E22',
     borderRadius: '8px',
     height: '150px',
     display: 'flex',
@@ -1464,7 +1464,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 24px 24px 24px',
     width: 'calc(100% - 48px)',
     padding: '12px',
-    backgroundColor: '#c87533',
+    backgroundColor: '#2C3E50',
     color: 'white',
     border: 'none',
     borderRadius: '8px',

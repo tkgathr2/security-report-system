@@ -4,7 +4,7 @@
 }
 
 .field-report-header {
-  background-color: #c87533;
+  background-color: #2C3E50;
   color: white;
   padding: 16px 20px;
   text-align: center;
@@ -46,7 +46,7 @@
   margin: 0 0 12px;
   font-size: 15px;
   color: white;
-  background-color: #c87533;
+  background-color: #E67E22;
   padding: 10px 14px;
   border-radius: 4px;
 }
@@ -76,8 +76,8 @@
 
 .field-report-input:focus {
   outline: none;
-  border-color: #c87533;
-  box-shadow: 0 0 0 2px rgba(200, 117, 51, 0.2);
+  border-color: #E67E22;
+  box-shadow: 0 0 0 2px rgba(230, 126, 34, 0.2);
 }
 
 .field-report-textarea {
@@ -112,8 +112,8 @@
 }
 
 .field-report-radio-label.selected {
-  border-color: #c87533;
-  background-color: #fdf0e6;
+  border-color: #E67E22;
+  background-color: #fef5ed;
 }
 
 .field-report-radio-label input[type="radio"] {
@@ -141,8 +141,8 @@
 }
 
 .field-report-checkbox-label.selected {
-  border-color: #c87533;
-  background-color: #fdf0e6;
+  border-color: #E67E22;
+  background-color: #fef5ed;
 }
 
 .field-report-checkbox-label input[type="checkbox"] {
@@ -206,7 +206,7 @@
 }
 
 .field-report-signature-box.filled {
-  border: 2px solid #c87533;
+  border: 2px solid #E67E22;
   background-color: white;
 }
 
@@ -341,7 +341,7 @@
 
 .field-report-info-label {
   font-size: 12px;
-  color: #c87533;
+  color: #E67E22;
   font-weight: bold;
   margin-bottom: 2px;
 }
@@ -438,7 +438,7 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background-color: #c87533;
+  background-color: #E67E22;
   color: white;
   font-size: 36px;
   display: flex;
@@ -550,8 +550,8 @@
 }
 
 .field-report-name-result-item:active {
-  background-color: #fdf0e6;
-  border-color: #c87533;
+  background-color: #fef5ed;
+  border-color: #E67E22;
 }
 
 .field-report-name-kanji {
