@@ -215,7 +215,11 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
       `SELECT sm.id, sm.display_name_kanji, sm.display_name_kana, sm.email, sm.created_at, sm.updated_at,
               CASE WHEN sm.email = '' THEN NULL WHEN sm.email IS NOT NULL THEN sm.email ELSE cu.email END as registered_email, cu.id as cast_user_id
        FROM staff_master sm
-       LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true AND cu.deleted_at IS NULL
+       LEFT JOIN LATERAL (
+         SELECT cu0.id, cu0.email FROM cast_users cu0
+         WHERE cu0.staff_id = sm.id AND cu0.email_verified = true AND cu0.deleted_at IS NULL
+         ORDER BY cu0.updated_at DESC LIMIT 1
+       ) cu ON true
        WHERE sm.deleted_at IS NULL
        UNION ALL
        SELECT cu2.id, cu2.email as display_name_kanji, cu2.email as display_name_kana, cu2.email, cu2.created_at, cu2.updated_at,
@@ -306,7 +310,11 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
     if (email) {
       await client.query(
         `UPDATE cast_users SET email = $1, updated_at = CURRENT_TIMESTAMP
-         WHERE staff_id = $2 AND deleted_at IS NULL
+         WHERE id = (
+           SELECT id FROM cast_users
+           WHERE staff_id = $2 AND deleted_at IS NULL
+           ORDER BY updated_at DESC LIMIT 1
+         )
          AND NOT EXISTS (SELECT 1 FROM cast_users WHERE email = $1 AND staff_id != $2 AND deleted_at IS NULL)`,
         [email, id]
       );
