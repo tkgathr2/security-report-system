@@ -1345,7 +1345,7 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
 
     logAudit({ req, actorEmail: adminUser.email, action: 'SEND_LOGIN_URL', targetType: 'cast_user', targetId: targetEmail, payload: { email: targetEmail, name: targetName } });
 
-    res.json({ ok: true, message: `${targetEmail} にログインURLを送信しました` });
+    res.json({ ok: true, message: `${targetEmail} にアクセスURLを送信しました` });
   } catch (error) {
     handleDbError(res, error, 'Send login URL');
   }
