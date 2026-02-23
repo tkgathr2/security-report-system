@@ -119,10 +119,7 @@ export default function CastRegister() {
 
         <div className="cast-links">
           <a href="/cast/login">既にアカウントをお持ちの方はこちら</a>
-          <a
-            href={`mailto:register@nihon-kotsu-yudo.co.jp?subject=${encodeURIComponent('メールアドレス登録')}&body=${encodeURIComponent('このまま送って下さい')}`}
-            className="cast-mailto-link"
-          >
+          <a href="/cast/mail-help" className="cast-mailto-link">
             メールアドレスを登録できない方はこちら
           </a>
         </div>
