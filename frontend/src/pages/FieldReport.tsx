@@ -695,7 +695,7 @@ export default function FieldReport() {
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div>
-            <h1 style={styles.headerTitle}>デジタル警備報告書システム【ほうこちゃん】</h1>
+            <h1 style={styles.headerTitle}>デジタル警備報告書システム<br />【ほうこちゃん】</h1>
             <p style={styles.headerSubtitle}>警備報告書</p>
           </div>
           <button 

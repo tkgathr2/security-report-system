@@ -37,7 +37,7 @@ export default function CastMagic() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
+          <div className="cast-logo">デジタル警備報告書システム<br />【ほうこちゃん】</div>
           <h1>エラー</h1>
           <p className="cast-message error">{error}</p>
           <a href="/cast/login" className="cast-button">
@@ -51,7 +51,7 @@ export default function CastMagic() {
   return (
     <div className="cast-container">
       <div className="cast-card">
-        <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
+        <div className="cast-logo">デジタル警備報告書システム<br />【ほうこちゃん】</div>
         <p>ログイン中...</p>
       </div>
     </div>
