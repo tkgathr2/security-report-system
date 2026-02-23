@@ -155,15 +155,15 @@ export async function sendLoginUrlEmail(email: string, name: string, loginUrl: s
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #E67E22;">【${APP_NAME}】報告画面のご案内</h2>
           ${name ? `<p>${name} 様</p>` : '<p>こんにちは</p>'}
-          <p>以下のボタンをクリックして、ログインしてください。</p>
+          <p>以下のボタンをクリックして、報告画面にアクセスしてください。</p>
           <p style="margin: 30px 0;">
             <a href="${loginUrl}" 
                style="display: inline-block; padding: 15px 30px; background: #E67E22; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
-              ログインする
+              報告画面を開く
             </a>
           </p>
           <p style="color: #666; font-size: 14px;">
-            ログイン後、本日の案件を確認して報告書を作成できます。
+            本日の案件を確認して報告書を作成できます。
           </p>
         </div>
       `,
