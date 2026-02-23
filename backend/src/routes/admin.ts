@@ -308,14 +308,22 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
     }
 
     if (email) {
+      const emailConflict = await client.query(
+        `SELECT id FROM cast_users WHERE email = $1 AND deleted_at IS NULL AND staff_id IS DISTINCT FROM $2 LIMIT 1`,
+        [email, id]
+      );
+      if (emailConflict.rows.length > 0) {
+        await client.query('ROLLBACK');
+        sendBadRequest(res, 'このメールアドレスは既に他のキャストに使用されています');
+        return;
+      }
       await client.query(
         `UPDATE cast_users SET email = $1, updated_at = CURRENT_TIMESTAMP
          WHERE id = (
            SELECT id FROM cast_users
            WHERE staff_id = $2 AND deleted_at IS NULL
            ORDER BY updated_at DESC LIMIT 1
-         )
-         AND NOT EXISTS (SELECT 1 FROM cast_users WHERE email = $1 AND staff_id != $2 AND deleted_at IS NULL)`,
+         )`,
         [email, id]
       );
     }
@@ -330,7 +338,12 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    handleDbError(res, error, 'Staff update');
+    const pgError = error as { code?: string };
+    if (pgError.code === '23505') {
+      sendBadRequest(res, 'このメールアドレスは既に使用されています');
+    } else {
+      handleDbError(res, error, 'Staff update');
+    }
   } finally {
     client.release();
   }
