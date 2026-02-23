@@ -140,7 +140,7 @@ export async function sendPinResetEmail(email: string, name: string, token: stri
   }
 }
 
-export async function sendLoginUrlEmail(email: string, name: string, loginUrl: string) {
+export async function sendLoginUrlEmail(email: string, name: string, loginUrl: string, isRegistered: boolean) {
   if (!resend) {
     console.log('RESEND_API_KEY not configured, skipping email');
     return { success: false, error: 'Email not configured' };
@@ -155,15 +155,15 @@ export async function sendLoginUrlEmail(email: string, name: string, loginUrl: s
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #E67E22;">【${APP_NAME}】報告画面のご案内</h2>
           ${name ? `<p>${name} 様</p>` : '<p>こんにちは</p>'}
-          <p>以下のボタンをクリックして、ログインしてください。</p>
+          <p>以下のボタンをクリックして、${isRegistered ? 'ログイン' : '登録'}してください。</p>
           <p style="margin: 30px 0;">
             <a href="${loginUrl}" 
                style="display: inline-block; padding: 15px 30px; background: #E67E22; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
-              ログインする
+              ${isRegistered ? 'ログインする' : '登録する'}
             </a>
           </p>
           <p style="color: #666; font-size: 14px;">
-            ログイン後、本日の案件を確認して報告書を作成できます。
+            ${isRegistered ? 'ログイン' : '登録'}後、本日の案件を確認して報告書を作成できます。
           </p>
         </div>
       `,
