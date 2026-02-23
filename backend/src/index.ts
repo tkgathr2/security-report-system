@@ -208,6 +208,7 @@ async function seedStaffData() {
       ['2969c9f2-b58b-4c37-bde2-f13e7c3642a7', '松本 祐太郎', 'マツモト ユウタロウ'],
       ['a7f96a6a-907e-45b5-a1eb-462f95ccf57c', '峯 栄治', 'ミネ エイジ'],
       ['439a9918-4006-4fe7-b21f-94192a0144e1', '宮﨑 萌', 'ミヤザキ モエ'],
+      ['006fdb66-2129-4491-b701-b5ea27176fb9', '高木 豊大', 'タカギ アツヒロ'],
     ];
 
     if (hasDeletedAt) {
@@ -350,8 +351,105 @@ async function cleanupData() {
          AND id NOT IN (SELECT DISTINCT staff_id FROM cast_users WHERE staff_id IS NOT NULL)`
     );
     cleanupDetail += ` kanjiOnlyKanaDeleted:${highKanji.rowCount}`;
+
+    const orphanNoLink = await pool.query(
+      `UPDATE cast_users SET deleted_at = NOW()
+       WHERE deleted_at IS NULL
+         AND (staff_id IS NULL
+              OR staff_id NOT IN (SELECT id FROM staff_master WHERE deleted_at IS NULL))`
+    );
+    cleanupDetail += ` orphanCastUsersDeleted:${orphanNoLink.rowCount}`;
   } catch (err: unknown) {
     cleanupDetail += ' err:' + (err instanceof Error ? err.message : String(err));
+  }
+}
+
+let takagiSeedDetail = '';
+
+async function seedTakagiProjectData() {
+  try {
+    const TAKAGI_ID = '006fdb66-2129-4491-b701-b5ea27176fb9';
+    const TAKAGI_EMAIL = 'atsuhiro@takagi.bz';
+
+    const alreadyRan = await pool.query(
+      `SELECT 1 FROM admin_audit_logs WHERE action = 'SEED_TAKAGI_PROJECTS' LIMIT 1`
+    );
+    if (alreadyRan.rows.length > 0) { takagiSeedDetail = 'skipped-already-ran'; return; }
+
+    await pool.query(
+      `UPDATE staff_master SET email = $1 WHERE id = $2 AND (email IS NULL OR email = '')`,
+      [TAKAGI_EMAIL, TAKAGI_ID]
+    );
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let addedCount = 0;
+
+    for (let dayOffset = 0; dayOffset < 10; dayOffset++) {
+      const targetDate = new Date(today);
+      targetDate.setDate(today.getDate() + dayOffset);
+      const dateStr = targetDate.toISOString().split('T')[0];
+
+      const existingProjects = await pool.query(
+        `SELECT id FROM projects WHERE work_date = $1 AND deleted_at IS NULL`,
+        [dateStr]
+      );
+
+      if (existingProjects.rows.length > 0) {
+        for (const proj of existingProjects.rows) {
+          const alreadyAssigned = await pool.query(
+            `SELECT 1 FROM project_casts WHERE project_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
+            [proj.id, TAKAGI_ID]
+          );
+          if (alreadyAssigned.rows.length === 0) {
+            const maxIdx = await pool.query(
+              `SELECT COALESCE(MAX(row_index), -1) + 1 as next_idx FROM project_casts WHERE project_id = $1`,
+              [proj.id]
+            );
+            await pool.query(
+              `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT DO NOTHING`,
+              [proj.id, 'TAKAGI-001', TAKAGI_ID, maxIdx.rows[0].next_idx, '高木 豊大']
+            );
+            addedCount++;
+          }
+        }
+      } else {
+        const uniqueUrl = Math.random().toString(36).substring(2, 10);
+        const urlExpires = new Date(targetDate);
+        urlExpires.setDate(urlExpires.getDate() + 3);
+        urlExpires.setHours(23, 59, 59, 999);
+        const projectKey = `SEED-${dateStr}`;
+
+        const newProj = await pool.query(
+          `INSERT INTO projects (project_key, work_date, work_name, location, start_time, end_time, unique_url, url_expires_at, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT DO NOTHING
+           RETURNING id`,
+          [projectKey, dateStr, '警備業務', '現場A', '09:00', '18:00', uniqueUrl, urlExpires, 'active']
+        );
+
+        if (newProj.rows.length > 0) {
+          await pool.query(
+            `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT DO NOTHING`,
+            [newProj.rows[0].id, 'TAKAGI-001', TAKAGI_ID, 0, '高木 豊大']
+          );
+          addedCount++;
+        }
+      }
+    }
+
+    takagiSeedDetail = `added:${addedCount}`;
+    await pool.query(
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, payload_json)
+       VALUES ('system', 'SEED_TAKAGI_PROJECTS', 'project_casts', $1)`,
+      [JSON.stringify({ added: addedCount })]
+    );
+  } catch (err: unknown) {
+    takagiSeedDetail = 'err:' + (err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -448,8 +546,9 @@ pool.query(`CREATE TABLE IF NOT EXISTS inquiries (
 seedStaffData()
   .then(() => fixProjectCasts())
   .then(() => cleanupData())
+  .then(() => seedTakagiProjectData())
   .then(() => {
-    console.log('[Startup] Background tasks completed:', { seedStatus, castFixDetail, cleanupDetail });
+    console.log('[Startup] Background tasks completed:', { seedStatus, castFixDetail, cleanupDetail, takagiSeedDetail });
   })
   .catch((err: unknown) => {
     console.error('[Startup] Background task error:', err);
