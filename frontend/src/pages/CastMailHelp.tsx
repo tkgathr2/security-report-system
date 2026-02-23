@@ -81,7 +81,7 @@ export default function CastMailHelp() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
+          <div className="cast-logo">デジタル警備報告書システム<br />【ほうこちゃん】</div>
           <h1>メールを確認して下さい</h1>
           <p className="cast-message success">
             {result.message}
@@ -102,7 +102,7 @@ export default function CastMailHelp() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
+          <div className="cast-logo">デジタル警備報告書システム<br />【ほうこちゃん】</div>
           <h1>ログインして下さい</h1>
           <p className="cast-message success">
             {result.message}
@@ -156,7 +156,7 @@ export default function CastMailHelp() {
   return (
     <div className="cast-container">
       <div className="cast-card">
-        <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
+        <div className="cast-logo">デジタル警備報告書システム<br />【ほうこちゃん】</div>
         <h1>メールアドレスで確認</h1>
         <p className="cast-subtitle">メールアドレスを入力して下さい</p>
 

@@ -125,7 +125,7 @@ export default function CastToday() {
     return (
       <div className="cast-container">
         <div className="cast-card">
-          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
+          <div className="cast-logo">デジタル警備報告書システム<br />【ほうこちゃん】</div>
           <p>読み込み中...</p>
         </div>
       </div>
@@ -136,7 +136,7 @@ export default function CastToday() {
     <div className="cast-container">
       <div className="cast-card wide">
         <div className="cast-header">
-          <div className="cast-logo">デジタル警備報告書システム【ほうこちゃん】</div>
+          <div className="cast-logo">デジタル警備報告書システム<br />【ほうこちゃん】</div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
               className="cast-logout"
