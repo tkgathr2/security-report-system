@@ -213,7 +213,7 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT sm.id, sm.display_name_kanji, sm.display_name_kana, sm.email, sm.created_at, sm.updated_at,
-              CASE WHEN sm.email IS NOT NULL AND sm.email != '' THEN sm.email ELSE cu.email END as registered_email, cu.id as cast_user_id
+              CASE WHEN sm.email IS NOT NULL AND sm.email != '' THEN sm.email WHEN sm.email = '' THEN NULL ELSE cu.email END as registered_email, cu.id as cast_user_id
        FROM staff_master sm
        LEFT JOIN LATERAL (
          SELECT cu0.id, cu0.email FROM cast_users cu0
@@ -325,16 +325,6 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
            ORDER BY updated_at DESC LIMIT 1
          )`,
         [email, id]
-      );
-    } else {
-      await client.query(
-        `UPDATE cast_users SET email = NULL, updated_at = CURRENT_TIMESTAMP
-         WHERE id = (
-           SELECT id FROM cast_users
-           WHERE staff_id = $1 AND deleted_at IS NULL
-           ORDER BY updated_at DESC LIMIT 1
-         )`,
-        [id]
       );
     }
 
