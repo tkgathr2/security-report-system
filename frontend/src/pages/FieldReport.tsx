@@ -1137,7 +1137,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '80px',
     height: '80px',
     borderRadius: '50%',
-    backgroundColor: '#4caf50',
+    backgroundColor: '#7cb305',
     color: 'white',
     fontSize: '48px',
     display: 'flex',
@@ -1150,14 +1150,15 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#f5f5f5'
   },
   header: {
-    backgroundColor: '#333',
+    backgroundColor: '#1a3a0a',
     color: 'white',
     padding: '20px',
     textAlign: 'center'
   },
   headerTitle: {
     margin: 0,
-    fontSize: '24px'
+    fontSize: '24px',
+    color: '#c8e600'
   },
   headerSubtitle: {
     margin: '5px 0 0',
@@ -1178,8 +1179,8 @@ const styles: Record<string, React.CSSProperties> = {
   sectionTitle: {
     margin: '0 0 15px',
     fontSize: '18px',
-    color: '#333',
-    borderBottom: '2px solid #333',
+    color: '#1a3a0a',
+    borderBottom: '2px solid #1a3a0a',
     paddingBottom: '10px'
   },
   infoGrid: {
@@ -1316,7 +1317,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#fafafa'
   },
   signatureBoxFilled: {
-    border: '2px solid #4caf50',
+    border: '2px solid #7cb305',
     borderRadius: '8px',
     height: '150px',
     display: 'flex',
@@ -1350,7 +1351,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   submitButton: {
     width: '100%',
-    backgroundColor: '#4caf50',
+    backgroundColor: '#e67e22',
     color: 'white',
     border: 'none',
     padding: '18px',
@@ -1394,8 +1395,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   helpButton: {
     backgroundColor: 'transparent',
-    color: 'white',
-    border: '1px solid white',
+    color: '#c8e600',
+    border: '1px solid #c8e600',
     padding: '8px 16px',
     borderRadius: '4px',
     fontSize: '14px',
@@ -1461,7 +1462,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 24px 24px 24px',
     width: 'calc(100% - 48px)',
     padding: '12px',
-    backgroundColor: '#333',
+    backgroundColor: '#1a3a0a',
     color: 'white',
     border: 'none',
     borderRadius: '8px',
@@ -1532,7 +1533,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   emailButton: {
     width: '100%',
-    backgroundColor: '#4caf50',
+    backgroundColor: '#e67e22',
     color: 'white',
     border: 'none',
     padding: '16px',
@@ -1650,7 +1651,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   confirmYesButton: {
     flex: 1,
-    backgroundColor: '#4caf50',
+    backgroundColor: '#e67e22',
     color: 'white',
     border: 'none',
     padding: '14px 24px',

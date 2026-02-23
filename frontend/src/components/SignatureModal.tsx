@@ -151,17 +151,18 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '15px 20px',
-    backgroundColor: '#333',
+    backgroundColor: '#1a3a0a',
     color: 'white'
   },
   title: {
     fontSize: '18px',
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    color: '#c8e600'
   },
   cancelButton: {
     backgroundColor: 'transparent',
-    color: 'white',
-    border: '1px solid white',
+    color: '#c8e600',
+    border: '1px solid #c8e600',
     padding: '8px 16px',
     borderRadius: '4px',
     fontSize: '14px',
@@ -188,7 +189,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   saveButton: {
     width: '100%',
-    backgroundColor: '#4caf50',
+    backgroundColor: '#e67e22',
     color: 'white',
     border: 'none',
     padding: '15px',
