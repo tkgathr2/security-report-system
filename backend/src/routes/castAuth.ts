@@ -68,6 +68,20 @@ function getBaseUrl(req: Request): string {
   return `${protocol}://${host}`;
 }
 
+async function autoLinkStaff(userId: string, userEmail: string): Promise<{ staff_id: string; staff_name: string } | null> {
+  const result = await pool.query(
+    `UPDATE cast_users SET staff_id = sm.id, updated_at = NOW()
+     FROM staff_master sm
+     WHERE cast_users.id = $1
+       AND LOWER(sm.email) = LOWER($2)
+       AND sm.deleted_at IS NULL
+       AND cast_users.staff_id IS NULL
+     RETURNING sm.id as staff_id, sm.display_name_kanji as staff_name`,
+    [userId, userEmail]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
 // Register - Step 1: Enter email only
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -470,18 +484,9 @@ router.get('/today', async (req: Request, res: Response) => {
     let user = userResult.rows[0];
 
     if (!user.staff_id && user.email) {
-      const autoLink = await pool.query(
-        `UPDATE cast_users SET staff_id = sm.id
-         FROM staff_master sm
-         WHERE cast_users.id = $1
-           AND sm.email = cast_users.email
-           AND sm.deleted_at IS NULL
-           AND cast_users.staff_id IS NULL
-         RETURNING sm.id as staff_id, sm.display_name_kanji as staff_name`,
-        [user.id]
-      );
-      if (autoLink.rows.length > 0) {
-        user = { ...user, staff_id: autoLink.rows[0].staff_id, staff_name: autoLink.rows[0].staff_name };
+      const linked = await autoLinkStaff(user.id, user.email);
+      if (linked) {
+        user = { ...user, staff_id: linked.staff_id, staff_name: linked.staff_name };
       }
     }
 
@@ -1011,18 +1016,9 @@ router.post('/exchange-cast-token', async (req: Request, res: Response) => {
     let user = result.rows[0];
 
     if (!user.staff_id && user.email) {
-      const autoLink2 = await pool.query(
-        `UPDATE cast_users SET staff_id = sm.id
-         FROM staff_master sm
-         WHERE cast_users.id = $1
-           AND sm.email = cast_users.email
-           AND sm.deleted_at IS NULL
-           AND cast_users.staff_id IS NULL
-         RETURNING sm.id as staff_id, sm.display_name_kanji as staff_name`,
-        [user.id]
-      );
-      if (autoLink2.rows.length > 0) {
-        user = { ...user, staff_id: autoLink2.rows[0].staff_id, staff_name: autoLink2.rows[0].staff_name };
+      const linked = await autoLinkStaff(user.id, user.email);
+      if (linked) {
+        user = { ...user, staff_id: linked.staff_id, staff_name: linked.staff_name };
       }
     }
 

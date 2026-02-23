@@ -1333,7 +1333,35 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
       }
       targetName = result.rows[0].name;
       isRegistered = !!result.rows[0].cu_email;
-      targetEmail = result.rows[0].cu_email || result.rows[0].sm_email;
+
+      if (email) {
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const emailErr = isValidEmail(normalizedEmail) ? null : 'メールアドレスの形式が正しくありません';
+        if (emailErr) { sendBadRequest(res, emailErr); return; }
+        targetEmail = normalizedEmail;
+
+        await pool.query(
+          `UPDATE staff_master SET email = $1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = $2 AND (email IS NULL OR email = '')`,
+          [normalizedEmail, staff_id]
+        );
+
+        const existingCu = await pool.query(
+          'SELECT id, staff_id FROM cast_users WHERE email = $1 AND deleted_at IS NULL',
+          [normalizedEmail]
+        );
+        if (existingCu.rows.length > 0) {
+          if (!existingCu.rows[0].staff_id) {
+            await pool.query(
+              'UPDATE cast_users SET staff_id = $1, updated_at = NOW() WHERE id = $2',
+              [staff_id, existingCu.rows[0].id]
+            );
+          }
+          isRegistered = true;
+        }
+      } else {
+        targetEmail = result.rows[0].cu_email || result.rows[0].sm_email;
+      }
     } else if (email) {
       const normalizedEmail = String(email).trim().toLowerCase();
       const emailErr = isValidEmail(normalizedEmail) ? null : 'メールアドレスの形式が正しくありません';
@@ -1365,7 +1393,7 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
       return;
     }
 
-    logAudit({ req, actorEmail: adminUser.email, action: 'SEND_LOGIN_URL', targetType: 'cast_user', targetId: targetEmail, payload: { email: targetEmail, name: targetName } });
+    logAudit({ req, actorEmail: adminUser.email, action: 'SEND_LOGIN_URL', targetType: 'cast_user', targetId: targetEmail, payload: { email: targetEmail, name: targetName, staff_id: staff_id || null } });
 
     res.json({ ok: true, message: `${targetEmail} にアクセスURLを送信しました` });
   } catch (error) {
