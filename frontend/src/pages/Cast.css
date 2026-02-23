@@ -20,11 +20,41 @@
   max-width: 600px;
 }
 
-.cast-header-actions {
+.cast-card-footer {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-bottom: 20px;
+  border-top: 1px solid #e9ecef;
+  margin: 30px -40px -40px -40px;
+  border-radius: 0 0 16px 16px;
+  overflow: hidden;
+}
+
+.cast-footer-btn {
+  flex: 1;
+  padding: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #E67E22;
+  transition: background 0.2s;
+}
+
+.cast-footer-btn:hover {
+  background: #fff8f0;
+}
+
+.cast-footer-btn-danger {
+  color: #dc2626;
+}
+
+.cast-footer-btn-danger:hover {
+  background: #fef2f2;
+}
+
+.cast-footer-divider {
+  width: 1px;
+  background: #e9ecef;
 }
 
 .cast-logo {
@@ -486,5 +516,10 @@
 
   .cast-button {
     padding: 14px;
+  }
+
+  .cast-card-footer {
+    margin: 30px -20px -30px -20px;
+    border-radius: 0 0 12px 12px;
   }
 }
