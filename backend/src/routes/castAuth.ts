@@ -992,6 +992,62 @@ router.post('/exchange-cast-token', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/mail-help', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ message: '正しいメールアドレスを入力してください' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existingUser = await pool.query(
+      `SELECT cu.id, cu.email_verified, cu.staff_id, cu.pin_hash, sm.display_name_kanji as name
+       FROM cast_users cu
+       LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+       WHERE cu.email = $1 AND cu.deleted_at IS NULL`,
+      [normalizedEmail]
+    );
+
+    if (existingUser.rows.length > 0) {
+      const user = existingUser.rows[0];
+      if (user.email_verified && user.pin_hash) {
+        return res.json({ registered: true, message: 'メールアドレスが登録されています。ログインして下さい' });
+      }
+    }
+
+    const token = generateToken();
+    const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    if (existingUser.rows.length > 0) {
+      await pool.query(
+        `UPDATE cast_users SET verification_token = $1, verification_token_expires = $2, updated_at = NOW() WHERE id = $3`,
+        [token, tokenExpires, existingUser.rows[0].id]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO cast_users (email, verification_token, verification_token_expires) VALUES ($1, $2, $3)`,
+        [normalizedEmail, token, tokenExpires]
+      );
+    }
+
+    const baseUrl = getBaseUrl(req);
+    const emailResult = await sendVerificationEmail(normalizedEmail, '', token, baseUrl);
+
+    if (!emailResult.success) {
+      return res.status(500).json({ message: 'メール送信に失敗しました' });
+    }
+
+    logAudit({ req, actorEmail: normalizedEmail, actorType: 'cast', action: 'CAST_MAIL_HELP', targetType: 'cast_user', payload: { email: normalizedEmail } });
+
+    res.json({ registered: false, message: 'メールに登録できるようにURLを送りました' });
+  } catch (error) {
+    console.error('Mail help error:', error);
+    res.status(500).json({ message: 'エラーが発生しました' });
+  }
+});
+
 const ADMIN_NOTIFICATION_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
 
 router.post('/inquiry', inquiryUpload.single('screenshot'), async (req: Request, res: Response) => {
