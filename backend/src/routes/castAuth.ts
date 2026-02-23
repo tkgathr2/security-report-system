@@ -107,12 +107,16 @@ router.post('/register', async (req: Request, res: Response) => {
         [token, tokenExpires, user.id]
       );
     } else {
-      // Create new user with email only
+      const staffLookup = await pool.query(
+        'SELECT id FROM staff_master WHERE email = $1 AND deleted_at IS NULL',
+        [normalizedEmail]
+      );
+      const linkedStaffId = staffLookup.rows.length > 0 ? staffLookup.rows[0].id : null;
       await pool.query(
-        `INSERT INTO cast_users (email, verification_token, verification_token_expires)
-         VALUES ($1, $2, $3)
+        `INSERT INTO cast_users (email, verification_token, verification_token_expires, staff_id)
+         VALUES ($1, $2, $3, $4)
          RETURNING id`,
-        [normalizedEmail, token, tokenExpires]
+        [normalizedEmail, token, tokenExpires, linkedStaffId]
       );
     }
 
@@ -859,8 +863,14 @@ router.post('/field-register', async (req: Request, res: Response) => {
       return;
     }
 
+    const staffMatch = await pool.query(
+      'SELECT id FROM staff_master WHERE email = $1 AND deleted_at IS NULL',
+      [email]
+    );
+    const matchedStaffId = staffMatch.rows.length > 0 ? staffMatch.rows[0].id : null;
+
     const existingUser = await pool.query(
-      'SELECT id, pin_hash, created_at FROM cast_users WHERE email = $1 AND deleted_at IS NULL',
+      'SELECT id, pin_hash, staff_id, created_at FROM cast_users WHERE email = $1 AND deleted_at IS NULL',
       [email]
     );
 
@@ -870,9 +880,10 @@ router.post('/field-register', async (req: Request, res: Response) => {
         const pinHash = await bcrypt.hash(pinStr, 10);
         const sessionToken = generateToken();
         const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        const staffId = existing.staff_id || matchedStaffId;
         await pool.query(
-          'UPDATE cast_users SET pin_hash = $1, magic_link_token = $2, magic_link_expires = $3, updated_at = NOW() WHERE id = $4',
-          [pinHash, sessionToken, sessionExpires, existing.id]
+          'UPDATE cast_users SET pin_hash = $1, magic_link_token = $2, magic_link_expires = $3, staff_id = COALESCE(staff_id, $5), updated_at = NOW() WHERE id = $4',
+          [pinHash, sessionToken, sessionExpires, existing.id, staffId]
         );
 
         const token = jwt.sign(
@@ -905,11 +916,11 @@ router.post('/field-register', async (req: Request, res: Response) => {
     const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const result = await pool.query(
-      `INSERT INTO cast_users (email, pin_hash, magic_link_token, magic_link_expires)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO cast_users (email, pin_hash, magic_link_token, magic_link_expires, staff_id)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (email) WHERE deleted_at IS NULL DO NOTHING
        RETURNING id, email, created_at`,
-      [email, pinHash, sessionToken, sessionExpires]
+      [email, pinHash, sessionToken, sessionExpires, matchedStaffId]
     );
 
     if (result.rows.length === 0) {
@@ -1026,9 +1037,14 @@ router.post('/mail-help', async (req: Request, res: Response) => {
         [token, tokenExpires, existingUser.rows[0].id]
       );
     } else {
+      const staffLookup2 = await pool.query(
+        'SELECT id FROM staff_master WHERE email = $1 AND deleted_at IS NULL',
+        [normalizedEmail]
+      );
+      const linkedStaffId2 = staffLookup2.rows.length > 0 ? staffLookup2.rows[0].id : null;
       await pool.query(
-        `INSERT INTO cast_users (email, verification_token, verification_token_expires) VALUES ($1, $2, $3)`,
-        [normalizedEmail, token, tokenExpires]
+        `INSERT INTO cast_users (email, verification_token, verification_token_expires, staff_id) VALUES ($1, $2, $3, $4)`,
+        [normalizedEmail, token, tokenExpires, linkedStaffId2]
       );
     }
 
@@ -1039,7 +1055,7 @@ router.post('/mail-help', async (req: Request, res: Response) => {
       return res.status(500).json({ message: 'メール送信に失敗しました' });
     }
 
-    logAudit({ req, actorEmail: normalizedEmail, actorType: 'cast', action: 'CAST_MAIL_HELP', targetType: 'cast_user', payload: { email: normalizedEmail } });
+    logAudit({ req, actorEmail: normalizedEmail, actorType: 'cast', action: 'CAST_MAIL_HELP',targetType: 'cast_user', payload: { email: normalizedEmail } });
 
     res.json({ registered: false, message: 'メールに登録できるようにURLを送りました' });
   } catch (error) {
