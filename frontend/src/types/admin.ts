@@ -1,4 +1,4 @@
-export type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients' | 'cast_users' | 'accounts' | 'send_url'
+export type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients' | 'cast_users' | 'accounts' | 'send_url' | 'inquiries'
 
 export interface AdminUser {
   id: string

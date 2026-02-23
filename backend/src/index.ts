@@ -430,6 +430,21 @@ pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cast_users_email_active ON cas
   .then(() => console.log('[Startup] Unique index on cast_users.email ensured'))
   .catch((err: unknown) => console.error('[Startup] cast_users index creation error:', err));
 
+pool.query(`CREATE TABLE IF NOT EXISTS inquiries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  cast_user_id UUID NOT NULL,
+  cast_email TEXT NOT NULL,
+  cast_name TEXT,
+  category TEXT NOT NULL,
+  message TEXT NOT NULL,
+  screenshot_bytes BYTEA,
+  screenshot_mime_type TEXT,
+  status TEXT NOT NULL DEFAULT 'new',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`)
+  .then(() => console.log('[Startup] Inquiries table ensured'))
+  .catch((err: unknown) => console.error('[Startup] Inquiries table creation error:', err));
+
 seedStaffData()
   .then(() => fixProjectCasts())
   .then(() => cleanupData())
