@@ -387,13 +387,7 @@ async function cleanupData() {
     );
     cleanupDetail += ` emailVerifiedBackfill:${verifyFix.rowCount}`;
 
-    const deleteTakagi = await pool.query(
-      `UPDATE cast_users SET deleted_at = NOW()
-       WHERE email = 'atsuhiro@takagi.bz' AND deleted_at IS NULL`
-    );
-    cleanupDetail += ` takagiCastDeleted:${deleteTakagi.rowCount}`;
-
-    const orphanNoLink = await pool.query(
+    const orphanNoLink= await pool.query(
       `UPDATE cast_users SET deleted_at = NOW()
        WHERE deleted_at IS NULL
          AND (staff_id IS NULL
