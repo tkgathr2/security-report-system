@@ -1137,7 +1137,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '80px',
     height: '80px',
     borderRadius: '50%',
-    backgroundColor: '#7cb305',
+    backgroundColor: '#1e3a5f',
     color: 'white',
     fontSize: '48px',
     display: 'flex',
@@ -1150,7 +1150,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#f5f5f5'
   },
   header: {
-    backgroundColor: '#1a3a0a',
+    backgroundColor: '#1e3a5f',
     color: 'white',
     padding: '20px',
     textAlign: 'center'
@@ -1158,7 +1158,7 @@ const styles: Record<string, React.CSSProperties> = {
   headerTitle: {
     margin: 0,
     fontSize: '24px',
-    color: '#c8e600'
+    color: '#ffffff'
   },
   headerSubtitle: {
     margin: '5px 0 0',
@@ -1178,10 +1178,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sectionTitle: {
     margin: '0 0 15px',
-    fontSize: '18px',
-    color: '#1a3a0a',
-    borderBottom: '2px solid #1a3a0a',
-    paddingBottom: '10px'
+    fontSize: '16px',
+    color: 'white',
+    backgroundColor: '#1e3a5f',
+    padding: '10px 14px',
+    borderRadius: '4px'
   },
   infoGrid: {
     display: 'grid',
@@ -1193,7 +1194,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   infoLabel: {
     fontSize: '12px',
-    color: '#666',
+    color: '#1e3a5f',
+    fontWeight: 'bold',
     marginBottom: '2px'
   },
   infoValue: {
@@ -1317,7 +1319,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#fafafa'
   },
   signatureBoxFilled: {
-    border: '2px solid #7cb305',
+    border: '2px solid #1e3a5f',
     borderRadius: '8px',
     height: '150px',
     display: 'flex',
@@ -1395,8 +1397,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   helpButton: {
     backgroundColor: 'transparent',
-    color: '#c8e600',
-    border: '1px solid #c8e600',
+    color: '#ffffff',
+    border: '1px solid rgba(255,255,255,0.6)',
     padding: '8px 16px',
     borderRadius: '4px',
     fontSize: '14px',
@@ -1462,7 +1464,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 24px 24px 24px',
     width: 'calc(100% - 48px)',
     padding: '12px',
-    backgroundColor: '#1a3a0a',
+    backgroundColor: '#1e3a5f',
     color: 'white',
     border: 'none',
     borderRadius: '8px',

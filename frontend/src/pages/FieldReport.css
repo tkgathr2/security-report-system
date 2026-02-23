@@ -4,7 +4,7 @@
 }
 
 .field-report-header {
-  background-color: #1a3a0a;
+  background-color: #1e3a5f;
   color: white;
   padding: 16px 20px;
   text-align: center;
@@ -44,10 +44,11 @@
 
 .field-report-section h2 {
   margin: 0 0 12px;
-  font-size: 16px;
-  color: #1a3a0a;
-  border-bottom: 2px solid #1a3a0a;
-  padding-bottom: 8px;
+  font-size: 15px;
+  color: white;
+  background-color: #1e3a5f;
+  padding: 10px 14px;
+  border-radius: 4px;
 }
 
 .field-report-form-group {
@@ -75,8 +76,8 @@
 
 .field-report-input:focus {
   outline: none;
-  border-color: #7cb305;
-  box-shadow: 0 0 0 2px rgba(124, 179, 5, 0.2);
+  border-color: #1e3a5f;
+  box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.2);
 }
 
 .field-report-textarea {
@@ -111,8 +112,8 @@
 }
 
 .field-report-radio-label.selected {
-  border-color: #7cb305;
-  background-color: #f3ffe1;
+  border-color: #1e3a5f;
+  background-color: #e8eef5;
 }
 
 .field-report-radio-label input[type="radio"] {
@@ -140,8 +141,8 @@
 }
 
 .field-report-checkbox-label.selected {
-  border-color: #7cb305;
-  background-color: #f3ffe1;
+  border-color: #1e3a5f;
+  background-color: #e8eef5;
 }
 
 .field-report-checkbox-label input[type="checkbox"] {
@@ -205,7 +206,7 @@
 }
 
 .field-report-signature-box.filled {
-  border: 2px solid #7cb305;
+  border: 2px solid #1e3a5f;
   background-color: white;
 }
 
@@ -340,7 +341,8 @@
 
 .field-report-info-label {
   font-size: 12px;
-  color: #666;
+  color: #1e3a5f;
+  font-weight: bold;
   margin-bottom: 2px;
 }
 
@@ -351,8 +353,8 @@
 
 .field-report-help-button {
   background-color: transparent;
-  color: #c8e600;
-  border: 1px solid #c8e600;
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.6);
   padding: 6px 12px;
   border-radius: 4px;
   font-size: 13px;
@@ -436,7 +438,7 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background-color: #7cb305;
+  background-color: #1e3a5f;
   color: white;
   font-size: 36px;
   display: flex;
@@ -548,8 +550,8 @@
 }
 
 .field-report-name-result-item:active {
-  background-color: #f3ffe1;
-  border-color: #7cb305;
+  background-color: #e8eef5;
+  border-color: #1e3a5f;
 }
 
 .field-report-name-kanji {
