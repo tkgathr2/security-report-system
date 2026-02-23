@@ -1047,21 +1047,6 @@ router.post('/inquiry', inquiryUpload.single('screenshot'), async (req: Request,
     }
 
     await pool.query(
-      `CREATE TABLE IF NOT EXISTS inquiries (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        cast_user_id UUID NOT NULL,
-        cast_email TEXT NOT NULL,
-        cast_name TEXT,
-        category TEXT NOT NULL,
-        message TEXT NOT NULL,
-        screenshot_bytes BYTEA,
-        screenshot_mime_type TEXT,
-        status TEXT NOT NULL DEFAULT 'new',
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )`
-    );
-
-    await pool.query(
       `INSERT INTO inquiries (cast_user_id, cast_email, cast_name, category, message, screenshot_bytes, screenshot_mime_type)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [user.id, user.email, user.name || null, category, msgStr, screenshotBytes, screenshotMimeType]

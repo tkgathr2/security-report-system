@@ -182,6 +182,10 @@ export async function sendLoginUrlEmail(email: string, name: string, loginUrl: s
   }
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export async function sendInquiryNotificationEmail(params: {
   adminEmails: string[];
   senderName: string;
@@ -189,7 +193,6 @@ export async function sendInquiryNotificationEmail(params: {
   category: string;
   message: string;
   hasScreenshot: boolean;
-  screenshotBase64?: string;
 }) {
   if (!resend) {
     console.log('RESEND_API_KEY not configured, skipping email');
@@ -216,12 +219,12 @@ export async function sendInquiryNotificationEmail(params: {
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #E67E22;">【${APP_NAME}】ユーザーからの問合せ</h2>
           <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
-            <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold; width: 120px;">送信者</td><td style="padding: 8px; border: 1px solid #ddd;">${params.senderName}</td></tr>
-            <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold;">メール</td><td style="padding: 8px; border: 1px solid #ddd;">${params.senderEmail}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold; width: 120px;">送信者</td><td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(params.senderName)}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold;">メール</td><td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(params.senderEmail)}</td></tr>
             <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold;">カテゴリ</td><td style="padding: 8px; border: 1px solid #ddd;">${categoryLabel}</td></tr>
           </table>
           <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 20px 0;">
-            <p style="margin: 0; white-space: pre-wrap;">${params.message}</p>
+            <p style="margin: 0; white-space: pre-wrap;">${escapeHtml(params.message)}</p>
           </div>
           ${params.hasScreenshot ? '<p style="color: #666; font-size: 14px;">📎 スクリーンショットが添付されています（管理画面の問合せ一覧から確認できます）</p>' : ''}
         </div>
