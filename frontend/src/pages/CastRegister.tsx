@@ -9,6 +9,7 @@ export default function CastRegister() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
 
   const handleCtrlEnter = useCallback((e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -49,7 +50,7 @@ export default function CastRegister() {
 
       if (!res.ok) {
         if (data.redirect) {
-          window.location.href = data.redirect;
+          setAlreadyRegistered(true);
           return;
         }
         throw new Error(data.message || '登録に失敗しました');
@@ -63,6 +64,24 @@ export default function CastRegister() {
       setLoading(false);
     }
   };
+
+  if (alreadyRegistered) {
+    return (
+      <div className="cast-container">
+        <div className="cast-card">
+          <div className="cast-logo">デジタル警備報告書システム<br />【ほうこちゃん】</div>
+          <h1>登録済みです</h1>
+          <p className="cast-message success">
+            このメールアドレスは既に登録されています。<br />
+            ログインしてください。
+          </p>
+          <a href="/cast/login" className="cast-button" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+            ログインページへ
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   if (sent) {
     return (
