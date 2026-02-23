@@ -999,7 +999,7 @@ function AdminApp() {
           <button style={styles.menuButton} onClick={() => setSidebarOpen(!sidebarOpen)}>
             &#9776;
           </button>
-          <div style={styles.headerLogo}>
+          <div style={{...styles.headerLogo, cursor: 'pointer'}} onClick={() => navigateTo('dashboard')}>
             <img src={COMPANY_LOGO_URL} alt="日本交通誘導" style={styles.headerLogoImage} />
           </div>
         </div>
