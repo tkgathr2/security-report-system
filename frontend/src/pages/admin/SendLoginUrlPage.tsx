@@ -92,7 +92,7 @@ export function SendLoginUrlPage({ staff, isMobile }: SendLoginUrlPageProps) {
 
   return (
     <div>
-      <h2 style={styles.pageTitle}>ログインURL送信</h2>
+      <h2 style={styles.pageTitle}>URL送信</h2>
 
       {result && (
         <div style={{

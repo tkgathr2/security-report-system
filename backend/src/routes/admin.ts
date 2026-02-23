@@ -262,6 +262,7 @@ router.post('/staff', requireAdmin, async (req: Request, res: Response) => {
 });
 
 router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
     const { display_name_kanji, display_name_kana, email } = req.body;
@@ -280,7 +281,9 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    const result = await client.query(
       `UPDATE staff_master
        SET display_name_kanji = $1, display_name_kana = $2, email = $3, updated_at = CURRENT_TIMESTAMP
        WHERE id = $4
@@ -289,16 +292,21 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       sendNotFound(res, 'スタッフが見つかりません');
       return;
     }
 
     if (email) {
-      await pool.query(
-        `UPDATE cast_users SET email = $1, updated_at = CURRENT_TIMESTAMP WHERE staff_id = $2`,
+      await client.query(
+        `UPDATE cast_users SET email = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE staff_id = $2 AND deleted_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM cast_users WHERE email = $1 AND staff_id != $2 AND deleted_at IS NULL)`,
         [email, id]
       );
     }
+
+    await client.query('COMMIT');
 
     const adminUser = req.user as { email: string };
     logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_STAFF', targetType: 'staff_master', targetId: id, payload: { display_name_kanji, display_name_kana, email: email || null } });
@@ -307,7 +315,10 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
       staff: result.rows[0]
     });
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
     handleDbError(res, error, 'Staff update');
+  } finally {
+    client.release();
   }
 });
 
@@ -1334,7 +1345,7 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
 
     logAudit({ req, actorEmail: adminUser.email, action: 'SEND_LOGIN_URL', targetType: 'cast_user', targetId: targetEmail, payload: { email: targetEmail, name: targetName } });
 
-    res.json({ ok: true, message: `${targetEmail} にログインURLを送信しました` });
+    res.json({ ok: true, message: `${targetEmail} にアクセスURLを送信しました` });
   } catch (error) {
     handleDbError(res, error, 'Send login URL');
   }
