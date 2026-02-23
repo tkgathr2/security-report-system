@@ -112,12 +112,24 @@ router.post('/register', async (req: Request, res: Response) => {
         [normalizedEmail]
       );
       const linkedStaffId = staffLookup.rows.length > 0 ? staffLookup.rows[0].id : null;
-      await pool.query(
-        `INSERT INTO cast_users (email, verification_token, verification_token_expires, staff_id)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id`,
-        [normalizedEmail, token, tokenExpires, linkedStaffId]
+
+      const softDeleted = await pool.query(
+        'SELECT id FROM cast_users WHERE email = $1 AND deleted_at IS NOT NULL ORDER BY updated_at DESC LIMIT 1',
+        [normalizedEmail]
       );
+      if (softDeleted.rows.length > 0) {
+        await pool.query(
+          `UPDATE cast_users SET deleted_at = NULL, verification_token = $1, verification_token_expires = $2, staff_id = COALESCE(staff_id, $3), updated_at = NOW() WHERE id = $4`,
+          [token, tokenExpires, linkedStaffId, softDeleted.rows[0].id]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO cast_users (email, verification_token, verification_token_expires, staff_id)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id`,
+          [normalizedEmail, token, tokenExpires, linkedStaffId]
+        );
+      }
     }
 
     // Send verification email
@@ -1075,10 +1087,22 @@ router.post('/mail-help', async (req: Request, res: Response) => {
         [normalizedEmail]
       );
       const linkedStaffId2 = staffLookup2.rows.length > 0 ? staffLookup2.rows[0].id : null;
-      await pool.query(
-        `INSERT INTO cast_users (email, verification_token, verification_token_expires, staff_id) VALUES ($1, $2, $3, $4)`,
-        [normalizedEmail, token, tokenExpires, linkedStaffId2]
+
+      const softDeleted2 = await pool.query(
+        'SELECT id FROM cast_users WHERE email = $1 AND deleted_at IS NOT NULL ORDER BY updated_at DESC LIMIT 1',
+        [normalizedEmail]
       );
+      if (softDeleted2.rows.length > 0) {
+        await pool.query(
+          `UPDATE cast_users SET deleted_at = NULL, verification_token = $1, verification_token_expires = $2, staff_id = COALESCE(staff_id, $3), updated_at = NOW() WHERE id = $4`,
+          [token, tokenExpires, linkedStaffId2, softDeleted2.rows[0].id]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO cast_users (email, verification_token, verification_token_expires, staff_id) VALUES ($1, $2, $3, $4)`,
+          [normalizedEmail, token, tokenExpires, linkedStaffId2]
+        );
+      }
     }
 
     const baseUrl = getBaseUrl(req);
