@@ -397,7 +397,8 @@ async function cleanupData() {
       `UPDATE cast_users SET deleted_at = NOW()
        WHERE deleted_at IS NULL
          AND (staff_id IS NULL
-              OR staff_id NOT IN (SELECT id FROM staff_master WHERE deleted_at IS NULL))`
+              OR staff_id NOT IN (SELECT id FROM staff_master WHERE deleted_at IS NULL))
+         AND NOT (email_verified = true AND pin_hash IS NOT NULL)`
     );
     cleanupDetail += ` orphanCastUsersDeleted:${orphanNoLink.rowCount}`;
   } catch (err: unknown) {
