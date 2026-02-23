@@ -122,7 +122,7 @@ router.post('/register', async (req: Request, res: Response) => {
       );
     } else {
       const staffLookup = await pool.query(
-        'SELECT id FROM staff_master WHERE email = $1 AND deleted_at IS NULL',
+        'SELECT id FROM staff_master WHERE LOWER(email) = $1 AND deleted_at IS NULL',
         [normalizedEmail]
       );
       const linkedStaffId = staffLookup.rows.length > 0 ? staffLookup.rows[0].id : null;
@@ -209,6 +209,14 @@ router.post('/verify', async (req: Request, res: Response) => {
         return res.status(400).json({ message: '選択されたスタッフが見つかりません' });
       }
 
+      const existingLink = await pool.query(
+        'SELECT id FROM cast_users WHERE staff_id = $1 AND email_verified = true AND deleted_at IS NULL AND id != $2',
+        [staffId, user.id]
+      );
+      if (existingLink.rows.length > 0) {
+        return res.status(400).json({ message: 'このスタッフは既に別のアカウントに紐付けられています' });
+      }
+
       const pinHash = await bcrypt.hash(pin, 10);
 
       await pool.query(
@@ -221,7 +229,7 @@ router.post('/verify', async (req: Request, res: Response) => {
       );
 
       await pool.query(
-        `UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2`,
+        `UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2 AND (email IS NULL OR email = '')`,
         [user.email, staffId]
       );
 
@@ -871,9 +879,9 @@ router.post('/field-register', async (req: Request, res: Response) => {
       return;
     }
 
-    const { email, pin } = req.body;
+    const { email: rawEmail, pin } = req.body;
 
-    if (!email || !pin) {
+    if (!rawEmail || !pin) {
       res.status(400).json({
         error: 'INVALID_PAYLOAD',
         message: 'メールアドレスとPINは必須です',
@@ -881,6 +889,8 @@ router.post('/field-register', async (req: Request, res: Response) => {
       });
       return;
     }
+
+    const email = String(rawEmail).toLowerCase().trim();
 
     if (!isValidEmail(email)) {
       res.status(400).json({
@@ -902,7 +912,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
     }
 
     const staffMatch = await pool.query(
-      'SELECT id FROM staff_master WHERE email = $1 AND deleted_at IS NULL',
+      'SELECT id FROM staff_master WHERE LOWER(email) = $1 AND deleted_at IS NULL',
       [email]
     );
     const matchedStaffId = staffMatch.rows.length > 0 ? staffMatch.rows[0].id : null;
@@ -926,7 +936,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
 
         if (staffId) {
           await pool.query(
-            'UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2',
+            'UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2 AND (email IS NULL OR email = \'\')',
             [email, staffId]
           );
         }
@@ -979,7 +989,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
 
     if (matchedStaffId) {
       await pool.query(
-        'UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2',
+        'UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2 AND (email IS NULL OR email = \'\')',
         [email, matchedStaffId]
       );
     }

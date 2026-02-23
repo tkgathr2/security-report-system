@@ -275,7 +275,7 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { display_name_kanji, display_name_kana, email } = req.body;
+    const { display_name_kanji, display_name_kana, email: rawEmail } = req.body;
 
     if (!display_name_kanji || !display_name_kana) {
       sendBadRequest(res, '漢字名とカタカナ名は必須です');
@@ -285,6 +285,8 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
     if (kanjiErr2) { sendBadRequest(res, kanjiErr2); return; }
     const kanaErr2 = validateStringField(display_name_kana, 'カタカナ名', MAX_LENGTHS.PERSON_NAME);
     if (kanaErr2) { sendBadRequest(res, kanaErr2); return; }
+
+    const email = typeof rawEmail === 'string' && rawEmail.trim() !== '' ? rawEmail.trim().toLowerCase() : '';
 
     if (email && !isValidEmail(email)) {
       sendBadRequest(res, '正しいメールアドレスを入力してください');
@@ -298,7 +300,7 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
        SET display_name_kanji = $1, display_name_kana = $2, email = $3, updated_at = CURRENT_TIMESTAMP
        WHERE id = $4
        RETURNING id, display_name_kanji, display_name_kana, email, updated_at`,
-      [display_name_kanji, display_name_kana, typeof email === 'string' ? email : null, id]
+      [display_name_kanji, display_name_kana, email, id]
     );
 
     if (result.rows.length === 0) {
