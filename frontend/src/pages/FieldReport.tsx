@@ -1150,7 +1150,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#f5f5f5'
   },
   header: {
-    backgroundColor: '#2C3E50',
+    backgroundColor: '#E67E22',
     color: 'white',
     padding: '20px',
     textAlign: 'center'
