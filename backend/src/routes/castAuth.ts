@@ -455,7 +455,23 @@ router.get('/today', async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'セッションが無効です' });
     }
 
-    const user = userResult.rows[0];
+    let user = userResult.rows[0];
+
+    if (!user.staff_id && user.email) {
+      const autoLink = await pool.query(
+        `UPDATE cast_users SET staff_id = sm.id
+         FROM staff_master sm
+         WHERE cast_users.id = $1
+           AND sm.email = cast_users.email
+           AND sm.deleted_at IS NULL
+           AND cast_users.staff_id IS NULL
+         RETURNING sm.id as staff_id, sm.display_name_kanji as staff_name`,
+        [user.id]
+      );
+      if (autoLink.rows.length > 0) {
+        user = { ...user, staff_id: autoLink.rows[0].staff_id, staff_name: autoLink.rows[0].staff_name };
+      }
+    }
 
     const dateParam = req.query.date as string | undefined;
     const today = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
@@ -980,7 +996,24 @@ router.post('/exchange-cast-token', async (req: Request, res: Response) => {
       return;
     }
 
-    const user = result.rows[0];
+    let user = result.rows[0];
+
+    if (!user.staff_id && user.email) {
+      const autoLink2 = await pool.query(
+        `UPDATE cast_users SET staff_id = sm.id
+         FROM staff_master sm
+         WHERE cast_users.id = $1
+           AND sm.email = cast_users.email
+           AND sm.deleted_at IS NULL
+           AND cast_users.staff_id IS NULL
+         RETURNING sm.id as staff_id, sm.display_name_kanji as staff_name`,
+        [user.id]
+      );
+      if (autoLink2.rows.length > 0) {
+        user = { ...user, staff_id: autoLink2.rows[0].staff_id, staff_name: autoLink2.rows[0].staff_name };
+      }
+    }
+
     const token = jwt.sign(
       { userId: user.id, email: user.email },
       AUTH_SECRET,
