@@ -17,7 +17,7 @@
 | ブランチ作成・push | OK |
 | PR作成 | OK |
 | **mainへ直接push** | **禁止** |
-| PRマージ | 禁止（Cursor/人間が実施） |
+| PRマージ | **automergeラベルで自動マージ**（下記手順参照） |
 
 ### Railway
 
@@ -27,6 +27,19 @@
 | 再デプロイ | OK |
 | **環境変数変更** | **禁止** |
 | **DB操作** | **禁止** |
+
+### PRマージ・デプロイ手順
+
+PR作成後、以下の手順で自分でマージ・デプロイまで完了させる:
+
+1. CI通過を確認（`git_pr_checks`）
+2. `gh pr edit {PR番号} --add-label automerge --repo tkgathr2/security-report-system`
+3. GitHub Actions `auto-merge-devin.yml` が自動でsquash mergeを実行
+4. Railway が main push を検知して自動デプロイ
+5. `curl -s https://security-report.up.railway.app/health` で `{"ok":true}` を確認
+6. ユーザーに完了報告
+
+※ docs-onlyの変更もデプロイ確認は行う
 
 ### シークレット
 
@@ -108,8 +121,10 @@
 2. featureブランチを作成
 3. 実装・コミット
 4. PRを作成
-5. Cursor/人間にレビュー依頼
-6. （マージはCursor/人間が実施）
+5. CI通過を確認
+6. automergeラベルを付けて自動マージ
+7. デプロイ完了を確認（health check）
+8. ユーザーに完了報告
 
 ---
 
