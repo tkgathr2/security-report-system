@@ -1327,7 +1327,9 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
 
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const host = req.headers['x-forwarded-host'] || req.headers.host;
-    const loginUrl = `${protocol}://${host}/cast/login`;
+    const loginUrl = isRegistered
+      ? `${protocol}://${host}/cast/login`
+      : `${protocol}://${host}/cast/register`;
 
     const emailResult = await sendLoginUrlEmail(targetEmail, targetName || '', loginUrl, isRegistered);
 
