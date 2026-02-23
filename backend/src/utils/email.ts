@@ -140,6 +140,48 @@ export async function sendPinResetEmail(email: string, name: string, token: stri
   }
 }
 
+export async function sendLoginUrlEmail(email: string, name: string, loginUrl: string) {
+  if (!resend) {
+    console.log('RESEND_API_KEY not configured, skipping email');
+    return { success: false, error: 'Email not configured' };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: email,
+      subject: `【${APP_NAME}】報告画面のご案内`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #E67E22;">【${APP_NAME}】報告画面のご案内</h2>
+          ${name ? `<p>${name} 様</p>` : '<p>こんにちは</p>'}
+          <p>以下のボタンをクリックして、ログインしてください。</p>
+          <p style="margin: 30px 0;">
+            <a href="${loginUrl}" 
+               style="display: inline-block; padding: 15px 30px; background: #E67E22; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
+              ログインする
+            </a>
+          </p>
+          <p style="color: #666; font-size: 14px;">
+            ログイン後、本日の案件を確認して報告書を作成できます。
+          </p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error('Failed to send login URL email:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('Login URL email sent:', data);
+    return { success: true, data };
+  } catch (error) {
+    console.error('Email send error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
 export async function sendWelcomeEmail(email: string, name: string, baseUrl: string) {
   if (!resend) {
     console.log('RESEND_API_KEY not configured, skipping email');

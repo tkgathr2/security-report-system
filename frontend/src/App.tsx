@@ -24,6 +24,7 @@ import { StaffPage } from './pages/admin/StaffPage'
 import { ImportHistoryPage } from './pages/admin/ImportHistoryPage'
 import { ClientsPage } from './pages/admin/ClientsPage'
 import { AccountsPage } from './pages/admin/AccountsPage'
+import { SendLoginUrlPage } from './pages/admin/SendLoginUrlPage'
 
 
 function AdminApp() {
@@ -766,6 +767,7 @@ function AdminApp() {
     if (newScreen === 'projects') fetchProjectsByDate(selectedDate)
     if (newScreen === 'reports') fetchReports(reportDate)
     if (newScreen === 'staff') { fetchStaff() }
+    if (newScreen === 'send_url') { fetchStaff() }
     if (newScreen === 'import_history') fetchImportHistory()
     if (newScreen === 'clients') fetchClients()
     if (newScreen === 'accounts') { setLoadingAccounts(true); Promise.all([fetchAccessRequests(), fetchAdminAccounts()]).finally(() => setLoadingAccounts(false)) }
@@ -1062,6 +1064,13 @@ function AdminApp() {
               <span style={styles.sidebarText}>インポート履歴</span>
             </button>
             <button
+              style={screen === 'send_url' ? styles.sidebarItemActive : styles.sidebarItem}
+              onClick={() => navigateTo('send_url')}
+            >
+              <span style={styles.sidebarIcon}>&#9993;</span>
+              <span style={styles.sidebarText}>URL送信</span>
+            </button>
+            <button
               style={screen === 'clients' ? styles.sidebarItemActive : styles.sidebarItem}
               onClick={() => navigateTo('clients')}
             >
@@ -1219,6 +1228,13 @@ function AdminApp() {
               savingClient={savingClient}
               handleUpdateClient={handleUpdateClient}
               handleDeleteClient={handleDeleteClient}
+            />
+          )}
+
+          {screen === 'send_url' && (
+            <SendLoginUrlPage
+              staff={staff}
+              isMobile={isMobile}
             />
           )}
 

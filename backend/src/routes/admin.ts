@@ -7,6 +7,7 @@ import { requireAdmin } from '../middleware/auth';
 import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '../utils/errorHandler';
 import { isValidEmail, validateStringField, validateArrayItems, MAX_LENGTHS } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
+import { sendLoginUrlEmail } from '../utils/email';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
 
@@ -1266,6 +1267,76 @@ router.put('/settings/pdf-layout', requireAdmin, async (req: Request, res: Respo
     res.json({ ok: true, layout: layout || undefined, design: design || undefined });
   } catch (error) {
     handleDbError(res, error, 'Update PDF layout setting');
+  }
+});
+
+router.post('/send-login-url', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { email, staff_id } = req.body;
+    const adminUser = req.user as { id: string; email: string };
+
+    let targetEmail: string | null = null;
+    let targetName: string | null = null;
+
+    if (staff_id) {
+      const result = await pool.query(
+        `SELECT sm.display_name_kanji as name, cu.email
+         FROM staff_master sm
+         LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true AND cu.deleted_at IS NULL
+         WHERE sm.id = $1 AND sm.deleted_at IS NULL`,
+        [staff_id]
+      );
+      if (result.rows.length === 0) {
+        sendNotFound(res, 'スタッフが見つかりません');
+        return;
+      }
+      targetName = result.rows[0].name;
+      targetEmail = result.rows[0].email;
+    } else if (email) {
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const emailErr = isValidEmail(normalizedEmail) ? null : 'メールアドレスの形式が正しくありません';
+      if (emailErr) { sendBadRequest(res, emailErr); return; }
+
+      const result = await pool.query(
+        `SELECT cu.email, sm.display_name_kanji as name
+         FROM cast_users cu
+         LEFT JOIN staff_master sm ON cu.staff_id = sm.id
+         WHERE cu.email = $1 AND cu.email_verified = true AND cu.deleted_at IS NULL`,
+        [normalizedEmail]
+      );
+      if (result.rows.length > 0) {
+        targetEmail = result.rows[0].email;
+        targetName = result.rows[0].name;
+      } else {
+        targetEmail = normalizedEmail;
+        targetName = null;
+      }
+    } else {
+      sendBadRequest(res, 'メールアドレスまたはスタッフIDが必要です');
+      return;
+    }
+
+    if (!targetEmail) {
+      sendBadRequest(res, 'このスタッフにはメールアドレスが登録されていません');
+      return;
+    }
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const loginUrl = `${protocol}://${host}/cast/login`;
+
+    const emailResult = await sendLoginUrlEmail(targetEmail, targetName || '', loginUrl);
+
+    if (!emailResult.success) {
+      res.status(500).json({ message: 'メール送信に失敗しました', error: emailResult.error });
+      return;
+    }
+
+    logAudit({ req, actorEmail: adminUser.email, action: 'SEND_LOGIN_URL', targetType: 'cast_user', targetId: targetEmail, payload: { email: targetEmail, name: targetName } });
+
+    res.json({ ok: true, message: `${targetEmail} にログインURLを送信しました` });
+  } catch (error) {
+    handleDbError(res, error, 'Send login URL');
   }
 });
 
