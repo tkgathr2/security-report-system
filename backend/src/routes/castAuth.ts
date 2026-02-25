@@ -209,13 +209,10 @@ router.post('/verify', async (req: Request, res: Response) => {
         return res.status(400).json({ message: '選択されたスタッフが見つかりません' });
       }
 
-      const existingLink = await pool.query(
-        'SELECT id FROM cast_users WHERE staff_id = $1 AND email_verified = true AND deleted_at IS NULL AND id != $2',
+      await pool.query(
+        'UPDATE cast_users SET staff_id = NULL, updated_at = NOW() WHERE staff_id = $1 AND deleted_at IS NULL AND id != $2',
         [staffId, user.id]
       );
-      if (existingLink.rows.length > 0) {
-        return res.status(400).json({ message: 'このスタッフは既に別のアカウントに紐付けられています' });
-      }
 
       const pinHash = await bcrypt.hash(pin, 10);
 
