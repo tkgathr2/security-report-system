@@ -134,6 +134,15 @@ export default function FieldReport() {
           setPageState('completed')
           return
         }
+        if (peek.project?.work_date) {
+          const workDate = peek.project.work_date.split('T')[0]
+          const nowJST = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
+          if (workDate > nowJST) {
+            setErrorMessage(`この案件の作業日は ${workDate} です。当日にならないと報告できません。`)
+            setPageState('error')
+            return
+          }
+        }
       }
       
       if (response.status === 403) {
