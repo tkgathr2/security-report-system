@@ -150,6 +150,15 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       return;
     }
 
+    const todayJST = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const workDate = project.work_date instanceof Date
+      ? project.work_date.toISOString().split('T')[0]
+      : String(project.work_date).split('T')[0];
+    if (workDate > todayJST) {
+      sendBadRequest(res, 'この案件の作業日はまだ到来していません。当日以降に報告してください。');
+      return;
+    }
+
     const signaturePngBuffer = Buffer.from(signature_png_base64, 'base64');
 
     let resolvedWriterName = writer_name || '';
