@@ -128,6 +128,15 @@ export function ReportsPage({
                                   </div>
                                 </div>
                                 <div style={styles.mobileCardActions}>
+                                  {adminEmail === 'atsuhiro@takagi.bz' && (
+                                    <button
+                                      style={{...styles.mobileActionButtonPrimary, background: '#d32f2f'}}
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteReport(report.id) }}
+                                      disabled={deleting}
+                                    >
+                                      {deleting ? '削除中...' : '削除'}
+                                    </button>
+                                  )}
                                   <button
                                     style={{...styles.mobileActionButtonPrimary, background: COLORS.primary}}
                                     onClick={(e) => { e.stopPropagation(); fetchReportDetail(report.id) }}
@@ -189,7 +198,16 @@ export function ReportsPage({
                                           </span>
                                         )}
                                       </td>
-                                      <td style={styles.td}>
+                                      <td style={{...styles.td, whiteSpace: 'nowrap'}}>
+                                        {adminEmail === 'atsuhiro@takagi.bz' && (
+                                          <button
+                                            style={{...styles.primaryButton, fontSize: '13px', padding: '6px 12px', background: '#d32f2f', color: '#fff', marginRight: '6px'}}
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteReport(report.id) }}
+                                            disabled={deleting}
+                                          >
+                                            削除
+                                          </button>
+                                        )}
                                         <button
                                           style={{...styles.primaryButton, fontSize: '13px', padding: '6px 16px'}}
                                           onClick={(e) => { e.stopPropagation(); fetchReportDetail(report.id) }}
