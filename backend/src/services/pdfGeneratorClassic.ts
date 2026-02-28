@@ -268,6 +268,7 @@ export async function generateReportPdfClassic(data: ReportData, design: PdfDesi
       let chipX = marginLeft + 6;
       let chipY = contentBoxTop + 5;
 
+      doc.fontSize(7);
       guardContentLabels.forEach(label => {
         const tw = doc.widthOfString(label);
         const cw = tw + 14;
