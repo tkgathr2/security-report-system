@@ -326,7 +326,9 @@ export default function FieldReport() {
           setWeather(data.payload_json.weather || 'sunny')
           setGuardContents(data.payload_json.guard_contents || [])
           setGuardContentsOther(data.payload_json.guard_other_text || '')
-          setGuards(data.payload_json.guards || [])
+          if (data.payload_json.guards && data.payload_json.guards.length > 0) {
+            setGuards(data.payload_json.guards)
+          }
           setHasQualifier(data.payload_json.has_qualifier || false)
           const qn = data.payload_json.qualifier_name
           if (Array.isArray(qn)) {
