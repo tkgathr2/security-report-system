@@ -874,7 +874,7 @@ export default function FieldReport() {
                       setGuards(v);
                     }}
                     onBlur={saveDraft}
-                    style={idx < dbCastCount ? styles.inputDbLinked : styles.input}
+                    style={(!g.name || g.name.trim() === '') ? { ...styles.input, border: '2px solid #d32f2f', backgroundColor: '#FFF3F0' } : (idx < dbCastCount ? styles.inputDbLinked : styles.input)}
                     readOnly={idx < dbCastCount}
                   />
                   <input
@@ -1192,9 +1192,14 @@ export default function FieldReport() {
             {isViewMode ? '閲覧モード' : submitting ? '送信中...' : '報告書を送信'}
           </button>
           {!isViewMode && !isFormValid && (
-            <p style={styles.submitHint}>
-              {hasNamelessGuard ? '氏名が未入力の警備員がいます。名前を入力するか削除してください' : '監督者名、警備内容（1つ以上）、署名を入力してください'}
-            </p>
+            hasNamelessGuard ? (
+              <div style={{ marginTop: '12px', padding: '12px 16px', backgroundColor: '#FFEBEE', border: '2px solid #d32f2f', borderRadius: '8px', textAlign: 'center' as const }}>
+                <p style={{ margin: 0, color: '#c62828', fontSize: '15px', fontWeight: 'bold' }}>⚠ 氏名が未入力の警備員がいます</p>
+                <p style={{ margin: '4px 0 0', color: '#d32f2f', fontSize: '13px' }}>名前を入力するか、不要な行を「削除」してください</p>
+              </div>
+            ) : (
+              <p style={styles.submitHint}>監督者名、警備内容（1つ以上）、署名を入力してください</p>
+            )
           )}
           {errorMessage && (
             <p style={styles.submitError}>
