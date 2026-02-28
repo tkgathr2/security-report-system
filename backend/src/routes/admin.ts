@@ -82,7 +82,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
               ${castsAgg}
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
-       LEFT JOIN project_casts pc ON pc.project_id = p.id
+       LEFT JOIN project_casts pc ON pc.project_id = p.id AND pc.deleted_at IS NULL
        LEFT JOIN staff_master sm_pc ON pc.staff_id = sm_pc.id
        WHERE p.work_date >= $1 AND p.work_date <= $2 AND p.deleted_at IS NULL
        GROUP BY ${groupBy}
@@ -95,7 +95,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
               ${castsAgg}
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
-       LEFT JOIN project_casts pc ON pc.project_id = p.id
+       LEFT JOIN project_casts pc ON pc.project_id = p.id AND pc.deleted_at IS NULL
        LEFT JOIN staff_master sm_pc ON pc.staff_id = sm_pc.id
        WHERE p.work_date = $1 AND p.deleted_at IS NULL
        GROUP BY ${groupBy}
@@ -108,7 +108,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
               ${castsAgg}
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
-       LEFT JOIN project_casts pc ON pc.project_id = p.id
+       LEFT JOIN project_casts pc ON pc.project_id = p.id AND pc.deleted_at IS NULL
        LEFT JOIN staff_master sm_pc ON pc.staff_id = sm_pc.id
        WHERE p.deleted_at IS NULL
        GROUP BY ${groupBy}
