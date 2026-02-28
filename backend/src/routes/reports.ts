@@ -127,7 +127,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     const projectResult = await pool.query(
       `SELECT p.id, p.status, p.url_expires_at, c.name as client_name_raw, p.work_date, p.work_title_raw,
-              p.location, p.work_name, c.emails as client_emails, c.contact_email,
+              p.location, p.work_name, p.start_time, p.end_time, c.emails as client_emails, c.contact_email,
               c.contact_name as client_contact_name, c.contact_title as client_contact_title,
               c.address as client_address
        FROM projects p
@@ -267,6 +267,30 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       let pdfBuffer: Buffer;
       let pdfGenerationStatus = 'success';
       try {
+        let resolvedGuards: { index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[] = Array.isArray(guards) ? guards : [];
+        if (resolvedGuards.length === 0) {
+          try {
+            const castsResult = await pool.query(
+              `SELECT pc.staff_no, COALESCE(sm.display_name_kanji, 'No.' || pc.staff_no) as cast_name
+               FROM project_casts pc
+               LEFT JOIN staff_master sm ON pc.staff_id = sm.id AND sm.deleted_at IS NULL
+               WHERE pc.project_id = $1 AND pc.deleted_at IS NULL ORDER BY pc.row_index`,
+              [project.id]
+            );
+            if (castsResult.rows.length > 0) {
+              resolvedGuards = castsResult.rows.map((c: { cast_name: string }, idx: number) => ({
+                index: idx + 1,
+                name: c.cast_name,
+                start_time: project.start_time || '',
+                end_time: project.end_time || '',
+                early_overtime_hours: null
+              }));
+              console.log(`[ASYNC] Fallback: loaded ${resolvedGuards.length} guards from project_casts`);
+            }
+          } catch (castErr) {
+            console.warn('[ASYNC] Failed to fetch project_casts fallback:', castErr);
+          }
+        }
         pdfBuffer = await generateReportPdf({
           companyName: project.client_name_raw,
           workDate: workDateStr,
@@ -276,7 +300,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           writerName: resolvedWriterName,
           guardContents: guard_contents,
           guardOtherText: guard_other_text,
-          guards: Array.isArray(guards) ? guards : [],
+          guards: resolvedGuards,
           hasQualifier: has_qualifier || false,
           qualifierName: qualifier_name,
           signaturePng: signaturePngBuffer,

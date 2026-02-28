@@ -1166,6 +1166,7 @@ function AdminApp() {
               resending={resending}
               resendResult={resendResult}
               deleting={deleting}
+              adminEmail={admin?.email || ''}
               navigateReportDate={navigateReportDate}
               goToReportToday={goToReportToday}
               fetchReports={fetchReports}

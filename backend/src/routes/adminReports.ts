@@ -103,8 +103,31 @@ router.post('/:reportId/pdf/generate', requireAdmin, async (req: Request, res: R
 
     const writerName = report.writer_name || '';
     const guardContents: string[] = Array.isArray(report.guard_contents) ? report.guard_contents : [];
-    const guards: { index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[] =
+    let guards: { index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[] =
       Array.isArray(report.guards_json) ? report.guards_json : [];
+    if (guards.length === 0) {
+      try {
+        const castsResult = await pool.query(
+          `SELECT pc.staff_no, COALESCE(sm.display_name_kanji, 'No.' || pc.staff_no) as cast_name
+           FROM project_casts pc
+           LEFT JOIN staff_master sm ON pc.staff_id = sm.id AND sm.deleted_at IS NULL
+           WHERE pc.project_id = $1 AND pc.deleted_at IS NULL ORDER BY pc.row_index`,
+          [report.project_id]
+        );
+        if (castsResult.rows.length > 0) {
+          guards = castsResult.rows.map((c: { cast_name: string }, idx: number) => ({
+            index: idx + 1,
+            name: c.cast_name,
+            start_time: project.start_time || '',
+            end_time: project.end_time || '',
+            early_overtime_hours: null
+          }));
+          console.log(`[REGEN] Fallback: loaded ${guards.length} guards from project_casts`);
+        }
+      } catch (castErr) {
+        console.warn('[REGEN] Failed to fetch project_casts fallback:', castErr);
+      }
+    }
     const signaturePng: Buffer | null = report.signature_png && report.signature_png.length > 0 ? report.signature_png : null;
 
     try {
