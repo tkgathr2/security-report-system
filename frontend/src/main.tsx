@@ -12,6 +12,7 @@ import CastMagic from './pages/CastMagic'
 import CastResetPin from './pages/CastResetPin'
 import CastInquiry from './pages/CastInquiry'
 import CastMailHelp from './pages/CastMailHelp'
+import CastHelpInstall from './pages/CastHelpInstall'
 import './index.css'
 
 Sentry.init({
@@ -43,6 +44,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/cast/reset-pin" element={<CastResetPin />} />
           <Route path="/cast/inquiry" element={<CastInquiry />} />
           <Route path="/cast/mail-help" element={<CastMailHelp />} />
+          <Route path="/cast/help-install" element={<CastHelpInstall />} />
           <Route path="/*" element={<App />} />
         </Routes>
       </BrowserRouter>

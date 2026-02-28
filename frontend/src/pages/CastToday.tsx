@@ -199,6 +199,13 @@ export default function CastToday() {
         <div className="cast-card-footer">
           <button
             className="cast-footer-btn"
+            onClick={() => navigate('/cast/help-install')}
+          >
+            ホームに追加
+          </button>
+          <div className="cast-footer-divider" />
+          <button
+            className="cast-footer-btn"
             onClick={() => navigate('/cast/inquiry')}
           >
             お問合せ
