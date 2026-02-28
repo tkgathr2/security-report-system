@@ -107,6 +107,47 @@ router.post('/select', authenticateCast, async (req: Request, res: Response) => 
   }
 });
 
+router.post('/register', authenticateCast, async (req: Request, res: Response) => {
+  try {
+    const { display_name_kanji, display_name_kana } = req.body;
+
+    if (!display_name_kanji || typeof display_name_kanji !== 'string' || display_name_kanji.trim().length === 0) {
+      res.status(400).json({ error: 'INVALID_PAYLOAD', message: '漢字名は必須です' });
+      return;
+    }
+    if (!display_name_kana || typeof display_name_kana !== 'string' || display_name_kana.trim().length === 0) {
+      res.status(400).json({ error: 'INVALID_PAYLOAD', message: 'カタカナ名は必須です' });
+      return;
+    }
+    if (display_name_kanji.length > 100 || display_name_kana.length > 100) {
+      res.status(400).json({ error: 'INVALID_PAYLOAD', message: '名前は100文字以内で入力してください' });
+      return;
+    }
+
+    const result = await pool.query(
+      `INSERT INTO staff_master (display_name_kanji, display_name_kana)
+       VALUES ($1, $2)
+       RETURNING id, display_name_kanji, display_name_kana`,
+      [display_name_kanji.trim(), display_name_kana.trim()]
+    );
+
+    const castUser = (req as AuthenticatedCastRequest).castUser;
+    console.log(`[STAFF_REGISTER] Cast user ${castUser.email} registered new staff: ${display_name_kanji} (${display_name_kana})`);
+
+    res.status(201).json({
+      ok: true,
+      staff: {
+        id: result.rows[0].id,
+        displayNameKanji: result.rows[0].display_name_kanji,
+        displayNameKana: result.rows[0].display_name_kana
+      }
+    });
+  } catch (error) {
+    console.error('Staff register error:', error);
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: 'スタッフ登録中にエラーが発生しました' });
+  }
+});
+
 router.get('/me', authenticateCast, async (req: Request, res: Response) => {
   try {
     const castUser = (req as AuthenticatedCastRequest).castUser;

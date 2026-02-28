@@ -99,6 +99,11 @@ export default function FieldReport() {
   const [guardSearchQuery, setGuardSearchQuery] = useState('')
   const [guardSearchResults, setGuardSearchResults] = useState<StaffMember[]>([])
   const [guardSearching, setGuardSearching] = useState(false)
+  const [showRegisterForm, setShowRegisterForm] = useState(false)
+  const [registerKanji, setRegisterKanji] = useState('')
+  const [registerKana, setRegisterKana] = useState('')
+  const [registerError, setRegisterError] = useState('')
+  const [registerSubmitting, setRegisterSubmitting] = useState(false)
   const [hasQualifier, setHasQualifier] = useState(false)
   const [qualifierNames, setQualifierNames] = useState<string[]>([])
   const [notes, setNotes] = useState('')
@@ -1001,6 +1006,73 @@ export default function FieldReport() {
                     setGuards([...guards, { index: guards.length + 1, name: '', start_time: project?.start_time || '', end_time: project?.end_time || '', early_overtime_hours: null }]);
                   }}
                 >+ 手動で追加</button>
+                <button
+                  type="button"
+                  style={{ marginTop: '8px', marginLeft: '8px', padding: '8px 16px', fontSize: '13px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  onClick={() => setShowRegisterForm(!showRegisterForm)}
+                >{showRegisterForm ? '閉じる' : '新規登録'}</button>
+                {showRegisterForm && (
+                  <div style={{ marginTop: '10px', padding: '12px', backgroundColor: '#eafaf1', borderRadius: '6px', border: '1px solid #27ae60', width: '100%' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', marginBottom: '6px', color: '#27ae60' }}>未登録者を新規登録して追加</label>
+                    <input
+                      type="text"
+                      style={{ ...styles.input, marginBottom: '6px' }}
+                      value={registerKanji}
+                      onChange={(e) => setRegisterKanji(e.target.value)}
+                      placeholder="漢字名（例：山田 太郎）"
+                    />
+                    <input
+                      type="text"
+                      style={{ ...styles.input, marginBottom: '6px' }}
+                      value={registerKana}
+                      onChange={(e) => setRegisterKana(e.target.value)}
+                      placeholder="カタカナ名（例：ヤマダ タロウ）"
+                    />
+                    {registerError && <p style={{ color: '#c00', fontSize: '12px', margin: '0 0 6px' }}>{registerError}</p>}
+                    <button
+                      type="button"
+                      style={{ padding: '8px 16px', fontSize: '13px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: registerSubmitting ? 0.6 : 1 }}
+                      disabled={registerSubmitting}
+                      onClick={async () => {
+                        if (!registerKanji.trim() || !registerKana.trim()) {
+                          setRegisterError('漢字名とカタカナ名は必須です');
+                          return;
+                        }
+                        setRegisterSubmitting(true);
+                        setRegisterError('');
+                        try {
+                          const res = await fetch('/api/staff/register', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+                            body: JSON.stringify({ display_name_kanji: registerKanji.trim(), display_name_kana: registerKana.trim() })
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            if (guards.length < 8) {
+                              setGuards([...guards, {
+                                index: guards.length + 1,
+                                name: data.staff.displayNameKanji,
+                                start_time: project?.start_time || '',
+                                end_time: project?.end_time || '',
+                                early_overtime_hours: null
+                              }]);
+                              setTimeout(saveDraft, 0);
+                            }
+                            setRegisterKanji('');
+                            setRegisterKana('');
+                            setShowRegisterForm(false);
+                          } else {
+                            const err = await res.json();
+                            setRegisterError(err.message || '登録に失敗しました');
+                          }
+                        } catch {
+                          setRegisterError('登録に失敗しました');
+                        }
+                        setRegisterSubmitting(false);
+                      }}
+                    >{registerSubmitting ? '登録中...' : '登録して追加'}</button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
