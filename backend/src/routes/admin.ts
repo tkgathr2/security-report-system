@@ -1253,6 +1253,65 @@ router.delete('/reports/:reportId', requireAdmin, async (req: Request, res: Resp
   }
 });
 
+router.post('/reports/bulk-delete', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const adminUser = req.user as { id: string; email: string };
+
+    const ALLOWED_DELETE_EMAILS = ['atsuhiro@takagi.bz'];
+    if (!ALLOWED_DELETE_EMAILS.includes(adminUser.email.toLowerCase())) {
+      res.status(403).json({ error: 'FORBIDDEN', message: '報告書の削除権限がありません' });
+      return;
+    }
+
+    const { reportIds } = req.body;
+    if (!Array.isArray(reportIds) || reportIds.length === 0) {
+      sendBadRequest(res, '削除する報告書IDが必要です');
+      return;
+    }
+    if (reportIds.length > 50) {
+      sendBadRequest(res, '一度に削除できるのは50件までです');
+      return;
+    }
+
+    const current = await pool.query(
+      `SELECT r.id, r.project_id, p.work_name, p.work_date, c.name as client_name
+       FROM reports r
+       JOIN projects p ON r.project_id = p.id
+       LEFT JOIN clients c ON p.client_id = c.id
+       WHERE r.id = ANY($1) AND r.deleted_at IS NULL`,
+      [reportIds]
+    );
+
+    for (const row of current.rows) {
+      await pool.query(
+        `INSERT INTO admin_audit_logs (admin_email, action, target_type, target_id, payload_json)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          adminUser.email,
+          'DELETE_REPORT',
+          'report',
+          row.id,
+          JSON.stringify({
+            project_id: row.project_id,
+            work_name: row.work_name,
+            work_date: row.work_date,
+            client_name: row.client_name,
+            bulk: true
+          })
+        ]
+      );
+    }
+
+    const result = await pool.query(
+      'UPDATE reports SET deleted_at = NOW() WHERE id = ANY($1) AND deleted_at IS NULL RETURNING id',
+      [reportIds]
+    );
+    res.json({ deleted: true, count: result.rowCount });
+  } catch (error) {
+    handleDbError(res, error, 'Bulk delete reports');
+  }
+});
+
 const ensureSettingsTable = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_settings (

@@ -21,7 +21,10 @@ interface ReportsPageProps {
   fetchReportDetail: (reportId: string) => void
   handleDownloadPdf: (reportId: string) => void
   handleDeleteReport: (reportId: string) => void
+  handleBulkDeleteReports: (ids: string[]) => void
   handleResendNotifications: (reportId: string) => void
+  selectedReportIds: Set<string>
+  setSelectedReportIds: (ids: Set<string>) => void
   setSelectedReportDetail: (detail: ReportDetail | null) => void
   setResendResult: (result: string | null) => void
   formatDate: (dateStr: string) => string
@@ -47,7 +50,10 @@ export function ReportsPage({
   fetchReportDetail,
   handleDownloadPdf,
   handleDeleteReport,
+  handleBulkDeleteReports,
   handleResendNotifications,
+  selectedReportIds,
+  setSelectedReportIds,
   setSelectedReportDetail,
   setResendResult,
   formatDate,
@@ -94,6 +100,24 @@ export function ReportsPage({
                             </button>
                           )}
                         </div>
+                        {adminEmail === 'atsuhiro@takagi.bz' && selectedReportIds.size > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', padding: '10px 16px', background: '#FFF3E0', borderRadius: '8px', border: '1px solid #FFB74D' }}>
+                            <span style={{ fontSize: '14px', color: '#E65100', fontWeight: 'bold' }}>{selectedReportIds.size}件選択中</span>
+                            <button
+                              style={{ padding: '6px 16px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+                              onClick={() => handleBulkDeleteReports(Array.from(selectedReportIds))}
+                              disabled={deleting}
+                            >
+                              {deleting ? '削除中...' : '一括削除'}
+                            </button>
+                            <button
+                              style={{ padding: '6px 16px', background: '#fff', color: '#666', border: '1px solid #ccc', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
+                              onClick={() => setSelectedReportIds(new Set())}
+                            >
+                              選択解除
+                            </button>
+                          </div>
+                        )}
                         {loading ? (
                           <p>読み込み中...</p>
                         ) : reports.length === 0 ? (
@@ -102,7 +126,16 @@ export function ReportsPage({
                           <div style={styles.mobileCardList}>
                             {reports.map(report => (
                               <div key={report.id} style={{...styles.mobileCard, cursor: 'pointer'}} onClick={() => fetchReportDetail(report.id)}>
-                                <div style={styles.mobileCardHeader}>
+                                <div style={{...styles.mobileCardHeader, display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                  {adminEmail === 'atsuhiro@takagi.bz' && (
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedReportIds.has(report.id)}
+                                      onChange={(e) => { e.stopPropagation(); const next = new Set(selectedReportIds); if (next.has(report.id)) next.delete(report.id); else next.add(report.id); setSelectedReportIds(next) }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }}
+                                    />
+                                  )}
                                   <span style={styles.mobileCardDate}>{formatDateTime(report.approved_at)}</span>
                                 </div>
                                 <div style={styles.mobileCardBody}>
@@ -165,6 +198,16 @@ export function ReportsPage({
                               <table style={styles.table}>
                                 <thead>
                                   <tr>
+                                    {adminEmail === 'atsuhiro@takagi.bz' && (
+                                      <th style={{...styles.th, width: '40px', textAlign: 'center'}}>
+                                        <input
+                                          type="checkbox"
+                                          checked={reports.length > 0 && reports.every(r => selectedReportIds.has(r.id))}
+                                          onChange={() => { if (reports.every(r => selectedReportIds.has(r.id))) { setSelectedReportIds(new Set()) } else { setSelectedReportIds(new Set(reports.map(r => r.id))) } }}
+                                          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                        />
+                                      </th>
+                                    )}
                                     <th style={styles.th}>承認日時</th>
                                     <th style={styles.th}>会社名</th>
                                     <th style={styles.th}>実施日</th>
@@ -177,7 +220,18 @@ export function ReportsPage({
                                 </thead>
                                 <tbody>
                                   {reports.map(report => (
-                                    <tr key={report.id} style={{...styles.tr, cursor: 'pointer'}} onClick={() => fetchReportDetail(report.id)}>
+                                    <tr key={report.id} style={{...styles.tr, cursor: 'pointer', background: selectedReportIds.has(report.id) ? '#FFF8E1' : undefined}} onClick={() => fetchReportDetail(report.id)}>
+                                      {adminEmail === 'atsuhiro@takagi.bz' && (
+                                        <td style={{...styles.td, textAlign: 'center'}}>
+                                          <input
+                                            type="checkbox"
+                                            checked={selectedReportIds.has(report.id)}
+                                            onChange={() => { const next = new Set(selectedReportIds); if (next.has(report.id)) next.delete(report.id); else next.add(report.id); setSelectedReportIds(next) }}
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                          />
+                                        </td>
+                                      )}
                                       <td style={styles.td}>{formatDateTime(report.approved_at)}</td>
                                       <td style={styles.td}>{report.client_name_raw}</td>
                                       <td style={styles.td}>{formatDate(report.work_date)}</td>
