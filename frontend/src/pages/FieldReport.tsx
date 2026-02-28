@@ -96,6 +96,9 @@ export default function FieldReport() {
   const [guardContentsOther, setGuardContentsOther] = useState('')
   const [guards, setGuards] = useState<{ index: number; name: string; start_time: string; end_time: string; early_overtime_hours?: number | null }[]>([])
   const [dbCastCount, setDbCastCount] = useState(0)
+  const [guardSearchQuery, setGuardSearchQuery] = useState('')
+  const [guardSearchResults, setGuardSearchResults] = useState<StaffMember[]>([])
+  const [guardSearching, setGuardSearching] = useState(false)
   const [hasQualifier, setHasQualifier] = useState(false)
   const [qualifierNames, setQualifierNames] = useState<string[]>([])
   const [notes, setNotes] = useState('')
@@ -327,7 +330,20 @@ export default function FieldReport() {
           setGuardContents(data.payload_json.guard_contents || [])
           setGuardContentsOther(data.payload_json.guard_other_text || '')
           if (data.payload_json.guards && data.payload_json.guards.length > 0) {
-            setGuards(data.payload_json.guards)
+            setGuards(prev => {
+              if (prev.length === 0) return data.payload_json.guards!;
+              const draftMap = new Map(data.payload_json.guards!.map(g => [g.name, g]));
+              const merged = prev.map(g => {
+                const draft = draftMap.get(g.name);
+                if (draft) {
+                  draftMap.delete(g.name);
+                  return { ...g, start_time: draft.start_time, end_time: draft.end_time, early_overtime_hours: draft.early_overtime_hours };
+                }
+                return g;
+              });
+              draftMap.forEach(extra => merged.push(extra));
+              return merged.map((g, i) => ({ ...g, index: i + 1 }));
+            });
           }
           setHasQualifier(data.payload_json.has_qualifier || false)
           const qn = data.payload_json.qualifier_name
@@ -833,12 +849,7 @@ export default function FieldReport() {
 
           <div style={styles.formGroup}>
             <label style={styles.label}>
-              警備員（最大8名）
-              {dbCastCount > 1 && (
-                <span style={styles.multiCastBadge}>
-                  {dbCastCount}人分の報告書（DB連携済み）
-                </span>
-              )}
+              警備員（{guards.length}名）
             </label>
             <div>
               {guards.map((g, idx) => (
@@ -905,38 +916,91 @@ export default function FieldReport() {
                   >削除</button>
                 </div>
               ))}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+              <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f8f9fa', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', color: '#555' }}>警備員を追加</label>
+                {project && project.casts && project.casts.filter(c => !guards.some(g => g.name === c.name)).length > 0 && (
+                  <div style={{ marginBottom: '8px' }}>
+                    <select
+                      style={{ ...styles.input, width: '100%' }}
+                      value=""
+                      onChange={(e) => {
+                        if (!e.target.value || guards.length >= 8) return;
+                        const cast = project.casts.find(c => c.name === e.target.value);
+                        if (!cast) return;
+                        setGuards([...guards, {
+                          index: guards.length + 1,
+                          name: cast.name,
+                          start_time: project.start_time || '',
+                          end_time: project.end_time || '',
+                          early_overtime_hours: null
+                        }]);
+                        setTimeout(saveDraft, 0);
+                      }}
+                    >
+                      <option value="">-- アサイン済みキャストから追加 --</option>
+                      {project.casts.filter(c => !guards.some(g => g.name === c.name)).map((c, i) => (
+                        <option key={i} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    style={styles.input}
+                    value={guardSearchQuery}
+                    onChange={async (e) => {
+                      const q = e.target.value;
+                      setGuardSearchQuery(q);
+                      if (q.trim().length === 0) { setGuardSearchResults([]); return; }
+                      setGuardSearching(true);
+                      try {
+                        const res = await fetch(`/api/staff/search?q=${encodeURIComponent(q)}`, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setGuardSearchResults((data.staff || []).filter((s: StaffMember) => !guards.some(g => g.name === s.displayNameKanji)));
+                        }
+                      } catch { /* ignore */ }
+                      setGuardSearching(false);
+                    }}
+                    placeholder="カタカナで名前を検索して追加"
+                  />
+                  {guardSearching && <p style={{ fontSize: '12px', color: '#999', margin: '4px 0 0' }}>検索中...</p>}
+                  {guardSearchResults.length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', border: '1px solid #ddd', borderRadius: '4px', zIndex: 10, maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                      {guardSearchResults.map(s => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          style={{ display: 'block', width: '100%', padding: '10px 12px', border: 'none', backgroundColor: 'white', textAlign: 'left', cursor: 'pointer', fontSize: '14px', borderBottom: '1px solid #f0f0f0' }}
+                          onClick={() => {
+                            if (guards.length >= 8) return;
+                            setGuards([...guards, {
+                              index: guards.length + 1,
+                              name: s.displayNameKanji,
+                              start_time: project?.start_time || '',
+                              end_time: project?.end_time || '',
+                              early_overtime_hours: null
+                            }]);
+                            setGuardSearchQuery('');
+                            setGuardSearchResults([]);
+                            setTimeout(saveDraft, 0);
+                          }}
+                        >
+                          {s.displayNameKanji} <span style={{ color: '#999', fontSize: '12px' }}>（{s.displayNameKana}）</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button
                   type="button"
+                  style={{ marginTop: '8px', padding: '8px 16px', fontSize: '13px', backgroundColor: '#E67E22', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                   onClick={() => {
                     if (guards.length >= 8) return;
-                    setGuards([...guards, { index: guards.length + 1, name: '', start_time: '', end_time: '', early_overtime_hours: null }]);
+                    setGuards([...guards, { index: guards.length + 1, name: '', start_time: project?.start_time || '', end_time: project?.end_time || '', early_overtime_hours: null }]);
                   }}
-                >+ 警備員を追加</button>
-                {project && project.casts && project.casts.filter(c => !guards.some(g => g.name === c.name)).length > 0 && (
-                  <select
-                    style={{ ...styles.input, flex: '1', minWidth: '180px' }}
-                    value=""
-                    onChange={(e) => {
-                      if (!e.target.value || guards.length >= 8) return;
-                      const cast = project.casts.find(c => c.name === e.target.value);
-                      if (!cast) return;
-                      setGuards([...guards, {
-                        index: guards.length + 1,
-                        name: cast.name,
-                        start_time: project.start_time || '',
-                        end_time: project.end_time || '',
-                        early_overtime_hours: null
-                      }]);
-                      setTimeout(saveDraft, 0);
-                    }}
-                  >
-                    <option value="">-- キャストから追加 --</option>
-                    {project.casts.filter(c => !guards.some(g => g.name === c.name)).map((c, i) => (
-                      <option key={i} value={c.name}>{c.name}</option>
-                    ))}
-                  </select>
-                )}
+                >+ 手動で追加</button>
               </div>
             </div>
           </div>
