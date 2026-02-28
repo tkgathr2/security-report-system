@@ -1107,7 +1107,7 @@ export default function FieldReport() {
                       }}
                     >
                       <option value="">-- 警備員から選択 --</option>
-                      {guards.filter(g => g.name.trim() !== '').map((g, idx) => (
+                      {guards.filter(g => g.name.trim() !== '' && (g.name === qn || !qualifierNames.includes(g.name))).map((g, idx) => (
                         <option key={idx} value={g.name}>{g.name}</option>
                       ))}
                     </select>
