@@ -346,18 +346,21 @@ export async function generateReportPdfClassic(data: ReportData, design: PdfDesi
         });
       }
 
-      if (data.notes && data.notes.trim()) {
+      {
         doc.moveDown(0.3);
         const notesY = doc.y;
-        doc.save(); doc.rect(marginLeft, notesY, labelColWidth, rowHeight).fill(colors.accent); doc.restore();
-        const notesTextHeight = doc.fontSize(8).heightOfString(data.notes.trim(), { width: contentWidth - labelColWidth - 12 });
+        const notesText = (data.notes && data.notes.trim()) ? data.notes.trim() : '';
+        const notesTextHeight = notesText ? doc.fontSize(8).heightOfString(notesText, { width: contentWidth - labelColWidth - 12 }) : 0;
         const notesRowH = Math.max(rowHeight, notesTextHeight + 10);
+        doc.save(); doc.rect(marginLeft, notesY, labelColWidth, notesRowH).fill(colors.accent); doc.restore();
         doc.save();
         doc.rect(marginLeft, notesY, contentWidth, notesRowH).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
         doc.moveTo(marginLeft + labelColWidth, notesY).lineTo(marginLeft + labelColWidth, notesY + notesRowH).stroke();
         doc.restore();
         doc.fillColor(colors.secondary).fontSize(8).text('備考', marginLeft + 6, notesY + 5);
-        doc.fillColor('#333333').fontSize(8).text(data.notes.trim(), marginLeft + labelColWidth + 6, notesY + 5, { width: contentWidth - labelColWidth - 12 });
+        if (notesText) {
+          doc.fillColor('#333333').fontSize(8).text(notesText, marginLeft + labelColWidth + 6, notesY + 5, { width: contentWidth - labelColWidth - 12 });
+        }
         doc.y = notesY + notesRowH;
       }
 
