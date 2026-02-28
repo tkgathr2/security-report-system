@@ -1106,23 +1106,11 @@ export default function FieldReport() {
                         setTimeout(saveDraft, 0);
                       }}
                     >
-                      <option value="">-- 資格者を選択 --</option>
+                      <option value="">-- 警備員から選択 --</option>
                       {guards.filter(g => g.name.trim() !== '').map((g, idx) => (
                         <option key={idx} value={g.name}>{g.name}</option>
                       ))}
                     </select>
-                    <input
-                      type="text"
-                      style={{ ...styles.input, flex: '1' }}
-                      value={qn}
-                      onChange={(e) => {
-                        const updated = [...qualifierNames];
-                        updated[qi] = e.target.value;
-                        setQualifierNames(updated);
-                      }}
-                      onBlur={saveDraft}
-                      placeholder="直接入力も可"
-                    />
                     <button
                       type="button"
                       onClick={() => {
