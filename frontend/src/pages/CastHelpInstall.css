@@ -1,0 +1,114 @@
+.install-section {
+  margin-top: 24px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
+}
+
+.install-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #E67E22;
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #E67E22;
+}
+
+.install-step {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.install-step:last-child {
+  margin-bottom: 0;
+}
+
+.install-step-number {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: #E67E22;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.install-step-number.done {
+  background: #4caf50;
+  font-size: 14px;
+}
+
+.install-step-content {
+  flex: 1;
+  padding-top: 4px;
+}
+
+.install-step-text {
+  font-size: 15px;
+  color: #333;
+  margin: 0 0 8px 0;
+  line-height: 1.6;
+}
+
+.install-step-url {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #E67E22;
+  font-family: monospace;
+  word-break: break-all;
+  user-select: all;
+}
+
+.install-step-note {
+  font-size: 13px;
+  color: #dc2626;
+  margin: 8px 0 0 0;
+  line-height: 1.5;
+}
+
+.install-step-icon-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #555;
+}
+
+.install-share-icon {
+  font-size: 20px;
+}
+
+.install-note {
+  font-size: 14px;
+  color: #555;
+  margin: 0 0 12px 0;
+  line-height: 1.6;
+}
+
+@media (max-width: 480px) {
+  .install-section {
+    padding: 16px;
+    margin-top: 20px;
+  }
+
+  .install-section-title {
+    font-size: 16px;
+  }
+
+  .install-step-text {
+    font-size: 14px;
+  }
+}
