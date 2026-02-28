@@ -560,6 +560,10 @@ pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_project_id_active ON r
   .then(() => console.log('[Startup] Unique index on reports ensured'))
   .catch((err: unknown) => console.error('[Startup] Index creation error:', err));
 
+pool.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS notes TEXT`)
+  .then(() => console.log('[Startup] reports.notes column ensured'))
+  .catch((err: unknown) => console.error('[Startup] reports.notes column error:', err));
+
 pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cast_users_email_active ON cast_users (email) WHERE deleted_at IS NULL`)
   .then(() => console.log('[Startup] Unique index on cast_users.email ensured'))
   .catch((err: unknown) => console.error('[Startup] cast_users index creation error:', err));

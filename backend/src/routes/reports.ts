@@ -67,7 +67,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       guards,
       has_qualifier,
       qualifier_name,
-      signature_png_base64
+      signature_png_base64,
+      notes
     } = req.body;
     console.log('[APPROVE] Request body parsed, project_unique_url:', project_unique_url);
 
@@ -192,8 +193,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       `INSERT INTO reports (
         project_id, cast_user_id, supervisor_name, writer_staff_id, weather,
         guard_contents, guard_other_text, overtime_hours, has_qualifier, qualifier_name,
-        signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json
-      ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+        signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json, notes
+      ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
       WHERE EXISTS (SELECT 1 FROM projects WHERE id = $1 AND url_expires_at > NOW() AND deleted_at IS NULL)
       ON CONFLICT (project_id) WHERE deleted_at IS NULL DO NOTHING
       RETURNING id`,
@@ -214,7 +215,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         now,
         'pending',
         null,
-        Array.isArray(guards) ? JSON.stringify(guards) : null
+        Array.isArray(guards) ? JSON.stringify(guards) : null,
+        typeof notes === 'string' ? notes.slice(0, 1000) : null
       ]
     );
 
@@ -305,6 +307,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           qualifierName: qualifier_name,
           signaturePng: signaturePngBuffer,
           weather: weather || null,
+          notes: typeof notes === 'string' ? notes : null,
           layout: pdfLayout as 'classic' | 'handwritten',
           design: pdfDesign as 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J',
         });
