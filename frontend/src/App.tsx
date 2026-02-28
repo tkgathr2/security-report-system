@@ -70,6 +70,7 @@ function AdminApp() {
   const [resending, setResending] = useState(false)
   const [resendResult, setResendResult] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set())
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([])
   const [adminAccounts, setAdminAccounts] = useState<AdminAccount[]>([])
   const [loadingAccounts, setLoadingAccounts] = useState(false)
@@ -723,6 +724,33 @@ function AdminApp() {
       }
       setSelectedReportDetail(null)
       setResendResult(null)
+      setSelectedReportIds(new Set())
+      fetchReports(reportDate)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '削除に失敗しました')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleBulkDeleteReports = async (ids: string[]) => {
+    if (ids.length === 0) return
+    if (!confirm(`${ids.length}件の報告書を削除しますか？\nこの操作は取り消せません。`)) return
+    setDeleting(true)
+    try {
+      const response = await fetch('/api/admin/reports/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ reportIds: ids })
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || '削除に失敗しました')
+      }
+      setSelectedReportDetail(null)
+      setResendResult(null)
+      setSelectedReportIds(new Set())
       fetchReports(reportDate)
     } catch (err) {
       alert(err instanceof Error ? err.message : '削除に失敗しました')
@@ -1173,7 +1201,10 @@ function AdminApp() {
               fetchReportDetail={fetchReportDetail}
               handleDownloadPdf={handleDownloadPdf}
               handleDeleteReport={handleDeleteReport}
+              handleBulkDeleteReports={handleBulkDeleteReports}
               handleResendNotifications={handleResendNotifications}
+              selectedReportIds={selectedReportIds}
+              setSelectedReportIds={setSelectedReportIds}
               setSelectedReportDetail={setSelectedReportDetail}
               setResendResult={setResendResult}
               formatDate={formatDate}
