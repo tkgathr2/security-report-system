@@ -1207,6 +1207,12 @@ router.delete('/reports/:reportId', requireAdmin, async (req: Request, res: Resp
     const { reportId } = req.params;
     const adminUser = req.user as { id: string; email: string };
 
+    const ALLOWED_DELETE_EMAILS = ['atsuhiro@takagi.bz'];
+    if (!ALLOWED_DELETE_EMAILS.includes(adminUser.email.toLowerCase())) {
+      res.status(403).json({ error: 'FORBIDDEN', message: '報告書の削除権限がありません' });
+      return;
+    }
+
     const current = await pool.query(
       `SELECT r.id, r.project_id, p.work_name, p.work_date, c.name as client_name
        FROM reports r

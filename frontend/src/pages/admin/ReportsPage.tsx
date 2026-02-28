@@ -14,6 +14,7 @@ interface ReportsPageProps {
   resending: boolean
   resendResult: string | null
   deleting: boolean
+  adminEmail: string
   navigateReportDate: (offset: number) => void
   goToReportToday: () => void
   fetchReports: (date: string) => void
@@ -39,6 +40,7 @@ export function ReportsPage({
   resending,
   resendResult,
   deleting,
+  adminEmail,
   navigateReportDate,
   goToReportToday,
   fetchReports,
@@ -303,6 +305,7 @@ export function ReportsPage({
                               )}
 
                               <div style={{display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px'}}>
+                                {adminEmail === 'atsuhiro@takagi.bz' && (
                                 <button
                                   style={{...styles.primaryButton, background: '#d32f2f', color: '#fff', opacity: deleting ? 0.6 : 1}}
                                   onClick={() => handleDeleteReport(selectedReportDetail.id)}
@@ -310,6 +313,7 @@ export function ReportsPage({
                                 >
                                   {deleting ? '削除中...' : '削除'}
                                 </button>
+                                )}
                                 <button
                                   style={{...styles.primaryButton, background: '#1976D2', opacity: resending ? 0.6 : 1}}
                                   onClick={() => handleResendNotifications(selectedReportDetail.id)}
