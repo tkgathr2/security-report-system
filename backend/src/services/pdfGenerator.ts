@@ -52,9 +52,10 @@ interface ReportData {
   qualifierName?: string | string[] | null;
   signaturePng?: Buffer | null;
   weather?: string | null;
+  notes?: string | null;
 }
 
-export type PdfDesign = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
+export type PdfDesign = 'A'| 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
 
 const GUARD_CONTENT_LABELS: Record<string, string> = {
   'traffic': '交通誘導',
@@ -302,7 +303,17 @@ async function generateReportPdfHandwritten(data: ReportData): Promise<Buffer> {
         doc.fontSize(8).text(`（${qNames.join('、')}）`, ML + 130, QUALIFIER_TOP + 6, { lineBreak: false });
       }
 
-      const COMPANY_INFO_TOP = QUALIFIER_TOP + QUALIFIER_H;
+      const NOTES_TOP = QUALIFIER_TOP + QUALIFIER_H;
+      const NOTES_H = 40;
+      doc.save();
+      doc.rect(ML, NOTES_TOP, LEFT_W, NOTES_H).lineWidth(LW).strokeColor(BORDER).stroke();
+      doc.restore();
+      doc.fillColor(TEXT_COLOR).fontSize(8).text('備考', ML + 5, NOTES_TOP + 3, { lineBreak: false });
+      if (data.notes && data.notes.trim()) {
+        doc.fillColor(TEXT_COLOR).fontSize(7).text(data.notes.trim(), ML + 5, NOTES_TOP + 14, { width: LEFT_W - 10, height: NOTES_H - 16, ellipsis: true });
+      }
+
+      const COMPANY_INFO_TOP = NOTES_TOP + NOTES_H;
       const COMPANY_INFO_H = FORM_BOTTOM - COMPANY_INFO_TOP;
       doc.save();
       doc.rect(ML, COMPANY_INFO_TOP, LEFT_W, COMPANY_INFO_H).lineWidth(LW).strokeColor(BORDER).stroke();

@@ -145,6 +145,7 @@ router.post('/:reportId/pdf/generate', requireAdmin, async (req: Request, res: R
         qualifierName: report.qualifier_name,
         signaturePng: signaturePng,
         weather: report.weather || null,
+        notes: report.notes || null,
         layout: pdfLayout,
         design: pdfDesign,
       });

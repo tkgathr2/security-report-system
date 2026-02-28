@@ -52,9 +52,10 @@ interface ReportData {
   qualifierName?: string | string[] | null;
   signaturePng?: Buffer | null;
   weather?: string | null;
+  notes?: string | null;
 }
 
-export type PdfDesign= 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
+export type PdfDesign= 'A'| 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
 
 const GUARD_CONTENT_LABELS: Record<string, string> = {
   'traffic': '交通誘導',
@@ -343,6 +344,21 @@ export async function generateReportPdfClassic(data: ReportData, design: PdfDesi
           );
           doc.y = rY + rH;
         });
+      }
+
+      if (data.notes && data.notes.trim()) {
+        doc.moveDown(0.3);
+        const notesY = doc.y;
+        doc.save(); doc.rect(marginLeft, notesY, labelColWidth, rowHeight).fill(colors.accent); doc.restore();
+        const notesTextHeight = doc.fontSize(8).heightOfString(data.notes.trim(), { width: contentWidth - labelColWidth - 12 });
+        const notesRowH = Math.max(rowHeight, notesTextHeight + 10);
+        doc.save();
+        doc.rect(marginLeft, notesY, contentWidth, notesRowH).strokeColor('#DDDDDD').lineWidth(0.5).stroke();
+        doc.moveTo(marginLeft + labelColWidth, notesY).lineTo(marginLeft + labelColWidth, notesY + notesRowH).stroke();
+        doc.restore();
+        doc.fillColor(colors.secondary).fontSize(8).text('備考', marginLeft + 6, notesY + 5);
+        doc.fillColor('#333333').fontSize(8).text(data.notes.trim(), marginLeft + labelColWidth + 6, notesY + 5, { width: contentWidth - labelColWidth - 12 });
+        doc.y = notesY + notesRowH;
       }
 
       doc.moveDown(0.5);
