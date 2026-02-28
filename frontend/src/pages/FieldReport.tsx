@@ -411,6 +411,10 @@ export default function FieldReport() {
 
   const handleSubmit = async () => {
     if (!token || !signatureDataUrl || !supervisorName) return
+    if (guards.some(g => !g.name || g.name.trim() === '')) {
+      setErrorMessage('氏名が未入力の警備員がいます。名前を入力するか、不要な行を削除してください。')
+      return
+    }
     
     setSubmitting(true)
     
@@ -716,7 +720,8 @@ export default function FieldReport() {
       )
     }
 
-    const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null && guardContents.length > 0
+    const hasNamelessGuard = guards.some(g => !g.name || g.name.trim() === '')
+    const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null && guardContents.length > 0 && !hasNamelessGuard
 
   const handleCloseTutorial = () => {
     setShowTutorial(false)
@@ -1188,7 +1193,7 @@ export default function FieldReport() {
           </button>
           {!isViewMode && !isFormValid && (
             <p style={styles.submitHint}>
-              監督者名、警備内容（1つ以上）、署名を入力してください
+              {hasNamelessGuard ? '氏名が未入力の警備員がいます。名前を入力するか削除してください' : '監督者名、警備内容（1つ以上）、署名を入力してください'}
             </p>
           )}
           {errorMessage && (
