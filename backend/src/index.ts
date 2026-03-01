@@ -64,7 +64,7 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'lax', // Required for OAuth redirects
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    maxAge: 90 * 24 * 60 * 60 * 1000 // 90 days（ログアウトしない限り3ヶ月有効）
   }
 }));
 
