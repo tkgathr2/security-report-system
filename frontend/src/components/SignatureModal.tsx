@@ -17,7 +17,7 @@ export default function SignatureModal({ isOpen, onClose, onSave }: SignatureMod
       const ctx = canvas.getContext('2d')
       if (ctx) {
         canvas.width = window.innerWidth
-        canvas.height = window.innerHeight - 120
+        canvas.height = window.innerHeight - 180
         ctx.fillStyle = 'white'
         ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.strokeStyle = '#000'
@@ -183,6 +183,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   footer: {
     padding: '15px 20px',
+    paddingBottom: 'calc(15px + env(safe-area-inset-bottom, 0px))',
     backgroundColor: 'white',
     borderTop: '1px solid #ddd'
   },
