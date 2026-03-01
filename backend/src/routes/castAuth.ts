@@ -12,7 +12,7 @@ import { checkRateLimitDb, recordFailedAttemptDb, resetAttemptsDb } from '../uti
 const inquiryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
-const JWT_EXPIRES_IN = '7d';
+const JWT_EXPIRES_IN = '30d';
 
 const router = Router();
 
