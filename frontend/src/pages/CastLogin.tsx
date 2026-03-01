@@ -240,6 +240,7 @@ export default function CastLogin() {
             メールでログイン
           </button>
           <a href="/cast/register">新規登録</a>
+          <a href="/cast/help-install">ホーム画面に追加</a>
         </div>
       </div>
     </div>
