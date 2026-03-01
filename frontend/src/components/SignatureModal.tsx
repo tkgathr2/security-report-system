@@ -17,8 +17,7 @@ export default function SignatureModal({ isOpen, onClose, onSave }: SignatureMod
       const ctx = canvas.getContext('2d')
       if (ctx) {
         canvas.width = window.innerWidth
-        const safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0', 10)
-        canvas.height = window.innerHeight - 120 - safeBottom
+        canvas.height = window.innerHeight - 180
         ctx.fillStyle = 'white'
         ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.strokeStyle = '#000'
