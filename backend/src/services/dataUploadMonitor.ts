@@ -2,7 +2,7 @@ import pool from '../db/pool';
 
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || '';
 
-const CHECK_HOURS_JST = [19, 22, 0, 9];
+const CHECK_HOURS_JST = [17, 19, 21, 0, 9, 12];
 
 const alreadyNotified = new Set<string>();
 
@@ -66,7 +66,7 @@ async function runCheck(): Promise<void> {
 
   if (!CHECK_HOURS_JST.includes(hour)) return;
 
-  const isBefore = hour === 19 || hour === 22;
+  const isBefore = hour === 17 || hour === 19 || hour === 21;
   const targetDate = isBefore ? getJSTDate(1).dateStr : todayStr;
   const checkLabel = `${hour}:00 JST`;
 
@@ -97,7 +97,7 @@ async function runCheck(): Promise<void> {
 let monitorTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startDataUploadMonitor(): void {
-  console.log('[DataMonitor] Starting data upload monitor (checks at 19:00, 22:00, 00:00, 09:00 JST)');
+  console.log('[DataMonitor] Starting data upload monitor (checks at 17:00, 19:00, 21:00, 00:00, 09:00, 12:00 JST)');
   monitorTimer = setInterval(() => {
     runCheck().catch(err => console.error('[DataMonitor] Unexpected error:', err));
   }, 60_000);
