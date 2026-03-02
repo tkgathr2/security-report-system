@@ -568,10 +568,19 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                                        AND p.deleted_at IS NULL`,
                   [castName, workDate, projectInfo.projectId]
                 );
-                if (existingAssignment.rows.length > 0) {
+                if (existingAssignment.rows.length > 0 && !forceImport) {
                   errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingAssignment.rows[0].work_name}」に割り当て済みです（1日1現場まで）` });
                   duplicateCastAssignments++;
                 } else {
+                  if (existingAssignment.rows.length > 0) {
+                    await dbClient.query(
+                      `UPDATE project_casts SET deleted_at = NOW()
+                       WHERE staff_id IN (SELECT sm.id FROM staff_master sm WHERE REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND sm.deleted_at IS NULL)
+                         AND project_id IN (SELECT p.id FROM projects p WHERE p.work_date = $2 AND p.id != $3 AND p.deleted_at IS NULL)
+                         AND deleted_at IS NULL`,
+                      [castName, workDate, projectInfo.projectId]
+                    );
+                  }
                   let staffIdRow = await dbClient.query(
                     `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
                     [castName]
