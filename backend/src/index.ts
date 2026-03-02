@@ -20,6 +20,7 @@ import castAuthRouter from './routes/castAuth';
 import pool from './db/pool';
 import { requestTimeout } from './middleware/requestTimeout';
 import { sanitizeInput } from './utils/validation';
+import { startDataUploadMonitor, stopDataUploadMonitor } from './services/dataUploadMonitor';
 
 dotenv.config();
 
@@ -528,6 +529,7 @@ function gracefulShutdown(source: string, exitCode: number) {
 
   console.error(`[gracefulShutdown] triggered by ${source}. Closing server and DB pool...`);
   if (cleanupTimer) clearInterval(cleanupTimer);
+  stopDataUploadMonitor();
   const forceExit = setTimeout(() => {
     console.error('[gracefulShutdown] Forced exit after timeout');
     process.exit(exitCode);
@@ -602,3 +604,5 @@ cleanupTimer = setInterval(() => {
     .catch((err: unknown) => console.error('[Scheduler] Periodic cleanup error:', err));
 }, CLEANUP_INTERVAL_MS);
 cleanupTimer.unref();
+
+startDataUploadMonitor();
