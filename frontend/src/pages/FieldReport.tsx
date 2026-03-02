@@ -36,6 +36,7 @@ interface Draft {
     has_qualifier?: boolean
     qualifier_name?: string
     notes?: string
+    partner_company_name?: string
   }
   updated_at: string
 }
@@ -107,6 +108,7 @@ export default function FieldReport() {
   const [hasQualifier, setHasQualifier] = useState(false)
   const [qualifierNames, setQualifierNames] = useState<string[]>([])
   const [notes, setNotes] = useState('')
+  const [partnerCompanyName, setPartnerCompanyName] = useState('')
   
   const [submitting, setSubmitting] = useState(false)
 
@@ -360,6 +362,7 @@ export default function FieldReport() {
             setQualifierNames([])
           }
           setNotes(data.payload_json.notes || '')
+          setPartnerCompanyName(data.payload_json.partner_company_name || '')
         }
       }
     } catch {
@@ -387,7 +390,8 @@ export default function FieldReport() {
             guards,
             has_qualifier: hasQualifier,
             qualifier_name: qualifierNames,
-            notes
+            notes,
+            partner_company_name: partnerCompanyName
           },
           client_updated_at: new Date().toISOString()
         })
@@ -440,6 +444,7 @@ export default function FieldReport() {
           has_qualifier: hasQualifier,
           qualifier_name: hasQualifier ? qualifierNames : [],
           notes,
+          partner_company_name: partnerCompanyName || undefined,
           signature_png_base64: base64Data
         })
       })
@@ -752,6 +757,17 @@ export default function FieldReport() {
               <div style={styles.infoItem}>
                 <span style={styles.infoLabel}>会社名</span>
                 <span style={styles.infoValue}>{project.client_name_raw}</span>
+              </div>
+              <div style={styles.infoItem}>
+                <label style={styles.infoLabel}>協力会社名</label>
+                <input
+                  type="text"
+                  style={styles.input}
+                  value={partnerCompanyName}
+                  onChange={(e) => setPartnerCompanyName(e.target.value)}
+                  onBlur={saveDraft}
+                  placeholder="協力会社名（任意）"
+                />
               </div>
               <div style={styles.infoItem}>
                 <span style={styles.infoLabel}>実施日</span>
