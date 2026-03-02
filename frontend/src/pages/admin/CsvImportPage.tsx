@@ -55,10 +55,10 @@ export function CsvImportPage({
         </div>
         {importResult && importResult.blocked && (
           <div style={{ ...styles.resultBox, borderLeft: '4px solid #dc3545' }}>
-            <h4 style={{ ...styles.resultTitle, color: '#dc3545' }}>インポートをブロックしました</h4>
-            <div style={{ backgroundColor: '#f8d7da', color: '#721c24', border: '1px solid #f5c6cb', borderRadius: '6px', padding: '12px 16px', marginBottom: '16px' }}>
-              <strong>{importResult.message}</strong>
-              <p style={{ margin: '8px 0 0', fontSize: '14px' }}>ダブルブッキングを解消してCSVを修正するか、管理者として強制インポートしてください。</p>
+            <h4 style={{ ...styles.resultTitle, color: '#dc3545' }}>ダブルブッキングが検出されました</h4>
+            <div style={{ backgroundColor: '#fff3cd', color: '#856404', border: '1px solid #ffc107', borderRadius: '6px', padding: '12px 16px', marginBottom: '16px' }}>
+              <strong>前のデータを削除して上書きでインストールしますか？</strong>
+              <p style={{ margin: '8px 0 0', fontSize: '14px' }}>OKを押すと、以下の既存割り当てを削除してCSVの内容で上書きします。</p>
             </div>
             {importResult.errors && importResult.errors.length > 0 && (
               <div style={{ ...styles.warningBox, marginBottom: '16px' }}>
@@ -71,13 +71,15 @@ export function CsvImportPage({
               </div>
             )}
             {pendingFile && (
-              <button
-                onClick={handleForceImport}
-                disabled={importing}
-                style={{ backgroundColor: '#dc3545', color: '#fff', border: 'none', borderRadius: '6px', padding: '10px 24px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                {importing ? '強制インポート中...' : '強制インポート（管理者権限）'}
-              </button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={handleForceImport}
+                  disabled={importing}
+                  style={{ backgroundColor: '#E67E22', color: '#fff', border: 'none', borderRadius: '6px', padding: '10px 24px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  {importing ? '上書き中...' : 'OK（上書きする）'}
+                </button>
+              </div>
             )}
           </div>
         )}
