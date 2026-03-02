@@ -53,6 +53,7 @@ interface ReportData {
   signaturePng?: Buffer | null;
   weather?: string | null;
   notes?: string | null;
+  partnerCompanyName?: string | null;
 }
 
 export type PdfDesign = 'A'| 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
@@ -349,7 +350,10 @@ async function generateReportPdfHandwritten(data: ReportData): Promise<Buffer> {
 
       doc.fillColor(TEXT_COLOR);
       drawCell(doc, RX, HEADER_ROWS_TOP, COL1_W, ROW_H, '協力会社名', 9, { align: 'center' });
-      drawCell(doc, RX + COL1_W, HEADER_ROWS_TOP, COL2_W, ROW_H, `${data.companyName}　御中`, 11, { padding: 8 });
+      const companyLine = data.partnerCompanyName
+        ? `${data.companyName}　御中（協力会社名：${data.partnerCompanyName}依頼分）`
+        : `${data.companyName}　御中`;
+      drawCell(doc, RX + COL1_W, HEADER_ROWS_TOP, COL2_W, ROW_H, companyLine, 11, { padding: 8 });
 
       const ROW2_Y = HEADER_ROWS_TOP + ROW_H;
       const dateColW = COL2_W * 0.55;

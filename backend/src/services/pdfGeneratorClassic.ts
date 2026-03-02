@@ -53,6 +53,7 @@ interface ReportData {
   signaturePng?: Buffer | null;
   weather?: string | null;
   notes?: string | null;
+  partnerCompanyName?: string | null;
 }
 
 export type PdfDesign= 'A'| 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
@@ -226,7 +227,10 @@ export async function generateReportPdfClassic(data: ReportData, design: PdfDesi
 
       drawHeader(doc, design, colors, logoBuffer, pageWidth, marginLeft, contentWidth);
 
-      doc.fillColor(colors.secondary).fontSize(11).text(`${data.companyName} 御中`, marginLeft, doc.y);
+      const companyLine = data.partnerCompanyName
+        ? `${data.companyName} 御中（協力会社名：${data.partnerCompanyName}依頼分）`
+        : `${data.companyName} 御中`;
+      doc.fillColor(colors.secondary).fontSize(11).text(companyLine, marginLeft, doc.y);
       doc.moveDown(0.2);
       doc.save(); doc.moveTo(marginLeft, doc.y).lineTo(marginLeft + contentWidth, doc.y).strokeColor('#DDDDDD').lineWidth(0.5).stroke(); doc.restore();
       doc.moveDown(0.3);
