@@ -608,7 +608,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                   await dbClient.query(
                     `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
                      VALUES ($1, $2, $3, $4, $5)
-                     ON CONFLICT (project_id, staff_no) DO UPDATE SET staff_id = EXCLUDED.staff_id, cast_name = EXCLUDED.cast_name`,
+                     ON CONFLICT (project_id, staff_no) DO UPDATE SET staff_id = EXCLUDED.staff_id, cast_name = EXCLUDED.cast_name, deleted_at = NULL`,
                     [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i, castName]
                   );
                   projectInfo.casts.add(castIdentifier);
