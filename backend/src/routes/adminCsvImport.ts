@@ -341,6 +341,37 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
   }
 
   const { format, mapping } = formatInfo;
+
+  const requiredFieldChecks: Array<{ label: string; key: string | undefined }> = [
+    { label: '案件名', key: mapping.projectName },
+    { label: 'クライアント名', key: mapping.clientName },
+    { label: '実施場所', key: mapping.location },
+    { label: '実施日', key: mapping.workDate },
+    { label: '氏名', key: mapping.staffName },
+  ];
+  const criticalMissing: string[] = [];
+  for (const { label, key } of requiredFieldChecks) {
+    if (!key) {
+      criticalMissing.push(label);
+      continue;
+    }
+    const filledCount = records.filter(r => r[key]?.trim()).length;
+    if (filledCount === 0) {
+      criticalMissing.push(label);
+    }
+  }
+  if (criticalMissing.length > 0) {
+    res.status(400).json({
+      error: 'CSV_FORMAT_INVALID',
+      message: `必須項目が不足しています: ${criticalMissing.join('、')}`,
+      details: {
+        missing_headers: criticalMissing,
+        found_headers: headers.slice(0, 20)
+      }
+    });
+    return;
+  }
+
   const errors: Array<{ row: number; reason: string }> = [];
   let createdProjectsCount = 0;
   let updatedProjectsCount = 0;
