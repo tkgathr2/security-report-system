@@ -1202,7 +1202,14 @@ export default function FieldReport() {
                 <p style={{ margin: '4px 0 0', color: '#d32f2f', fontSize: '13px' }}>名前を入力するか、不要な行を「削除」してください</p>
               </div>
             ) : (
-              <p style={styles.submitHint}>監督者名、警備内容（1つ以上）、署名を入力してください</p>
+              <div style={{ marginTop: '12px', padding: '12px 16px', backgroundColor: '#FFF8E1', border: '2px solid #FFA000', borderRadius: '8px' }}>
+                <p style={{ margin: '0 0 8px', color: '#E65100', fontSize: '14px', fontWeight: 'bold' }}>未入力の必須項目:</p>
+                <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'disc' }}>
+                  {supervisorName.trim() === '' && <li style={{ color: '#E65100', fontSize: '14px', marginBottom: '4px' }}>監督者名</li>}
+                  {guardContents.length === 0 && <li style={{ color: '#E65100', fontSize: '14px', marginBottom: '4px' }}>警備内容（1つ以上選択）</li>}
+                  {!signatureDataUrl && <li style={{ color: '#E65100', fontSize: '14px', marginBottom: '4px' }}>署名</li>}
+                </ul>
+              </div>
             )
           )}
           {errorMessage && (
