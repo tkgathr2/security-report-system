@@ -101,6 +101,12 @@ export const DESIGN_NAMES: Record<PdfDesign, string> = {
   J: 'Blaze',
 };
 
+function weatherLabel(weather?: string | null): string {
+  if (!weather) return '-';
+  const map: Record<string, string> = { sunny: '晴れ', cloudy: '曇り', rainy: '雨', snowy: '雪' };
+  return map[weather] || weather;
+}
+
 function drawHeader(
   doc: PDFKit.PDFDocument,
   design: PdfDesign,
@@ -242,6 +248,7 @@ export async function generateReportPdfClassic(data: ReportData, design: PdfDesi
 
       const infoRows: [string, string][] = [
         ['実施日', data.workDate],
+        ['天気', weatherLabel(data.weather)],
         ['実施場所', data.location],
         ['作業名称', data.workName],
         ['監督者名', data.supervisorName],
