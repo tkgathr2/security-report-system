@@ -1007,7 +1007,7 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
 
       // カナで既存検索
       const existing = await pool.query(
-        'SELECT id, display_name_kanji FROM staff_master WHERE display_name_kana = $1',
+        'SELECT id, display_name_kanji, deleted_at FROM staff_master WHERE display_name_kana = $1',
         [nameKana]
       );
 
@@ -1019,6 +1019,13 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
           [nameKanji, nameKana, adminUser.email]
         );
         inserted++;
+      } else if (existing.rows[0].deleted_at) {
+        // soft-deleted → 復活
+        await pool.query(
+          'UPDATE staff_master SET display_name_kanji = COALESCE(NULLIF($1, \'\'), display_name_kanji), deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [nameKanji, existing.rows[0].id]
+        );
+        updated++;
       } else if (existing.rows[0].display_name_kanji !== nameKanji && nameKanji) {
         // 漢字更新
         await pool.query(
