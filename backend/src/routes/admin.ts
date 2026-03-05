@@ -1020,9 +1020,9 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
         );
         inserted++;
       } else if (existing.rows[0].deleted_at) {
-        // soft-deleted → 復活
+        // soft-deleted → 復活（created_atもリセットして新規登録と同じ扱いにする）
         await pool.query(
-          'UPDATE staff_master SET display_name_kanji = COALESCE(NULLIF($1, \'\'), display_name_kanji), deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          'UPDATE staff_master SET display_name_kanji = COALESCE(NULLIF($1, \'\'), display_name_kanji), deleted_at = NULL, created_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           [nameKanji, existing.rows[0].id]
         );
         updated++;
