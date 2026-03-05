@@ -388,6 +388,14 @@ async function cleanupData() {
     );
     cleanupDetail += ` emailVerifiedBackfill:${verifyFix.rowCount}`;
 
+    const createdAtFix = await pool.query(
+      `UPDATE staff_master SET created_at = updated_at
+       WHERE deleted_at IS NULL
+         AND updated_at - created_at > INTERVAL '1 day'
+         AND updated_at > NOW() - INTERVAL '7 days'`
+    );
+    cleanupDetail += ` createdAtFixedForRestoredStaff:${createdAtFix.rowCount}`;
+
     const orphanNoLink= await pool.query(
       `UPDATE cast_users SET deleted_at = NOW()
        WHERE deleted_at IS NULL
