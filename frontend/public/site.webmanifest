@@ -1,7 +1,7 @@
 {
   "name": "デジタル警備報告書システム【ほうこちゃん】",
   "short_name": "ほうこちゃん",
-  "start_url": "/cast/today",
+  "start_url": "/",
   "icons": [
     {
       "src": "/icon-192.png",
