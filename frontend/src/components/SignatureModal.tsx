@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 
 interface SignatureModalProps {
   isOpen: boolean
@@ -11,23 +11,69 @@ export default function SignatureModal({ isOpen, onClose, onSave }: SignatureMod
   const [isDrawing, setIsDrawing] = useState(false)
   const [hasDrawn, setHasDrawn] = useState(false)
 
-  useEffect(() => {
-    if (isOpen && canvasRef.current) {
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        canvas.width = window.innerWidth
-        canvas.height = window.innerHeight - 180
-        ctx.fillStyle = 'white'
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        ctx.strokeStyle = '#000'
-        ctx.lineWidth = 3
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-      }
-      setHasDrawn(false)
+  const syncCanvasSize = useCallback((preserveContent = false) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const rect = canvas.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+
+    let prevData: ImageData | null = null
+    if (preserveContent && canvas.width > 0 && canvas.height > 0) {
+      prevData = ctx.getImageData(0, 0, canvas.width, canvas.height)
     }
-  }, [isOpen])
+
+    canvas.width = rect.width * dpr
+    canvas.height = rect.height * dpr
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+    ctx.fillStyle = 'white'
+    ctx.fillRect(0, 0, rect.width, rect.height)
+
+    if (prevData) {
+      ctx.putImageData(prevData, 0, 0)
+    }
+
+    ctx.strokeStyle = '#000'
+    ctx.lineWidth = 3
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+  }, [])
+
+  useEffect(() => {
+    if (isOpen) {
+      setHasDrawn(false)
+
+      const scrollY = window.scrollY
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.width = '100%'
+      document.body.style.top = `-${scrollY}px`
+
+      const raf = requestAnimationFrame(() => syncCanvasSize(false))
+      return () => cancelAnimationFrame(raf)
+    } else {
+      const top = document.body.style.top
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+      document.body.style.top = ''
+      if (top) window.scrollTo(0, parseInt(top, 10) * -1)
+    }
+  }, [isOpen, syncCanvasSize])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const onResize = () => syncCanvasSize(true)
+    window.addEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onResize)
+    }
+  }, [isOpen, syncCanvasSize])
 
   const getCoordinates = (e: React.TouchEvent | React.MouseEvent) => {
     const canvas = canvasRef.current
@@ -81,8 +127,13 @@ export default function SignatureModal({ isOpen, onClose, onSave }: SignatureMod
     const ctx = canvas?.getContext('2d')
     if (!ctx || !canvas) return
 
+    const rect = canvas.getBoundingClientRect()
     ctx.fillStyle = 'white'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillRect(0, 0, rect.width, rect.height)
+    ctx.strokeStyle = '#000'
+    ctx.lineWidth = 3
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
     setHasDrawn(false)
   }
 
@@ -98,7 +149,12 @@ export default function SignatureModal({ isOpen, onClose, onSave }: SignatureMod
   if (!isOpen) return null
 
   return (
-    <div style={styles.overlay}>
+    <div
+      style={styles.overlay}
+      onTouchMove={(e) => {
+        if (!(e.target instanceof HTMLCanvasElement)) e.preventDefault()
+      }}
+    >
       <div style={styles.header}>
         <button style={styles.cancelButton} onClick={onClose}>
           キャンセル
@@ -144,15 +200,18 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#f5f5f5',
     zIndex: 1000,
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    overscrollBehavior: 'none' as const,
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '15px 20px',
+    paddingTop: 'calc(15px + env(safe-area-inset-top, 0px))',
     backgroundColor: '#333',
-    color: 'white'
+    color: 'white',
+    flexShrink: 0,
   },
   title: {
     fontSize: '18px',
@@ -179,13 +238,15 @@ const styles: Record<string, React.CSSProperties> = {
   canvas: {
     flex: 1,
     touchAction: 'none',
-    cursor: 'crosshair'
+    cursor: 'crosshair',
+    display: 'block',
   },
   footer: {
     padding: '15px 20px',
     paddingBottom: 'calc(15px + env(safe-area-inset-bottom, 0px))',
     backgroundColor: 'white',
-    borderTop: '1px solid #ddd'
+    borderTop: '1px solid #ddd',
+    flexShrink: 0,
   },
   saveButton: {
     width: '100%',
