@@ -13,6 +13,7 @@ import CastResetPin from './pages/CastResetPin'
 import CastInquiry from './pages/CastInquiry'
 import CastMailHelp from './pages/CastMailHelp'
 import CastHelpInstall from './pages/CastHelpInstall'
+import RootRedirect from './pages/RootRedirect'
 import './index.css'
 
 Sentry.init({
@@ -35,6 +36,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     }>
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<RootRedirect />} />
           <Route path="/report/:uniqueUrl" element={<FieldReport />} />
           <Route path="/cast/register" element={<CastRegister />} />
           <Route path="/cast/verify" element={<CastVerify />} />
