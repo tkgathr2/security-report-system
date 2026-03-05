@@ -1523,4 +1523,65 @@ router.put('/inquiries/:id/status', requireAdmin, async (req: Request, res: Resp
   }
 });
 
+router.post('/bulk-cleanup', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { since_date, delete_casts } = req.body;
+    if (!since_date) {
+      res.status(400).json({ error: 'since_date is required (YYYY-MM-DD)' });
+      return;
+    }
+    const adminUser = req.user as { email: string };
+    const results: Record<string, number> = {};
+
+    const reportsDel = await pool.query(
+      `UPDATE reports SET deleted_at = NOW()
+       WHERE deleted_at IS NULL AND project_id IN (
+         SELECT id FROM projects WHERE work_date >= $1 AND deleted_at IS NULL
+       ) RETURNING id`,
+      [since_date]
+    );
+    results.reports_deleted = reportsDel.rowCount || 0;
+
+    const castsDel = await pool.query(
+      `UPDATE project_casts SET deleted_at = NOW()
+       WHERE deleted_at IS NULL AND project_id IN (
+         SELECT id FROM projects WHERE work_date >= $1 AND deleted_at IS NULL
+       ) RETURNING id`,
+      [since_date]
+    );
+    results.project_casts_deleted = castsDel.rowCount || 0;
+
+    const projectsDel = await pool.query(
+      `UPDATE projects SET deleted_at = NOW()
+       WHERE work_date >= $1 AND deleted_at IS NULL RETURNING id`,
+      [since_date]
+    );
+    results.projects_deleted = projectsDel.rowCount || 0;
+
+    if (delete_casts) {
+      const staffDel = await pool.query(
+        `UPDATE staff_master SET deleted_at = NOW()
+         WHERE deleted_at IS NULL RETURNING id`
+      );
+      results.staff_deleted = staffDel.rowCount || 0;
+
+      const castUsersDel = await pool.query(
+        `UPDATE cast_users SET deleted_at = NOW()
+         WHERE deleted_at IS NULL RETURNING id`
+      );
+      results.cast_users_deleted = castUsersDel.rowCount || 0;
+    }
+
+    await pool.query(
+      `INSERT INTO admin_audit_logs (admin_email, action, target_type, payload_json)
+       VALUES ($1, $2, $3, $4)`,
+      [adminUser.email, 'BULK_CLEANUP', 'projects', JSON.stringify({ since_date, delete_casts, results })]
+    );
+
+    res.json({ ok: true, results });
+  } catch (error) {
+    handleDbError(res, error, 'Bulk cleanup');
+  }
+});
+
 export default router;
