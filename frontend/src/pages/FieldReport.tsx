@@ -27,7 +27,6 @@ interface Project {
 
 interface Draft {
   payload_json: {
-    supervisor_name?: string
     writer_name?: string
     weather?: string
     guard_contents?: string[]
@@ -89,7 +88,6 @@ export default function FieldReport() {
     const [nameSearching, setNameSearching] = useState(false)
     const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null)
   
-  const [supervisorName, setSupervisorName] = useState('')
   const [writerName, setWriterName] = useState('')
   const [writerEmail, setWriterEmail] = useState('')
   const [weather, setWeather] = useState('sunny')
@@ -277,10 +275,6 @@ export default function FieldReport() {
       setHasQualifier(true)
     }
 
-    if (projectData.supervisor_name) {
-      setSupervisorName(projectData.supervisor_name)
-    }
-    
     if (projectData.casts && projectData.casts.length > 0) {
       setDbCastCount(projectData.casts.length)
       const initialGuards = projectData.casts.map((cast, idx) => ({
@@ -331,7 +325,6 @@ export default function FieldReport() {
       if (response.ok) {
         const data: Draft = await response.json()
         if (data.payload_json) {
-          setSupervisorName(data.payload_json.supervisor_name || '')
           setWriterName(data.payload_json.writer_name || '')
           setWeather(data.payload_json.weather || 'sunny')
           setGuardContents(data.payload_json.guard_contents || [])
@@ -382,7 +375,7 @@ export default function FieldReport() {
         },
         body: JSON.stringify({
           payload_json: {
-            supervisor_name: supervisorName,
+            supervisor_name: '',
             writer_name: writerName,
             weather,
             guard_contents: guardContents,
@@ -414,7 +407,7 @@ export default function FieldReport() {
   }
 
   const handleSubmit = async () => {
-    if (!token || !signatureDataUrl || !supervisorName) return
+    if (!token || !signatureDataUrl) return
     if (guards.some(g => !g.name || g.name.trim() === '')) {
       setErrorMessage('氏名が未入力の警備員がいます。名前を入力するか、不要な行を削除してください。')
       return
@@ -435,7 +428,7 @@ export default function FieldReport() {
         },
         body: JSON.stringify({
           project_unique_url: uniqueUrl,
-          supervisor_name: supervisorName,
+          supervisor_name: '',
           writer_name: writerName,
           weather,
           guard_contents: guardContents,
@@ -726,7 +719,7 @@ export default function FieldReport() {
     }
 
     const hasNamelessGuard = guards.some(g => !g.name || g.name.trim() === '')
-    const isFormValid = supervisorName.trim() !== '' && signatureDataUrl !== null && guardContents.length > 0 && !hasNamelessGuard
+    const isFormValid = signatureDataUrl !== null && guardContents.length > 0 && !hasNamelessGuard
 
   const handleCloseTutorial = () => {
     setShowTutorial(false)
@@ -788,18 +781,6 @@ export default function FieldReport() {
         <section style={styles.formSection}>
           <h2 style={styles.sectionTitle}>報告内容</h2>
           
-          <div style={styles.formGroup}>
-            <label style={styles.label}>監督者名 <span style={styles.required}>*</span></label>
-            <input
-              type="text"
-              style={styles.input}
-              value={supervisorName}
-              onChange={(e) => setSupervisorName(e.target.value)}
-              onBlur={saveDraft}
-              placeholder="監督者のお名前"
-            />
-          </div>
-
           <div style={styles.formGroup}>
             <label style={styles.label}>記入者（メールアドレス）</label>
             <input
@@ -1205,7 +1186,6 @@ export default function FieldReport() {
               <div style={{ marginTop: '12px', padding: '12px 16px', backgroundColor: '#FFF8E1', border: '2px solid #FFA000', borderRadius: '8px' }}>
                 <p style={{ margin: '0 0 8px', color: '#E65100', fontSize: '14px', fontWeight: 'bold' }}>未入力の必須項目:</p>
                 <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'disc' }}>
-                  {supervisorName.trim() === '' && <li style={{ color: '#E65100', fontSize: '14px', marginBottom: '4px' }}>監督者名</li>}
                   {guardContents.length === 0 && <li style={{ color: '#E65100', fontSize: '14px', marginBottom: '4px' }}>警備内容（1つ以上選択）</li>}
                   {!signatureDataUrl && <li style={{ color: '#E65100', fontSize: '14px', marginBottom: '4px' }}>署名</li>}
                 </ul>
@@ -1240,7 +1220,7 @@ export default function FieldReport() {
               </div>
               <div style={styles.tutorialSection}>
                 <h3 style={styles.tutorialSectionTitle}>2. 報告内容の入力</h3>
-                <p style={styles.tutorialText}>監督者名（必須）、天気、警備内容（1つ以上必須）、残業時間、備考を入力してください。</p>
+                <p style={styles.tutorialText}>天気、警備内容（1つ以上必須）、残業時間、備考を入力してください。</p>
               </div>
               <div style={styles.tutorialSection}>
                 <h3 style={styles.tutorialSectionTitle}>3. 署名</h3>
