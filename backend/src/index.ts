@@ -418,6 +418,20 @@ async function seedTakagiProjectData() {
       [TAKAGI_EMAIL, TAKAGI_ID]
     );
 
+    const existingCast = await pool.query(
+      `SELECT id FROM cast_users WHERE email = $1 AND deleted_at IS NULL`,
+      [TAKAGI_EMAIL]
+    );
+    if (existingCast.rows.length === 0) {
+      await pool.query(
+        `INSERT INTO cast_users (email, staff_id, email_verified)
+         VALUES ($1, $2, true)
+         ON CONFLICT DO NOTHING`,
+        [TAKAGI_EMAIL, TAKAGI_ID]
+      );
+      console.log('[Seed] Created cast_users record for atsuhiro@takagi.bz');
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     let addedCount = 0;

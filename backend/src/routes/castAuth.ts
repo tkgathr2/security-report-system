@@ -938,6 +938,14 @@ router.post('/field-register', async (req: Request, res: Response) => {
           );
         }
 
+        const baseUrl = getBaseUrl(req);
+        let staffName: string | null = null;
+        if (staffId) {
+          const staffNameResult = await pool.query('SELECT display_name_kanji FROM staff_master WHERE id = $1', [staffId]);
+          staffName = staffNameResult.rows.length > 0 ? staffNameResult.rows[0].display_name_kanji : null;
+        }
+        sendWelcomeEmail(email, staffName || email, baseUrl).catch(err => console.error('[EMAIL] field-register welcome email error:', err));
+
         const token = jwt.sign(
           { userId: existing.id, email },
           AUTH_SECRET,
@@ -992,6 +1000,14 @@ router.post('/field-register', async (req: Request, res: Response) => {
     }
 
     const user = result.rows[0];
+
+    const baseUrl = getBaseUrl(req);
+    let staffName: string | null = null;
+    if (matchedStaffId) {
+      const staffNameResult = await pool.query('SELECT display_name_kanji FROM staff_master WHERE id = $1', [matchedStaffId]);
+      staffName = staffNameResult.rows.length > 0 ? staffNameResult.rows[0].display_name_kanji : null;
+    }
+    sendWelcomeEmail(email, staffName || email, baseUrl).catch(err => console.error('[EMAIL] field-register welcome email error:', err));
 
     const token = jwt.sign(
       { userId: user.id, email: user.email },

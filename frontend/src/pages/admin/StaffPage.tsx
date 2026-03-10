@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useMemo } from 'react'
 import { COLORS } from '../../constants/admin'
 import { styles } from '../../styles/adminStyles'
 import type { StaffMember } from '../../types/admin'
@@ -40,6 +40,25 @@ interface StaffPageProps {
   formatDate: (dateStr: string) => string
 }
 
+type PinSortMode = 'none' | 'registered' | 'unregistered'
+
+function PinBadge({ hasPin }: { hasPin: boolean }) {
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 8px',
+      borderRadius: '12px',
+      fontSize: '12px',
+      fontWeight: 'bold',
+      backgroundColor: hasPin ? '#e8f5e9' : '#fff3e0',
+      color: hasPin ? '#2e7d32' : '#e65100',
+      border: `1px solid ${hasPin ? '#a5d6a7' : '#ffcc80'}`,
+    }}>
+      {hasPin ? '登録済' : '未登録'}
+    </span>
+  )
+}
+
 export function StaffPage({
   staff,
   filteredStaff,
@@ -64,6 +83,28 @@ export function StaffPage({
   handleDeleteStaff,
   formatDate,
 }: StaffPageProps) {
+  const [pinSort, setPinSort] = useState<PinSortMode>('none')
+
+  const sortedStaff = useMemo(() => {
+    if (pinSort === 'none') return filteredStaff
+    return [...filteredStaff].sort((a, b) => {
+      if (pinSort === 'registered') {
+        if (a.has_pin && !b.has_pin) return -1
+        if (!a.has_pin && b.has_pin) return 1
+      } else {
+        if (!a.has_pin && b.has_pin) return -1
+        if (a.has_pin && !b.has_pin) return 1
+      }
+      return 0
+    })
+  }, [filteredStaff, pinSort])
+
+  const cyclePinSort = () => {
+    setPinSort(prev => prev === 'none' ? 'registered' : prev === 'registered' ? 'unregistered' : 'none')
+  }
+
+  const pinSortLabel = pinSort === 'none' ? '暗証番号' : pinSort === 'registered' ? '暗証番号 ▲' : '暗証番号 ▼'
+
   return (
             <div>
               <div style={styles.pageHeader}>
@@ -120,7 +161,7 @@ export function StaffPage({
                                                           <p style={styles.emptyMessage}>検索結果がありません</p>
                                                         ) : isMobile ? (
                                                           <div style={styles.mobileCardList}>
-                                                            {filteredStaff.map(member => (
+                                                            {sortedStaff.map(member => (
                                                               <div key={member.id} style={styles.mobileCard}>
                                                                 <div style={styles.mobileCardBody}>
                                                                   <div style={styles.mobileCardRow}>
@@ -134,6 +175,10 @@ export function StaffPage({
                                                                   <div style={styles.mobileCardRow}>
                                                                     <span style={styles.mobileCardLabel}>メールアドレス</span>
                                                                     <span style={styles.mobileCardValue}>{member.registered_email || member.email || '-'}</span>
+                                                                  </div>
+                                                                  <div style={styles.mobileCardRow}>
+                                                                    <span style={styles.mobileCardLabel}>暗証番号</span>
+                                                                    <span style={styles.mobileCardValue}><PinBadge hasPin={member.has_pin} /></span>
                                                                   </div>
                                                                   <div style={styles.mobileCardRow}>
                                                                     <span style={styles.mobileCardLabel}>登録日</span>
@@ -160,16 +205,18 @@ export function StaffPage({
                                                                     <th style={styles.th}>氏名（漢字）</th>
                                                                     <th style={styles.th}>氏名（カナ）</th>
                                                                     <th style={styles.th}>メールアドレス</th>
+                                                                    <th style={{...styles.th, cursor: 'pointer', userSelect: 'none'}} onClick={cyclePinSort}>{pinSortLabel}</th>
                                                                     <th style={styles.th}>登録日</th>
                                                                     <th style={styles.th}>操作</th>
                                                                   </tr>
                                                                 </thead>
                                                                 <tbody>
-                                                                  {filteredStaff.map(member => (
+                                                                  {sortedStaff.map(member => (
                                                                     <tr key={member.id} style={styles.tr}>
                                                                       <td style={styles.td}>{member.display_name_kanji}<NewBadge createdAt={member.created_at} /></td>
                                                                       <td style={styles.td}>{member.display_name_kana}</td>
                                                                       <td style={styles.td}>{member.registered_email || member.email || '-'}</td>
+                                                                      <td style={styles.td}><PinBadge hasPin={member.has_pin} /></td>
                                                                       <td style={styles.td}>{formatDate(member.created_at)}</td>
                                                                       <td style={styles.td}>
                                                                         <button 

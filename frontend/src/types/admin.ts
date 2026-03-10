@@ -92,6 +92,7 @@ export interface StaffMember {
   email: string | null
   registered_email: string | null
   cast_user_id: string | null
+  has_pin: boolean
   created_at: string
   updated_at: string
 }
