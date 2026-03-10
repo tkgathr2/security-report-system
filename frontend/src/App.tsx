@@ -834,14 +834,36 @@ function AdminApp() {
     return sortDirection === 'asc' ? ' ↑' : ' ↓'
   }
 
+  const normalizeForSearch = (text: string): string => {
+    const KANJI_VARIANTS: Record<string, string> = {
+      '\u9AD9': '\u9AD8', '\uFA30': '\u4FAE', '\uFA31': '\u4FBB',
+      '\u5861': '\u5D0E', '\uFA11': '\u5D0E', '\u7E41': '\u7E4B',
+      '\u6FF3': '\u6FA4', '\u6FA4': '\u6CA2', '\u6589': '\u658E',
+      '\u9F4B': '\u658E', '\u9F4A': '\u6589', '\u5EE3': '\u5E83',
+      '\u6AFB': '\u685C', '\u7027': '\u6EDD', '\u5CF0': '\u5CEF',
+      '\u5CEF': '\u5CF0', '\u9FD4': '\u9F8D', '\u9F8D': '\u7ADC',
+      '\u9130': '\u90CE', '\u90DE': '\u90CE', '\u83EF': '\u82B1',
+      '\u5B78': '\u5B66', '\u6B78': '\u5E30', '\u4E98': '\u4E99',
+      '\u4E99': '\u4E98',
+    }
+    let result = text.toLowerCase()
+    for (const [variant, standard] of Object.entries(KANJI_VARIANTS)) {
+      result = result.split(variant).join(standard)
+    }
+    return result.replace(/[\s\u3000]/g, '')
+  }
+
   const filteredStaff = staff.filter(member => {
     if (!staffSearchQuery.trim()) return true
-    const query = staffSearchQuery.toLowerCase()
+    const query = normalizeForSearch(staffSearchQuery)
+    const queryLower = staffSearchQuery.toLowerCase()
     return (
-      member.display_name_kanji.toLowerCase().includes(query) ||
-      member.display_name_kana.toLowerCase().includes(query) ||
-      (member.email && member.email.toLowerCase().includes(query)) ||
-      (member.registered_email && member.registered_email.toLowerCase().includes(query))
+      normalizeForSearch(member.display_name_kanji).includes(query) ||
+      normalizeForSearch(member.display_name_kana).includes(query) ||
+      member.display_name_kanji.toLowerCase().includes(queryLower) ||
+      member.display_name_kana.toLowerCase().includes(queryLower) ||
+      (member.email && member.email.toLowerCase().includes(queryLower)) ||
+      (member.registered_email && member.registered_email.toLowerCase().includes(queryLower))
     )
   })
 
