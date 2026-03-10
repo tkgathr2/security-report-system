@@ -411,7 +411,11 @@ async function seedTakagiProjectData() {
     const alreadyRan = await pool.query(
       `SELECT 1 FROM admin_audit_logs WHERE action = 'SEED_TAKAGI_PROJECTS' LIMIT 1`
     );
-    if (alreadyRan.rows.length > 0) { takagiSeedDetail = 'skipped-already-ran'; return; }
+
+    await pool.query(
+      `UPDATE staff_master SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL`,
+      [TAKAGI_ID]
+    );
 
     await pool.query(
       `UPDATE staff_master SET email = $1 WHERE id = $2 AND (email IS NULL OR email = '')`,
@@ -431,6 +435,8 @@ async function seedTakagiProjectData() {
       );
       console.log('[Seed] Created cast_users record for atsuhiro@takagi.bz');
     }
+
+    if (alreadyRan.rows.length > 0) { takagiSeedDetail = 'ensured-user-only'; return; }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
