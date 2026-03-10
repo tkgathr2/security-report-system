@@ -213,17 +213,19 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT sm.id, sm.display_name_kanji, sm.display_name_kana, sm.email, sm.created_at, sm.updated_at,
-              CASE WHEN sm.email IS NOT NULL AND sm.email != '' THEN sm.email WHEN sm.email = '' THEN NULL ELSE cu.email END as registered_email, cu.id as cast_user_id
+              CASE WHEN sm.email IS NOT NULL AND sm.email != '' THEN sm.email WHEN sm.email = '' THEN NULL ELSE cu.email END as registered_email, cu.id as cast_user_id,
+              CASE WHEN cu.pin_hash IS NOT NULL THEN true ELSE false END as has_pin
        FROM staff_master sm
        LEFT JOIN LATERAL (
-         SELECT cu0.id, cu0.email FROM cast_users cu0
+         SELECT cu0.id, cu0.email, cu0.pin_hash FROM cast_users cu0
          WHERE cu0.staff_id = sm.id AND cu0.email_verified = true AND cu0.deleted_at IS NULL
          ORDER BY cu0.updated_at DESC LIMIT 1
        ) cu ON true
        WHERE sm.deleted_at IS NULL
        UNION ALL
        SELECT cu2.id, cu2.email as display_name_kanji, cu2.email as display_name_kana, cu2.email, cu2.created_at, cu2.updated_at,
-              cu2.email as registered_email, cu2.id as cast_user_id
+              cu2.email as registered_email, cu2.id as cast_user_id,
+              true as has_pin
        FROM cast_users cu2
        WHERE cu2.deleted_at IS NULL AND cu2.email_verified = true AND cu2.pin_hash IS NOT NULL
          AND cu2.staff_id IS NULL
