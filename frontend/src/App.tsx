@@ -835,6 +835,8 @@ function AdminApp() {
   }
 
   const normalizeForSearch = (text: string): string => {
+    const toKatakana = (input: string) => input.replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
+
     const KANJI_VARIANTS: Record<string, string> = {
       '\u9AD9': '\u9AD8', '\uFA30': '\u4FAE', '\uFA31': '\u4FBB',
       '\u5861': '\u5D0E', '\uFA11': '\u5D0E', '\u7E41': '\u7E4B',
@@ -846,7 +848,8 @@ function AdminApp() {
       '\u5B78': '\u5B66', '\u6B78': '\u5E30', '\u4E98': '\u4E99',
       '\u4E99': '\u4E98',
     }
-    let result = text.toLowerCase()
+
+    let result = toKatakana(text.normalize('NFKC')).toLowerCase()
     for (const [variant, standard] of Object.entries(KANJI_VARIANTS)) {
       result = result.split(variant).join(standard)
     }
