@@ -384,14 +384,14 @@ router.post('/staff/bulk-clear-pins', requireSuperAdmin, async (req: Request, re
 
     const count = result.rowCount;
     const adminUser = req.user as { email: string };
-    
-    logAudit({ 
-      req, 
-      actorEmail: adminUser.email, 
-      action: 'BULK_CLEAR_CAST_PINS', 
-      targetType: 'cast_user', 
-      targetId: 'all', 
-      payload: { count } 
+
+    logAudit({
+      req,
+      actorEmail: adminUser.email,
+      action: 'BULK_CLEAR_CAST_PINS',
+      targetType: 'cast_user',
+      targetId: 'all',
+      payload: { count }
     });
 
     await client.query('COMMIT');
@@ -453,7 +453,6 @@ router.post('/staff/:id/clear-pin', requireSuperAdmin, async (req: Request, res:
     client.release();
   }
 });
-
 router.delete('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {

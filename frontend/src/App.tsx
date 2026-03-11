@@ -582,6 +582,7 @@ function AdminApp() {
     }
   }
 
+<<<<<<< HEAD
   const handleClearPin = async (staffId: string) => {
     setSavingStaff(true)
     setError(null)
@@ -629,6 +630,31 @@ function AdminApp() {
     }
   }
 
+||||||| 187b920
+=======
+  const handleClearPin = async (staffId: string) => {
+    setSavingStaff(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/admin/staff/${staffId}/clear-pin`, {
+        method: 'POST',
+        credentials: 'include'
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || 'PINのクリアに失敗しました')
+      }
+      alert('PINをクリアしました')
+      setEditingStaff(null)
+      fetchStaff()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'PINのクリアに失敗しました')
+    } finally {
+      setSavingStaff(false)
+    }
+  }
+
+>>>>>>> origin/main
   const handleStaffCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
