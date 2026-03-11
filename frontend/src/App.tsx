@@ -604,6 +604,30 @@ function AdminApp() {
     }
   }
 
+  const handleBulkClearPins = async () => {
+    if (!confirm('【警告】\n全キャストユーザーのPINとログインセッションをクリアします。\n全員がログアウトされ、PINの再設定が必要になります。\n\n本当に実行しますか？')) return
+    if (!confirm('【最終確認】\nこの操作は取り消せません。\n本当に実行してよろしいですか？')) return
+    
+    setSavingStaff(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/admin/staff/bulk-clear-pins', {
+        method: 'POST',
+        credentials: 'include'
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || '一括クリアに失敗しました')
+      }
+      const data = await response.json()
+      alert(`完了しました。\n対象件数: ${data.count}件`)
+      fetchStaff()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '一括クリアに失敗しました')
+    } finally {
+      setSavingStaff(false)
+    }
+  }
   const handleStaffCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -1283,6 +1307,7 @@ function AdminApp() {
               handleUpdateStaff={handleUpdateStaff}
               handleDeleteStaff={handleDeleteStaff}
               handleClearPin={handleClearPin}
+              handleBulkClearPins={handleBulkClearPins}
               formatDate={formatDate}
             />
           )}
