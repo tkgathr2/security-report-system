@@ -250,6 +250,8 @@ async function seedStaffData() {
     }
 
     const missingSeedIdSet = new Set(missingSeedIds);
+    const normalizeKana = (s: string) => s.replace(/[\s\u3000\u00A0]/g, '');
+    const normalizeKanji = (s: string) => s.replace(/[\s\u3000\u00A0]/g, '').replace(/\u9AD9/g, '\u9AD8');
 
     let inserted = 0;
     let enforced = 0;
@@ -270,19 +272,28 @@ async function seedStaffData() {
           continue;
         }
 
+        console.log(`[Seed] INSERT conflict for ${kana} (${kanji}), searching existing...`);
+
+        const normKana = normalizeKana(kana);
+        const normKanji = normalizeKanji(kanji);
         const existing = await pool.query(
-          `SELECT id, deleted_at FROM staff_master
-           WHERE display_name_kana = $1
+          `SELECT id, deleted_at, display_name_kana, display_name_kanji FROM staff_master
+           WHERE REPLACE(REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', ''), E'\\u00A0', '') = $1
+              OR REPLACE(REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', ''), E'\\u00A0', '') = $2
            ORDER BY deleted_at IS NULL DESC, created_at ASC
            LIMIT 1`,
-          [kana]
+          [normKana, normKanji]
         );
 
         if (existing.rows.length === 0) {
+          console.log(`[Seed] No match found for ${kana} (normKana=${normKana}, normKanji=${normKanji})`);
           continue;
         }
 
         const existingId = existing.rows[0].id as string;
+        const existingKana = existing.rows[0].display_name_kana as string;
+        const existingKanji = existing.rows[0].display_name_kanji as string;
+        console.log(`[Seed] Found existing: id=${existingId}, kana='${existingKana}', kanji='${existingKanji}', deleted=${existing.rows[0].deleted_at !== null}`);
 
         if (existingId === id) {
           if (existing.rows[0].deleted_at !== null) {
@@ -301,6 +312,7 @@ async function seedStaffData() {
           `UPDATE staff_master SET id = $1, display_name_kanji = $2, display_name_kana = $3, deleted_at = NULL WHERE id = $4`,
           [id, kanji, kana, existingId]
         );
+        console.log(`[Seed] Enforced seed ID ${id} (was ${existingId}) for ${kanji}`);
         inserted++;
         enforced++;
       } catch (innerErr: unknown) {
