@@ -318,36 +318,47 @@ async function seedStaffData() {
         const normKana = normalizeKana(kana);
         const normKanji = normalizeKanji(kanji);
 
-        const existingActive = await pool.query(
+        const conflictCandidates = await pool.query(
           `SELECT id
            FROM staff_master
            WHERE deleted_at IS NULL
              AND (
-               REPLACE(REPLACE(REPLACE(display_name_kana, ' ', ''), '　', ''), ' ', '') = $1
+               display_name_kana = $3
+               OR REPLACE(REPLACE(REPLACE(display_name_kana, ' ', ''), '　', ''), ' ', '') = $1
                OR REPLACE(REPLACE(REPLACE(display_name_kanji, ' ', ''), '　', ''), ' ', '') = $2
              )
-           ORDER BY created_at ASC
-           LIMIT 1`,
-          [normKana, normKanji]
+           ORDER BY created_at ASC`,
+          [normKana, normKanji, kana]
         );
 
-        if (existingActive.rows.length === 0) {
+        const conflictIds = conflictCandidates.rows.map((r: { id: string }) => r.id as string);
+        if (conflictIds.length === 0) {
           continue;
         }
-
-        const existingId = existingActive.rows[0].id as string;
 
         const client = await pool.connect();
         try {
           await client.query('BEGIN');
 
-          await client.query(`UPDATE project_casts SET staff_id = $1 WHERE staff_id = $2`, [id, existingId]);
-          await client.query(`UPDATE cast_users SET staff_id = $1 WHERE staff_id = $2`, [id, existingId]);
+          await client.query(
+            `UPDATE project_casts SET staff_id = $1 WHERE staff_id = ANY($2::uuid[])`,
+            [id, conflictIds]
+          );
+          await client.query(
+            `UPDATE cast_users SET staff_id = $1 WHERE staff_id = ANY($2::uuid[])`,
+            [id, conflictIds]
+          );
           if (hasWriterStaffId) {
-            await client.query(`UPDATE reports SET writer_staff_id = $1 WHERE writer_staff_id = $2`, [id, existingId]);
+            await client.query(
+              `UPDATE reports SET writer_staff_id = $1 WHERE writer_staff_id = ANY($2::uuid[])`,
+              [id, conflictIds]
+            );
           }
 
-          await client.query(`UPDATE staff_master SET deleted_at = NOW() WHERE id = $1`, [existingId]);
+          await client.query(
+            `UPDATE staff_master SET deleted_at = NOW() WHERE id = ANY($1::uuid[])`,
+            [conflictIds]
+          );
 
           const retryInsert = await client.query(
             `INSERT INTO staff_master (id, display_name_kanji, display_name_kana)
@@ -358,7 +369,13 @@ async function seedStaffData() {
           );
 
           if ((retryInsert.rowCount ?? 0) === 0) {
-            throw new Error('seed insert still conflicted');
+            const stillSameKana = await client.query(
+              `SELECT COUNT(*)::int AS cnt FROM staff_master WHERE deleted_at IS NULL AND display_name_kana = $1`,
+              [kana]
+            );
+            throw new Error(
+              `seed insert still conflicted (activeSameKana=${stillSameKana.rows[0].cnt as number})`
+            );
           }
 
           await client.query('COMMIT');
@@ -385,7 +402,8 @@ async function seedStaffData() {
 
     const newCount = await pool.query(`SELECT COUNT(*) as cnt FROM staff_master ${whereClause}`);
     seedStatus = 'done-' + newCount.rows[0].cnt;
-    seedDetail += ` inserted:${inserted} enforced:${enforced} enforceErrors:${enforceErrors} seedPresentAfter:${seedPresent.rows[0].cnt} after:${newCount.rows[0].cnt}`;
+    const seedPresentAfter = parseInt(seedPresent.rows[0].cnt, 10);
+    seedDetail += ` inserted:${inserted} enforced:${enforced} enforceErrors:${enforceErrors} seedPresentAfter:${seedPresentAfter} missingAfterInsert:${seedIds.length - seedPresentAfter} after:${newCount.rows[0].cnt}`;
 
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
