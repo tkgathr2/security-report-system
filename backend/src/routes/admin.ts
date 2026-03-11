@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
@@ -14,6 +14,19 @@ const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'produc
 const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
+
+function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!req.isAuthenticated || !req.isAuthenticated() || !req.user) {
+    res.status(401).json({ error: 'UNAUTHORIZED', message: '管理者セッションがありません' });
+    return;
+  }
+  const user = req.user as Express.User;
+  if (user.role !== 'super_admin') {
+    res.status(403).json({ error: 'FORBIDDEN', message: 'スーパー管理者権限が必要です' });
+    return;
+  }
+  next();
+}
 
 function normalizeClientName(name: string): string {
   return name
@@ -218,8 +231,8 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
        FROM staff_master sm
        LEFT JOIN LATERAL (
          SELECT cu0.id, cu0.email, cu0.pin_hash FROM cast_users cu0
-         WHERE cu0.staff_id = sm.id AND cu0.email_verified = true AND cu0.deleted_at IS NULL
-         ORDER BY cu0.updated_at DESC LIMIT 1
+         WHERE cu0.staff_id = sm.id AND cu0.deleted_at IS NULL
+         ORDER BY cu0.email_verified DESC, cu0.updated_at DESC LIMIT 1
        ) cu ON true
        WHERE sm.deleted_at IS NULL
        UNION ALL
@@ -348,6 +361,55 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
     } else {
       handleDbError(res, error, 'Staff update');
     }
+  } finally {
+    client.release();
+  }
+});
+
+router.post('/staff/:id/clear-pin', requireSuperAdmin, async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+
+    await client.query('BEGIN');
+
+    const castUserResult = await client.query(
+      `SELECT id FROM cast_users
+       WHERE staff_id = $1 AND deleted_at IS NULL
+       ORDER BY email_verified DESC, updated_at DESC
+       LIMIT 1`,
+      [id]
+    );
+
+    if (castUserResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      sendNotFound(res, '対象キャストユーザーが見つかりません');
+      return;
+    }
+
+    const castUserId = castUserResult.rows[0].id as string;
+
+    await client.query(
+      `UPDATE cast_users
+       SET pin_hash = NULL,
+           pin_reset_token = NULL,
+           pin_reset_token_expires = NULL,
+           magic_link_token = NULL,
+           magic_link_expires = NULL,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [castUserId]
+    );
+
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'CLEAR_CAST_PIN', targetType: 'cast_user', targetId: castUserId, payload: { staff_id: id } });
+
+    await client.query('COMMIT');
+
+    res.json({ ok: true });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    handleDbError(res, error, 'Clear cast pin');
   } finally {
     client.release();
   }
