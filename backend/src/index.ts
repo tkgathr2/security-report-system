@@ -252,6 +252,12 @@ async function seedStaffData() {
     const existingSeedIds = new Set(existingSeed.rows.map((r: { id: string }) => r.id));
     let missingSeedIds = seedIds.filter(id => !existingSeedIds.has(id));
     seedDetail += ` missingSeed:${missingSeedIds.length}`;
+    if (missingSeedIds.length > 0) {
+      const missingSeedNames = staffData
+        .filter(([sid]) => missingSeedIds.includes(sid))
+        .map(([, k, a]) => `${k}(${a})`);
+      seedDetail += ` missingSeedNames:${missingSeedNames.slice(0, 8).join('|')}${missingSeedNames.length > 8 ? '|...' : ''}`;
+    }
 
     if (missingSeedIds.length === 0) {
       seedStatus = 'skipped-seed-present';
@@ -273,6 +279,12 @@ async function seedStaffData() {
       const afterRestoreIds = new Set(afterRestoreSeed.rows.map((r: { id: string }) => r.id));
       missingSeedIds = seedIds.filter(id => !afterRestoreIds.has(id));
       seedDetail += ` missingAfterRestore:${missingSeedIds.length}`;
+      if (missingSeedIds.length > 0) {
+        const missingSeedNames = staffData
+          .filter(([sid]) => missingSeedIds.includes(sid))
+          .map(([, k, a]) => `${k}(${a})`);
+        seedDetail += ` missingAfterRestoreNames:${missingSeedNames.slice(0, 8).join('|')}${missingSeedNames.length > 8 ? '|...' : ''}`;
+      }
 
       if (missingSeedIds.length === 0) {
         seedStatus = 'restored-seed';
@@ -293,6 +305,7 @@ async function seedStaffData() {
     let inserted = 0;
     let enforced = 0;
     let enforceErrors = 0;
+    const enforceFailSamples: string[] = [];
 
     for (const [id, kanji, kana] of staffData) {
       if (!missingSeedIdSet.has(id)) continue;
@@ -386,12 +399,14 @@ async function seedStaffData() {
           enforceErrors++;
           const msg = enforceErr instanceof Error ? enforceErr.message : String(enforceErr);
           console.log(`[Seed] Enforce failed ${kana}: ${msg}`);
+          enforceFailSamples.push(`${kana}:${msg}`);
         } finally {
           client.release();
         }
       } catch (innerErr: unknown) {
         const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
         console.log(`[Seed] Skip ${kana}: ${msg}`);
+        enforceFailSamples.push(`${kana}:skip:${msg}`);
       }
     }
 
@@ -404,6 +419,9 @@ async function seedStaffData() {
     seedStatus = 'done-' + newCount.rows[0].cnt;
     const seedPresentAfter = parseInt(seedPresent.rows[0].cnt, 10);
     seedDetail += ` inserted:${inserted} enforced:${enforced} enforceErrors:${enforceErrors} seedPresentAfter:${seedPresentAfter} missingAfterInsert:${seedIds.length - seedPresentAfter} after:${newCount.rows[0].cnt}`;
+    if (enforceFailSamples.length > 0) {
+      seedDetail += ` enforceFailSamples:${enforceFailSamples.slice(0, 5).join('||')}${enforceFailSamples.length > 5 ? '||...' : ''}`;
+    }
 
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
