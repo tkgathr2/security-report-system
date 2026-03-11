@@ -353,6 +353,23 @@ async function seedStaffData() {
         try {
           await client.query('BEGIN');
 
+          // 1. Soft-delete conflicting rows to free up the unique constraint
+          await client.query(
+            `UPDATE staff_master SET deleted_at = NOW() WHERE id = ANY($1::uuid[])`,
+            [conflictIds]
+          );
+
+          // 2. Insert the canonical seed record
+          const retryInsert = await client.query(
+            `INSERT INTO staff_master (id, display_name_kanji, display_name_kana)
+             VALUES ($1, $2, $3)
+             ON CONFLICT DO NOTHING
+             RETURNING id`,
+            [id, kanji, kana]
+          );
+
+          // 3. Update FK references to point to the new seed ID
+          // Note: We do this AFTER insert so the FK constraint is satisfied
           await client.query(
             `UPDATE project_casts SET staff_id = $1 WHERE staff_id = ANY($2::uuid[])`,
             [id, conflictIds]
@@ -367,19 +384,6 @@ async function seedStaffData() {
               [id, conflictIds]
             );
           }
-
-          await client.query(
-            `UPDATE staff_master SET deleted_at = NOW() WHERE id = ANY($1::uuid[])`,
-            [conflictIds]
-          );
-
-          const retryInsert = await client.query(
-            `INSERT INTO staff_master (id, display_name_kanji, display_name_kana)
-             VALUES ($1, $2, $3)
-             ON CONFLICT DO NOTHING
-             RETURNING id`,
-            [id, kanji, kana]
-          );
 
           if ((retryInsert.rowCount ?? 0) === 0) {
             const stillSameKana = await client.query(
