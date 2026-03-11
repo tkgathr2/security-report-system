@@ -177,7 +177,6 @@ async function seedStaffData() {
     const countResult = await pool.query(`SELECT COUNT(*) as cnt FROM staff_master ${whereClause}`);
     const count = parseInt(countResult.rows[0].cnt, 10);
     seedDetail += ` count:${count}`;
-    if (count >= 10) { seedStatus = 'skipped-enough'; return; }
 
     const staffData = [
       ['e2a3ee29-fa62-4394-b5c5-4826f30cde30', '有澤 知子', 'アリサワ トモコ'],
@@ -212,17 +211,41 @@ async function seedStaffData() {
       ['006fdb66-2129-4491-b701-b5ea27176fb9', '高木 豊大', 'タカギ アツヒロ'],
     ];
 
-    if (hasDeletedAt) {
-      const seedIds = staffData.map(s => s[0]);
-      const placeholders = seedIds.map((_, i) => `$${i + 1}`).join(', ');
-      const restored = await pool.query(`UPDATE staff_master SET deleted_at = NULL WHERE id IN (${placeholders}) AND deleted_at IS NOT NULL`, seedIds);
-      seedDetail += ` restored:${restored.rowCount}`;
+    const seedIds = staffData.map(s => s[0]);
+    const existingSeedQuery = hasDeletedAt
+      ? 'SELECT id FROM staff_master WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL'
+      : 'SELECT id FROM staff_master WHERE id = ANY($1::uuid[])';
+    const existingSeed = await pool.query(existingSeedQuery, [seedIds]);
+    const existingSeedIds = new Set(existingSeed.rows.map((r: { id: string }) => r.id));
+    let missingSeedIds = seedIds.filter(id => !existingSeedIds.has(id));
+    seedDetail += ` missingSeed:${missingSeedIds.length}`;
+
+    if (missingSeedIds.length === 0) {
+      seedStatus = 'skipped-seed-present';
+      return;
     }
 
-    const recount = await pool.query(`SELECT COUNT(*) as cnt FROM staff_master ${whereClause}`);
-    const recountVal = parseInt(recount.rows[0].cnt, 10);
-    seedDetail += ` afterRestore:${recountVal}`;
-    if (recountVal >= 10) { seedStatus = 'restored-' + recountVal; return; }
+    if (hasDeletedAt) {
+      const placeholders = seedIds.map((_, i) => `$${i + 1}`).join(', ');
+      const restored = await pool.query(
+        `UPDATE staff_master SET deleted_at = NULL WHERE id IN (${placeholders}) AND deleted_at IS NOT NULL`,
+        seedIds
+      );
+      seedDetail += ` restored:${restored.rowCount}`;
+
+      const afterRestoreSeed = await pool.query(
+        'SELECT id FROM staff_master WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL',
+        [seedIds]
+      );
+      const afterRestoreIds = new Set(afterRestoreSeed.rows.map((r: { id: string }) => r.id));
+      missingSeedIds = seedIds.filter(id => !afterRestoreIds.has(id));
+      seedDetail += ` missingAfterRestore:${missingSeedIds.length}`;
+
+      if (missingSeedIds.length === 0) {
+        seedStatus = 'restored-seed';
+        return;
+      }
+    }
 
     let inserted = 0;
     for (const [id, kanji, kana] of staffData) {
