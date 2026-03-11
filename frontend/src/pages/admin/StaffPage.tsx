@@ -37,6 +37,7 @@ interface StaffPageProps {
   handleCreateStaff: () => void
   handleUpdateStaff: () => void
   handleDeleteStaff: (id: string, name: string) => void
+  handleClearPin: (id: string) => void
   formatDate: (dateStr: string) => string
 }
 
@@ -81,6 +82,7 @@ export function StaffPage({
   handleCreateStaff,
   handleUpdateStaff,
   handleDeleteStaff,
+  handleClearPin,
   formatDate,
 }: StaffPageProps) {
   const [pinSort, setPinSort] = useState<PinSortMode>('none')
@@ -320,6 +322,17 @@ export function StaffPage({
                                   disabled={savingStaff}
                                 >
                                   削除
+                                </button>
+                                <button
+                                  style={{...styles.cancelButton, backgroundColor: '#f57c00', color: 'white', marginLeft: '8px'}}
+                                  onClick={() => {
+                                    if (window.confirm('暗証番号とログインセッションをクリアしますか？\n（スーパー管理者のみ実行可能です）')) {
+                                      handleClearPin(editingStaff.id)
+                                    }
+                                  }}
+                                  disabled={savingStaff}
+                                >
+                                  PINクリア
                                 </button>
                                 <div style={{ display: 'flex', gap: '8px' }}>
                                   <button
