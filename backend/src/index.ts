@@ -250,7 +250,6 @@ async function seedStaffData() {
     }
 
     const missingSeedIdSet = new Set(missingSeedIds);
-    const normalizeKana = (s: string) => s.replace(/[ \u3000]/g, '');
 
     let inserted = 0;
     let enforced = 0;
@@ -271,19 +270,12 @@ async function seedStaffData() {
           continue;
         }
 
-        if (!hasDeletedAt) {
-          continue;
-        }
-
-        const normKana = normalizeKana(kana);
         const existing = await pool.query(
-          `SELECT id
-           FROM staff_master
-           WHERE deleted_at IS NULL
-             AND REPLACE(REPLACE(display_name_kana, ' ', ''), '\u3000', '') = $1
-           ORDER BY created_at ASC
+          `SELECT id, deleted_at FROM staff_master
+           WHERE display_name_kana = $1
+           ORDER BY deleted_at IS NULL DESC, created_at ASC
            LIMIT 1`,
-          [normKana]
+          [kana]
         );
 
         if (existing.rows.length === 0) {
@@ -291,37 +283,26 @@ async function seedStaffData() {
         }
 
         const existingId = existing.rows[0].id as string;
+
         if (existingId === id) {
+          if (existing.rows[0].deleted_at !== null) {
+            await pool.query(
+              `UPDATE staff_master SET deleted_at = NULL, display_name_kanji = $2 WHERE id = $1`,
+              [id, kanji]
+            );
+            inserted++;
+          }
           continue;
         }
 
-        await pool.query('BEGIN');
-        try {
-          await pool.query(`UPDATE staff_master SET deleted_at = NOW() WHERE id = $1`, [existingId]);
-
-          const retryInsert = await pool.query(
-            `INSERT INTO staff_master (id, display_name_kanji, display_name_kana)
-             VALUES ($1, $2, $3)
-             ON CONFLICT DO NOTHING
-             RETURNING id`,
-            [id, kanji, kana]
-          );
-
-          if ((retryInsert.rowCount ?? 0) === 0) {
-            throw new Error('seed insert still conflicted');
-          }
-
-          await pool.query(`UPDATE project_casts SET staff_id = $1 WHERE staff_id = $2`, [id, existingId]);
-          await pool.query(`UPDATE cast_users SET staff_id = $1 WHERE staff_id = $2`, [id, existingId]);
-
-          await pool.query('COMMIT');
-          inserted++;
-          enforced++;
-        } catch (enforceErr: unknown) {
-          await pool.query('ROLLBACK');
-          const msg = enforceErr instanceof Error ? enforceErr.message : String(enforceErr);
-          console.log(`[Seed] Enforce failed ${kana}: ${msg}`);
-        }
+        await pool.query(`UPDATE project_casts SET staff_id = $1 WHERE staff_id = $2`, [id, existingId]);
+        await pool.query(`UPDATE cast_users SET staff_id = $1 WHERE staff_id = $2`, [id, existingId]);
+        await pool.query(
+          `UPDATE staff_master SET id = $1, display_name_kanji = $2, display_name_kana = $3, deleted_at = NULL WHERE id = $4`,
+          [id, kanji, kana, existingId]
+        );
+        inserted++;
+        enforced++;
       } catch (innerErr: unknown) {
         const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
         console.log(`[Seed] Skip ${kana}: ${msg}`);
