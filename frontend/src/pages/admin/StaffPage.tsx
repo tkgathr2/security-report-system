@@ -127,6 +127,7 @@ export function StaffPage({
                   <button 
                     style={{...styles.secondaryButton, backgroundColor: '#d32f2f', color: 'white', border: 'none'}} 
                     onClick={handleBulkClearPins}
+                    disabled={savingStaff}
                   >
                     PIN一括クリア
                   </button>
