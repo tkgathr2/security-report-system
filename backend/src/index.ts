@@ -165,6 +165,39 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+const SEEDED_STAFF_DATA: ReadonlyArray<readonly [string, string, string]> = [
+  ['e2a3ee29-fa62-4394-b5c5-4826f30cde30', '有澤 知子', 'アリサワ トモコ'],
+  ['49972e7a-f311-4358-86cb-2b5c34081b69', '井上 誠司', 'イノウエ セイジ'],
+  ['433360cd-5de2-4402-83a4-1c0abb2f1626', '井村 義則', 'イムラ ヨシノリ'],
+  ['2018528a-1287-4df3-9401-14b88fceaf6d', 'イ モン チョー', 'イ モン チョー'],
+  ['5cdb75da-9c58-4dbf-9deb-195afdc96fd1', '梅原 幸雄', 'ウメハラ ユキオ'],
+  ['0f1514c9-0524-4be6-b725-5161ed6a371f', '大野 祢音', 'オオノ ナイト'],
+  ['578c67f0-88e9-4f2d-93b1-079d977b71ca', '梶原 創', 'カジハラ ソウ'],
+  ['712606ff-a3bd-49ae-a351-9cd10dab8bb5', 'カッサ ヨハネス アスゲドム', 'カッサ ヨハネス アスゲドム'],
+  ['83b466ae-a722-4238-b698-8bc93f99a5f7', '川面 直人', 'カワオモ ナオト'],
+  ['b55cd8f2-2e28-4f84-bb79-084107001b13', '神崎 誠', 'カンザキ マコト'],
+  ['e9bc1be3-8661-4456-ad1e-9618ccf01abf', '岸本 直美', 'キシモト ナオミ'],
+  ['ed998da1-091c-4d1a-94f7-22ed6376beb7', '北口 恵一', 'キタグチ ケイイチ'],
+  ['897b046a-15fc-4865-af3f-f5d2f1d4671d', '京谷 雅弥', 'キョウタニ マサヤ'],
+  ['105b5ece-354d-4376-b56b-d0dbbafcd1e3', '久保 勇太', 'クボ ユウタ'],
+  ['85580fdd-feb4-495b-a2ae-5b7f3928cc96', '近藤 拓翔', 'コンドウ タクト'],
+  ['15dd404b-8f6e-40ca-8f81-cd19549cc78b', '高梨 航希', 'タカナシ コウキ'],
+  ['b06832e9-e141-438d-83d8-0d1b112d6243', '土田 直矢', 'ツチダ ナオヤ'],
+  ['d62cfa48-664f-4ff2-a276-96842e88c91b', 'テストスタッフ', 'テストスタッフ'],
+  ['c4882bde-8fa0-425a-b29e-45a63af1cfc5', '中嶋 正一', 'ナカジマ ショウイチ'],
+  ['03f26cec-e969-47d3-bf89-2e064a2abdce', '中田 琉月', 'ナカタ ルツキ'],
+  ['bca398ac-c11e-424c-b098-cb498b09abb0', '中村 文彦', 'ナカムラ フミヒコ'],
+  ['461239ac-ba19-4896-82bd-44587a46c443', '西村 克人', 'ニシムラ カツト'],
+  ['f5321299-9b72-4b51-890d-4a311d57efeb', '波多野 匠', 'ハタノ タクミ'],
+  ['1527734d-a112-4176-8bc7-63169bd14e1c', '廣中 良信', 'ヒロナカ ヨシノブ'],
+  ['34e86a31-9c7b-48fa-b36b-24128dd76327', '藤井 勝', 'フジイ マサル'],
+  ['bfaef3bc-2eb8-4a8b-9437-b200ff643b75', '藤田 風雅', 'フジタ フウガ'],
+  ['2969c9f2-b58b-4c37-bde2-f13e7c3642a7', '松本 祐太郎', 'マツモト ユウタロウ'],
+  ['a7f96a6a-907e-45b5-a1eb-462f95ccf57c', '峯 栄治', 'ミネ エイジ'],
+  ['439a9918-4006-4fe7-b21f-94192a0144e1', '宮﨑 萌', 'ミヤザキ モエ'],
+  ['006fdb66-2129-4491-b701-b5ea27176fb9', '高木 豊大', 'タカギ アツヒロ'],
+];
+
 async function seedStaffData() {
   try {
     const colResult = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'staff_master' ORDER BY ordinal_position`);
@@ -178,38 +211,7 @@ async function seedStaffData() {
     const count = parseInt(countResult.rows[0].cnt, 10);
     seedDetail += ` count:${count}`;
 
-    const staffData = [
-      ['e2a3ee29-fa62-4394-b5c5-4826f30cde30', '有澤 知子', 'アリサワ トモコ'],
-      ['49972e7a-f311-4358-86cb-2b5c34081b69', '井上 誠司', 'イノウエ セイジ'],
-      ['433360cd-5de2-4402-83a4-1c0abb2f1626', '井村 義則', 'イムラ ヨシノリ'],
-      ['2018528a-1287-4df3-9401-14b88fceaf6d', 'イ モン チョー', 'イ モン チョー'],
-      ['5cdb75da-9c58-4dbf-9deb-195afdc96fd1', '梅原 幸雄', 'ウメハラ ユキオ'],
-      ['0f1514c9-0524-4be6-b725-5161ed6a371f', '大野 祢音', 'オオノ ナイト'],
-      ['578c67f0-88e9-4f2d-93b1-079d977b71ca', '梶原 創', 'カジハラ ソウ'],
-      ['712606ff-a3bd-49ae-a351-9cd10dab8bb5', 'カッサ ヨハネス アスゲドム', 'カッサ ヨハネス アスゲドム'],
-      ['83b466ae-a722-4238-b698-8bc93f99a5f7', '川面 直人', 'カワオモ ナオト'],
-      ['b55cd8f2-2e28-4f84-bb79-084107001b13', '神崎 誠', 'カンザキ マコト'],
-      ['e9bc1be3-8661-4456-ad1e-9618ccf01abf', '岸本 直美', 'キシモト ナオミ'],
-      ['ed998da1-091c-4d1a-94f7-22ed6376beb7', '北口 恵一', 'キタグチ ケイイチ'],
-      ['897b046a-15fc-4865-af3f-f5d2f1d4671d', '京谷 雅弥', 'キョウタニ マサヤ'],
-      ['105b5ece-354d-4376-b56b-d0dbbafcd1e3', '久保 勇太', 'クボ ユウタ'],
-      ['85580fdd-feb4-495b-a2ae-5b7f3928cc96', '近藤 拓翔', 'コンドウ タクト'],
-      ['15dd404b-8f6e-40ca-8f81-cd19549cc78b', '高梨 航希', 'タカナシ コウキ'],
-      ['b06832e9-e141-438d-83d8-0d1b112d6243', '土田 直矢', 'ツチダ ナオヤ'],
-      ['d62cfa48-664f-4ff2-a276-96842e88c91b', 'テストスタッフ', 'テストスタッフ'],
-      ['c4882bde-8fa0-425a-b29e-45a63af1cfc5', '中嶋 正一', 'ナカジマ ショウイチ'],
-      ['03f26cec-e969-47d3-bf89-2e064a2abdce', '中田 琉月', 'ナカタ ルツキ'],
-      ['bca398ac-c11e-424c-b098-cb498b09abb0', '中村 文彦', 'ナカムラ フミヒコ'],
-      ['461239ac-ba19-4896-82bd-44587a46c443', '西村 克人', 'ニシムラ カツト'],
-      ['f5321299-9b72-4b51-890d-4a311d57efeb', '波多野 匠', 'ハタノ タクミ'],
-      ['1527734d-a112-4176-8bc7-63169bd14e1c', '廣中 良信', 'ヒロナカ ヨシノブ'],
-      ['34e86a31-9c7b-48fa-b36b-24128dd76327', '藤井 勝', 'フジイ マサル'],
-      ['bfaef3bc-2eb8-4a8b-9437-b200ff643b75', '藤田 風雅', 'フジタ フウガ'],
-      ['2969c9f2-b58b-4c37-bde2-f13e7c3642a7', '松本 祐太郎', 'マツモト ユウタロウ'],
-      ['a7f96a6a-907e-45b5-a1eb-462f95ccf57c', '峯 栄治', 'ミネ エイジ'],
-      ['439a9918-4006-4fe7-b21f-94192a0144e1', '宮﨑 萌', 'ミヤザキ モエ'],
-      ['006fdb66-2129-4491-b701-b5ea27176fb9', '高木 豊大', 'タカギ アツヒロ'],
-    ];
+    const staffData = SEEDED_STAFF_DATA;
 
     const seedIds = staffData.map(s => s[0]);
     const existingSeedQuery = hasDeletedAt
@@ -332,6 +334,8 @@ async function cleanupData() {
     }
     cleanupDetail = `testDeleted:${deletedTest}`;
 
+    const seedIds = new Set(SEEDED_STAFF_DATA.map(s => s[0]));
+
     const dupeResult = await pool.query(`
       SELECT REPLACE(REPLACE(display_name_kana, ' ', ''), '\u3000', '') as norm_kana,
              array_agg(id ORDER BY created_at ASC) as ids,
@@ -343,8 +347,10 @@ async function cleanupData() {
     `);
     let mergedCount = 0;
     for (const row of dupeResult.rows) {
-      const keepId = row.ids[0];
-      const removeIds = row.ids.slice(1);
+      const allIds: string[] = row.ids;
+      const seedInGroup = allIds.find(id => seedIds.has(id));
+      const keepId = seedInGroup || allIds[0];
+      const removeIds = allIds.filter(id => id !== keepId);
       for (const removeId of removeIds) {
         await pool.query(
           `UPDATE project_casts SET staff_id = $1 WHERE staff_id = $2`,
