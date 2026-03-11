@@ -206,6 +206,37 @@ async function seedStaffData() {
     const hasCreatedBy = cols.includes('created_by');
     const hasEmail = cols.includes('email');
     const hasDeletedAt = cols.includes('deleted_at');
+
+    if (hasDeletedAt) {
+      try {
+        const constraintExists = await pool.query(
+          `SELECT 1 FROM pg_constraint WHERE conname = 'staff_master_display_name_kana_unique' LIMIT 1`
+        );
+        const partialIndexExists = await pool.query(
+          `SELECT 1 FROM pg_indexes WHERE tablename = 'staff_master' AND indexname = 'idx_staff_master_display_name_kana_not_deleted' LIMIT 1`
+        );
+
+        seedDetail += ` kanaUniqueConstraint:${constraintExists.rowCount ?? 0} kanaPartialIndex:${partialIndexExists.rowCount ?? 0}`;
+
+        if ((constraintExists.rowCount ?? 0) > 0) {
+          await pool.query(
+            `ALTER TABLE staff_master DROP CONSTRAINT IF EXISTS staff_master_display_name_kana_unique;`
+          );
+          seedDetail += ' kanaUniqueConstraintDropped:1';
+        }
+
+        if ((partialIndexExists.rowCount ?? 0) === 0) {
+          await pool.query(
+            `CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_master_display_name_kana_not_deleted ON staff_master (display_name_kana) WHERE deleted_at IS NULL;`
+          );
+          seedDetail += ' kanaPartialIndexCreated:1';
+        }
+      } catch (schemaErr: unknown) {
+        const msg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
+        seedDetail += ` kanaSchemaFixErr:${msg}`;
+      }
+    }
+
     const whereClause = hasDeletedAt ? 'WHERE deleted_at IS NULL' : '';
     const countResult = await pool.query(`SELECT COUNT(*) as cnt FROM staff_master ${whereClause}`);
     const count = parseInt(countResult.rows[0].cnt, 10);
