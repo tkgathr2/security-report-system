@@ -38,6 +38,7 @@ interface StaffPageProps {
   handleUpdateStaff: () => void
   handleDeleteStaff: (id: string, name: string) => void
   handleClearPin: (id: string) => void
+  handleBulkClearPins: () => void
   formatDate: (dateStr: string) => string
 }
 
@@ -83,6 +84,7 @@ export function StaffPage({
   handleUpdateStaff,
   handleDeleteStaff,
   handleClearPin,
+  handleBulkClearPins,
   formatDate,
 }: StaffPageProps) {
   const [pinSort, setPinSort] = useState<PinSortMode>('none')
@@ -122,6 +124,12 @@ export function StaffPage({
                     />
                     {staffImporting ? 'インポート中...' : 'CSVインポート'}
                   </label>
+                  <button 
+                    style={{...styles.secondaryButton, backgroundColor: '#d32f2f', color: 'white', border: 'none'}} 
+                    onClick={handleBulkClearPins}
+                  >
+                    PIN一括クリア
+                  </button>
                   <button style={styles.primaryButton} onClick={() => setShowStaffModal(true)}>
                     + 新規登録
                   </button>

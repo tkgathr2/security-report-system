@@ -366,6 +366,45 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
+router.post('/staff/bulk-clear-pins', requireSuperAdmin, async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `UPDATE cast_users
+       SET pin_hash = NULL,
+           pin_reset_token = NULL,
+           pin_reset_token_expires = NULL,
+           magic_link_token = NULL,
+           magic_link_expires = NULL,
+           updated_at = NOW()
+       WHERE deleted_at IS NULL`
+    );
+
+    const count = result.rowCount;
+    const adminUser = req.user as { email: string };
+    
+    logAudit({ 
+      req, 
+      actorEmail: adminUser.email, 
+      action: 'BULK_CLEAR_CAST_PINS', 
+      targetType: 'cast_user', 
+      targetId: 'all', 
+      payload: { count } 
+    });
+
+    await client.query('COMMIT');
+
+    res.json({ ok: true, count });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    handleDbError(res, error, 'Bulk clear cast pins');
+  } finally {
+    client.release();
+  }
+});
+
 router.post('/staff/:id/clear-pin', requireSuperAdmin, async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
