@@ -38,7 +38,7 @@ interface StaffPageProps {
   handleUpdateStaff: () => void
   handleDeleteStaff: (id: string, name: string) => void
   handleClearPin: (id: string) => void
-  handleBulkClearPins: () => void
+  // handleBulkClearPins: () => void (PIN一括クリアは撤廃) 
   formatDate: (dateStr: string) => string
 }
 
@@ -84,7 +84,7 @@ export function StaffPage({
   handleUpdateStaff,
   handleDeleteStaff,
   handleClearPin,
-  handleBulkClearPins,
+  // handleBulkClearPins, (PIN一括クリアは撤廃) 
   formatDate,
 }: StaffPageProps) {
   const [pinSort, setPinSort] = useState<PinSortMode>('none')
@@ -126,7 +126,7 @@ export function StaffPage({
                   </label>
                   <button 
                     style={{...styles.secondaryButton, backgroundColor: '#d32f2f', color: 'white', border: 'none'}} 
-                    onClick={handleBulkClearPins}
+                    // onClick={handleBulkClearPins} (PIN一括クリアは撤廃) 
                     disabled={savingStaff}
                   >
                     PIN一括クリア

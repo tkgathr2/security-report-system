@@ -1307,7 +1307,7 @@ function AdminApp() {
               handleUpdateStaff={handleUpdateStaff}
               handleDeleteStaff={handleDeleteStaff}
               handleClearPin={handleClearPin}
-              handleBulkClearPins={handleBulkClearPins}
+              // handleBulkClearPins={handleBulkClearPins} (PIN一括クリアは撤廃)
               formatDate={formatDate}
             />
           )}
