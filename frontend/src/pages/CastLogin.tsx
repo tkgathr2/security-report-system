@@ -191,7 +191,7 @@ export default function CastLogin() {
     <div className="cast-container">
       <div className="cast-card">
         <div className="cast-logo">デジタル警備報告書システム<br />【ほうこちゃん】</div>
-        <h1>スタッフログイン</h1>
+        <h1>キャストログイン</h1>
 
         <form onSubmit={handleLogin}>
           <div className="cast-input-group">

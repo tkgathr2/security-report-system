@@ -91,7 +91,7 @@ export default function CastMailHelp() {
             メール内のリンクから登録を続けて下さい。
           </p>
           <div className="cast-links">
-            <a href="/cast/register">スタッフ登録に戻る</a>
+            <a href="/cast/register">キャスト登録に戻る</a>
           </div>
         </div>
       </div>
@@ -146,7 +146,7 @@ export default function CastMailHelp() {
 
           <div className="cast-links">
             <a href="/cast/reset-pin">暗証番号を忘れた方はこちら</a>
-            <a href="/cast/register">スタッフ登録に戻る</a>
+            <a href="/cast/register">キャスト登録に戻る</a>
           </div>
         </div>
       </div>
@@ -183,7 +183,7 @@ export default function CastMailHelp() {
         </form>
 
         <div className="cast-links">
-          <a href="/cast/register">スタッフ登録に戻る</a>
+          <a href="/cast/register">キャスト登録に戻る</a>
         </div>
       </div>
     </div>

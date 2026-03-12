@@ -111,7 +111,7 @@ export default function CastRegister() {
     <div className="cast-container">
       <div className="cast-card">
         <div className="cast-logo">デジタル警備報告書システム<br />【ほうこちゃん】</div>
-        <h1>スタッフ登録</h1>
+        <h1>キャスト登録</h1>
         <p className="cast-subtitle">メールアドレスを入力してください</p>
 
         <form onSubmit={handleSubmit}>

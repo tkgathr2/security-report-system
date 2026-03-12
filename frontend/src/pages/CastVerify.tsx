@@ -135,7 +135,7 @@ export default function CastVerify() {
     setError('');
 
     if (!selectedStaffId) {
-      setError('スタッフを選択してください。名前（カナまたは漢字）を入力して候補から選んでください。');
+      setError('キャストを選択してください。名前（カナまたは漢字）を入力して候補から選んでください。');
       return;
     }
 
@@ -246,7 +246,7 @@ export default function CastVerify() {
             {nameKana.length > 0 && staffSuggestions.length === 0 && showSuggestions && !searching && (
               <div className="staff-suggestions">
                 <div className="staff-suggestion-empty">
-                  該当するスタッフが見つかりません
+                  該当するキャストが見つかりません
                 </div>
               </div>
             )}
@@ -254,7 +254,7 @@ export default function CastVerify() {
 
           {selectedStaffId && (
             <div className="cast-input-group">
-              <label>選択されたスタッフ</label>
+              <label>選択された名前</label>
               <div className="selected-staff">
                 <span className="selected-staff-name">{nameKanji}</span>
                 <span className="selected-staff-kana">（{nameKana}）</span>
