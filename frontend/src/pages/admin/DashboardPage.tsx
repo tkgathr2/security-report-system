@@ -289,7 +289,7 @@ export function DashboardPage({
                     </div>
                     <div style={{padding: '12px', background: '#f8f9fa', borderRadius: '8px', cursor: 'pointer'}} onClick={() => navigateTo('staff')}>
                       <div style={{fontSize: '22px', fontWeight: 'bold', color: COLORS.text}}>{stats?.total_staff || 0}</div>
-                      <div style={{fontSize: '12px', color: COLORS.darkGray}}>スタッフ数</div>
+                      <div style={{fontSize: '12px', color: COLORS.darkGray}}>キャスト数</div>
                     </div>
                   </div>
                 </div>
@@ -306,7 +306,7 @@ export function DashboardPage({
                     </button>
                     <button style={{...styles.actionButton, margin: 0, width: '100%', textAlign: 'left' as const}} onClick={() => navigateTo('staff')}>
                       <span style={styles.actionIcon}>&#128101;</span>
-                      スタッフを管理
+                      キャストを管理
                     </button>
                     <button style={{...styles.actionButton, margin: 0, width: '100%', textAlign: 'left' as const, backgroundColor: '#fff3cd', borderColor: '#ffc107'}} onClick={handleDeleteProjectsWithoutCasts}>
                       <span style={styles.actionIcon}>&#128465;</span>

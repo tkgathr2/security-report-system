@@ -106,7 +106,7 @@ export function CsvImportPage({
                 <span style={styles.resultValue}>{importResult.updated_projects_count ?? 0}件</span>
               </div>
               <div style={styles.resultItem}>
-                <span style={styles.resultLabel}>自動追加スタッフ</span>
+                <span style={styles.resultLabel}>自動追加キャスト</span>
                 <span style={styles.resultValue}>{importResult.staff_auto_added_count ?? 0}件</span>
               </div>
               <div style={styles.resultItem}>
@@ -116,7 +116,7 @@ export function CsvImportPage({
             </div>
             {importResult.staff_without_email && importResult.staff_without_email.length > 0 && (
               <div style={{ ...styles.warningBox, backgroundColor: '#fff3cd', color: '#856404', border: '1px solid #ffc107', padding: '12px 16px' }}>
-                <strong>メールアドレス未登録のスタッフ（{importResult.staff_without_email.length}名）:</strong>
+                <strong>メールアドレス未登録のキャスト（{importResult.staff_without_email.length}名）:</strong>
                 <div style={{ marginTop: '4px' }}>{importResult.staff_without_email.join('、')}</div>
               </div>
             )}

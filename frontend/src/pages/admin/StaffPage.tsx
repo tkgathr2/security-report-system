@@ -167,7 +167,7 @@ export function StaffPage({
                                                         {loading ? (
                                                           <p>読み込み中...</p>
                                                         ) : staff.length === 0 ? (
-                                                          <p style={styles.emptyMessage}>スタッフが登録されていません</p>
+                                                          <p style={styles.emptyMessage}>キャストが登録されていません</p>
                                                         ) : filteredStaff.length === 0 ? (
                                                           <p style={styles.emptyMessage}>検索結果がありません</p>
                                                         ) : isMobile ? (
@@ -248,7 +248,7 @@ export function StaffPage({
                             {showStaffModal && (
                 <div style={styles.modalOverlay} onClick={() => setShowStaffModal(false)}>
                   <div style={styles.modal} onClick={e => e.stopPropagation()}>
-                    <h3 style={styles.modalTitle}>スタッフ新規登録</h3>
+                    <h3 style={styles.modalTitle}>キャスト新規登録</h3>
                     <div style={styles.formGroup}>
                       <label style={styles.label}>氏名（漢字）</label>
                       <input

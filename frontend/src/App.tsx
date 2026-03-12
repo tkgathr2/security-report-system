@@ -358,7 +358,7 @@ function AdminApp() {
       const data = await response.json()
       setStaff(data.staff || [])
     } catch {
-      setError('スタッフ一覧の取得に失敗しました')
+      setError('キャスト一覧の取得に失敗しました')
     } finally {
       setLoading(false)
     }
@@ -1384,7 +1384,7 @@ function AdminApp() {
                       <tr>
                         <th style={styles.th}>No.</th>
                         <th style={styles.th}>氏名</th>
-                        <th style={styles.th}>スタッフNo.</th>
+                        <th style={styles.th}>キャストNo.</th>
                       </tr>
                     </thead>
                     <tbody>
