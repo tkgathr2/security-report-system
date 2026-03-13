@@ -129,7 +129,6 @@ export function StaffPage({
                     onClick={handleBulkClearPins}
                     disabled={savingStaff}
                   >
-                    PIN一括クリア
                   </button>
                   <button style={styles.primaryButton} onClick={() => setShowStaffModal(true)}>
                     + 新規登録

@@ -366,7 +366,7 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
-router.post('/staff/bulk-clear-pins', requireSuperAdmin, async (req: Request, res: Response) => {
+// bulk clear pin endpoint removed
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

@@ -611,19 +611,19 @@ function AdminApp() {
     setSavingStaff(true)
     setError(null)
     try {
-      const response = await fetch('/api/admin/staff/bulk-clear-pins', {
+      // bulk clear pin removed
         method: 'POST',
         credentials: 'include'
       })
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.message || '一括クリアに失敗しました')
+        // bulk clear pin removed
       }
       const data = await response.json()
       alert(`完了しました。\n対象件数: ${data.count}件`)
       fetchStaff()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '一括クリアに失敗しました')
+      // bulk clear pin removed
     } finally {
       setSavingStaff(false)
     }

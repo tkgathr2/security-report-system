@@ -95,7 +95,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // Check if user already exists
     const existingUser = await pool.query(
-      `SELECT cu.id, cu.email_verified, cu.staff_id, sm.display_name_kanji as name
+      `SELECT cu.id, cu.email_verified, cu.staff_id, cu.pin_hash, sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
        WHERE cu.email = $1 AND cu.deleted_at IS NULL`,
@@ -107,7 +107,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
     if (existingUser.rows.length > 0) {
       const user = existingUser.rows[0];
-      if (user.email_verified && user.name) {
+      if (user.email_verified && user.pin_hash) {
         return res.status(400).json({ 
           message: '既に登録済みです。ログインしてください',
           redirect: '/cast/login'
