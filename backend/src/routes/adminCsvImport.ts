@@ -372,6 +372,49 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
     return;
   }
 
+  // Row-level required field validation: if any row has missing required fields,
+  // block the entire import (no partial imports).
+  const rowValidationErrors: Array<{ row: number; reason: string }> = [];
+  for (let i = 0; i < records.length; i++) {
+    const row = records[i];
+    const rowNum = i + 2;
+
+    const projectNameKey = mapping.projectName;
+    const clientNameKey = mapping.clientName;
+    const locationKey = mapping.location;
+    const workDateKey = mapping.workDate;
+    const staffNameKey = mapping.staffName;
+
+    const projectName = projectNameKey ? row[projectNameKey]?.trim() : undefined;
+    const clientNameRaw = clientNameKey ? row[clientNameKey]?.trim() : undefined;
+    const location = locationKey ? row[locationKey]?.trim() : undefined;
+    const workDateStr = workDateKey ? row[workDateKey]?.trim() : undefined;
+    const staffName = staffNameKey ? row[staffNameKey]?.trim() : undefined;
+
+    const emptyFields: string[] = [];
+    if (!projectName) emptyFields.push('案件名');
+    if (isEmptyClientName(clientNameRaw)) emptyFields.push('クライアント名');
+    if (!location) emptyFields.push('実施場所');
+    if (!workDateStr) emptyFields.push('実施日');
+    if (!staffName) emptyFields.push('氏名');
+
+    if (emptyFields.length > 0) {
+      rowValidationErrors.push({ row: rowNum, reason: `以下の項目が空です: ${emptyFields.join(', ')}` });
+    }
+  }
+
+  if (rowValidationErrors.length > 0) {
+    res.status(400).json({
+      error: 'CSV_ROW_INVALID',
+      message: '必須項目が空の行があります。CSVを修正して再アップロードしてください。',
+      details: {
+        error_count: rowValidationErrors.length,
+        errors: rowValidationErrors
+      }
+    });
+    return;
+  }
+
   const errors: Array<{ row: number; reason: string }> = [];
   let createdProjectsCount = 0;
   let updatedProjectsCount = 0;
