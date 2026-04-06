@@ -190,7 +190,7 @@ router.get('/google/callback',
         const pendingName = req.session.pendingDisplayName || '';
         delete req.session.pendingEmail;
         delete req.session.pendingDisplayName;
-        res.redirect(`/?access_denied=1&name=${encodeURIComponent(pendingName)}`);
+        res.redirect(`/?access_denied=1&email=${encodeURIComponent(pendingEmail)}&name=${encodeURIComponent(pendingName)}`);
         return;
       }
 
