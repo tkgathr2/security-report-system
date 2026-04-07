@@ -1,16 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
 import { COLORS } from '../../constants/admin'
 import { styles } from '../../styles/adminStyles'
 import type { Client, DashboardStats, Project, Report, Screen } from '../../types/admin'
-
-type PdfLayout = 'classic' | 'handwritten'
-type PdfDesign = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J'
-
-const DESIGN_LABELS: Record<PdfDesign, string> = {
-  A: 'A - オレンジ', B: 'B - ブルー', C: 'C - グリーン',
-  D: 'D - レッド', E: 'E - パープル', F: 'F - ティール',
-  G: 'G - インディゴ', H: 'H - コーラル', I: 'I - ゴールド', J: 'J - シルバー'
-}
 
 interface DashboardPageProps {
   stats: DashboardStats | null
@@ -45,49 +35,6 @@ export function DashboardPage({
   formatDateTime,
   parseDateParts,
 }: DashboardPageProps) {
-  const [pdfLayout, setPdfLayout] = useState<PdfLayout>('classic')
-  const [pdfDesign, setPdfDesign] = useState<PdfDesign>('A')
-  const [pdfSaving, setPdfSaving] = useState(false)
-  const [pdfMessage, setPdfMessage] = useState('')
-
-  const fetchPdfSettings = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/settings/pdf-layout', { credentials: 'include' })
-      if (res.ok) {
-        const data = await res.json()
-        setPdfLayout(data.layout || 'classic')
-        setPdfDesign(data.design || 'A')
-      }
-    } catch { /* use defaults */ }
-  }, [])
-
-  useEffect(() => { fetchPdfSettings() }, [fetchPdfSettings])
-
-  const savePdfSettings = async (newLayout: PdfLayout, newDesign: PdfDesign) => {
-    setPdfSaving(true)
-    setPdfMessage('')
-    try {
-      const res = await fetch('/api/admin/settings/pdf-layout', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ layout: newLayout, design: newDesign })
-      })
-      if (res.ok) {
-        setPdfLayout(newLayout)
-        setPdfDesign(newDesign)
-        setPdfMessage('保存しました')
-        setTimeout(() => setPdfMessage(''), 2000)
-      } else {
-        setPdfMessage('保存に失敗しました')
-      }
-    } catch {
-      setPdfMessage('保存に失敗しました')
-    } finally {
-      setPdfSaving(false)
-    }
-  }
-
   return (
             <div>
               <h2 style={styles.pageTitle}>ダッシュボード</h2>
@@ -226,50 +173,7 @@ export function DashboardPage({
                 </div>
               </div>
 
-              <div style={{background: COLORS.white, borderRadius: '12px', padding: '20px', marginBottom: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: `1px solid ${COLORS.gray}`}}>
-                <h3 style={{margin: '0 0 16px', fontSize: '16px', color: COLORS.text, display: 'flex', alignItems: 'center', gap: '8px'}}>
-                  <span>&#128196;</span> PDFデザイン設定
-                </h3>
-                <div style={{display: 'flex', flexDirection: isMobile ? 'column' as const : 'row' as const, gap: '16px', alignItems: isMobile ? 'stretch' : 'flex-end'}}>
-                  <div style={{flex: 1}}>
-                    <label style={{display: 'block', fontSize: '13px', color: COLORS.darkGray, marginBottom: '6px', fontWeight: 500}}>レイアウト</label>
-                    <select
-                      value={pdfLayout}
-                      onChange={(e) => {
-                        const v = e.target.value as PdfLayout
-                        setPdfLayout(v)
-                        savePdfSettings(v, pdfDesign)
-                      }}
-                      style={{width: '100%', padding: '10px 12px', fontSize: '14px', border: `1px solid ${COLORS.gray}`, borderRadius: '6px', backgroundColor: COLORS.white, cursor: 'pointer'}}
-                    >
-                      <option value="classic">クラシック（カラフルデザイン）</option>
-                      <option value="handwritten">手書き風（A4横フォーム）</option>
-                    </select>
-                  </div>
-                  {pdfLayout === 'classic' && (
-                    <div style={{flex: 1}}>
-                      <label style={{display: 'block', fontSize: '13px', color: COLORS.darkGray, marginBottom: '6px', fontWeight: 500}}>カラーテーマ</label>
-                      <select
-                        value={pdfDesign}
-                        onChange={(e) => {
-                          const v = e.target.value as PdfDesign
-                          setPdfDesign(v)
-                          savePdfSettings(pdfLayout, v)
-                        }}
-                        style={{width: '100%', padding: '10px 12px', fontSize: '14px', border: `1px solid ${COLORS.gray}`, borderRadius: '6px', backgroundColor: COLORS.white, cursor: 'pointer'}}
-                      >
-                        {(Object.keys(DESIGN_LABELS) as PdfDesign[]).map(k => (
-                          <option key={k} value={k}>{DESIGN_LABELS[k]}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <div style={{display: 'flex', alignItems: 'center', gap: '8px', minHeight: '40px'}}>
-                    {pdfSaving && <span style={{fontSize: '13px', color: COLORS.darkGray}}>保存中...</span>}
-                    {pdfMessage && <span style={{fontSize: '13px', color: pdfMessage === '保存しました' ? COLORS.success : COLORS.danger, fontWeight: 500}}>{pdfMessage}</span>}
-                  </div>
-                </div>
-              </div>
+              {/* PDFデザイン設定は非表示 */}
 
               <div style={{display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '20px'}}>
                 <div style={{background: COLORS.white, borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)'}}>

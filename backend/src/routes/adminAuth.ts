@@ -405,10 +405,42 @@ router.post('/access-requests/:requestId/reject', requireSuperAdmin, async (req:
     const requestId = req.params.requestId as string;
     const adminUser = req.user as Express.User;
 
+    const requestResult = await pool.query('SELECT * FROM access_requests WHERE id = $1', [requestId]);
+    const request = requestResult.rows[0];
+
     await pool.query(
       'UPDATE access_requests SET status = $1, reviewed_by = $2, reviewed_at = NOW() WHERE id = $3',
       ['rejected', adminUser.email, requestId]
     );
+
+    if (request?.email) {
+      try {
+        await sendEmail({
+          to: [request.email],
+          subject: '【デジタル警備報告書システム ほうこちゃん】アクセス申請について',
+          text: `管理画面へのアクセス申請が承認されませんでした。\n\n詳細については管理者にお問い合わせください。`,
+          html: `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:'Helvetica Neue',Arial,sans-serif;background-color:#f5f5f5;">
+  <div style="max-width:600px;margin:0 auto;padding:20px;">
+    <div style="background-color:#2C3E50;padding:20px 30px;border-radius:8px 8px 0 0;text-align:center;">
+      <h1 style="color:#ffffff;margin:0;font-size:20px;">デジタル警備報告書システム【ほうこちゃん】</h1>
+    </div>
+    <div style="background-color:#ffffff;padding:30px;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+      <h2 style="color:#e74c3c;margin:0 0 20px;font-size:18px;border-bottom:2px solid #e74c3c;padding-bottom:10px;">アクセス申請について</h2>
+      <p style="color:#212529;font-size:15px;line-height:1.6;">管理画面へのアクセス申請が承認されませんでした。</p>
+      <p style="color:#6c757d;font-size:14px;line-height:1.6;">詳細については管理者にお問い合わせください。</p>
+    </div>
+    <p style="color:#adb5bd;font-size:11px;text-align:center;margin-top:15px;">日本交通誘導 デジタル警備報告書システム【ほうこちゃん】</p>
+  </div>
+</body>
+</html>`
+        });
+      } catch (emailError) {
+        console.error('[REJECT] Email send failed (rejection still succeeded):', emailError);
+      }
+    }
 
     logAudit({ req, actorEmail: adminUser.email, action: 'REJECT_ACCESS_REQUEST', targetType: 'access_request', targetId: requestId, payload: {} });
 
@@ -431,6 +463,8 @@ router.get('/admins', requireSuperAdmin, async (_req: Request, res: Response) =>
   }
 });
 
+const ROLE_LABELS: Record<string, string> = { super_admin: 'スーパー管理者', admin: '管理者', viewer: '閲覧権限' };
+
 router.put('/admins/:adminId/role', requireSuperAdmin, async (req: Request, res: Response) => {
   try {
     const adminId = req.params.adminId as string;
@@ -443,10 +477,53 @@ router.put('/admins/:adminId/role', requireSuperAdmin, async (req: Request, res:
 
     const adminUser = req.user as Express.User;
 
-    const prev = await pool.query('SELECT role FROM admin_allowlist WHERE id = $1', [adminId]);
+    const prev = await pool.query('SELECT email, role FROM admin_allowlist WHERE id = $1', [adminId]);
     const oldRole = prev.rows[0]?.role ?? 'admin';
+    const targetEmail = prev.rows[0]?.email;
 
     await pool.query('UPDATE admin_allowlist SET role = $1 WHERE id = $2', [role, adminId]);
+
+    if (targetEmail && oldRole !== role) {
+      const BASE_URL = process.env.BASE_URL || 'https://security-report.up.railway.app';
+      try {
+        await sendEmail({
+          to: [targetEmail],
+          subject: '【デジタル警備報告書システム ほうこちゃん】権限が変更されました',
+          text: `管理画面の権限が変更されました。\n\n変更前: ${ROLE_LABELS[oldRole] || oldRole}\n変更後: ${ROLE_LABELS[role] || role}\n\n${BASE_URL}`,
+          html: `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:'Helvetica Neue',Arial,sans-serif;background-color:#f5f5f5;">
+  <div style="max-width:600px;margin:0 auto;padding:20px;">
+    <div style="background-color:#2C3E50;padding:20px 30px;border-radius:8px 8px 0 0;text-align:center;">
+      <h1 style="color:#ffffff;margin:0;font-size:20px;">デジタル警備報告書システム【ほうこちゃん】</h1>
+    </div>
+    <div style="background-color:#ffffff;padding:30px;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+      <h2 style="color:#e67e22;margin:0 0 20px;font-size:18px;border-bottom:2px solid #e67e22;padding-bottom:10px;">権限が変更されました</h2>
+      <p style="color:#212529;font-size:15px;line-height:1.6;">管理画面の権限が変更されました。</p>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+        <tr>
+          <td style="padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;font-weight:bold;color:#495057;width:120px;">変更前</td>
+          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${ROLE_LABELS[oldRole] || oldRole}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;font-weight:bold;color:#495057;">変更後</td>
+          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${ROLE_LABELS[role] || role}</td>
+        </tr>
+      </table>
+      <div style="text-align:center;margin:25px 0;">
+        <a href="${BASE_URL}" style="display:inline-block;background-color:#e67e22;color:#ffffff;text-decoration:none;padding:12px 30px;border-radius:6px;font-size:15px;font-weight:bold;">管理画面にログイン</a>
+      </div>
+    </div>
+    <p style="color:#adb5bd;font-size:11px;text-align:center;margin-top:15px;">日本交通誘導 デジタル警備報告書システム【ほうこちゃん】</p>
+  </div>
+</body>
+</html>`
+        });
+      } catch (emailError) {
+        console.error('[ROLE_UPDATE] Email send failed (update still succeeded):', emailError);
+      }
+    }
 
     logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_ADMIN_ROLE', targetType: 'admin', targetId: adminId, payload: { old_role: oldRole, new_role: role } });
 
@@ -467,12 +544,44 @@ router.delete('/admins/:adminId', requireSuperAdmin, async (req: Request, res: R
       return;
     }
 
+    const target = await pool.query('SELECT email FROM admin_allowlist WHERE id = $1', [adminId]);
+    const targetEmail = target.rows[0]?.email;
+
     await pool.query('UPDATE admin_allowlist SET is_active = false WHERE id = $1', [adminId]);
 
     await pool.query(
       `DELETE FROM session WHERE sess::text LIKE $1`,
       [`%${adminId}%`]
     ).catch(() => {});
+
+    if (targetEmail) {
+      try {
+        await sendEmail({
+          to: [targetEmail],
+          subject: '【デジタル警備報告書システム ほうこちゃん】アカウントが無効化されました',
+          text: `管理画面のアカウントが無効化されました。\n\n詳細については管理者にお問い合わせください。`,
+          html: `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:'Helvetica Neue',Arial,sans-serif;background-color:#f5f5f5;">
+  <div style="max-width:600px;margin:0 auto;padding:20px;">
+    <div style="background-color:#2C3E50;padding:20px 30px;border-radius:8px 8px 0 0;text-align:center;">
+      <h1 style="color:#ffffff;margin:0;font-size:20px;">デジタル警備報告書システム【ほうこちゃん】</h1>
+    </div>
+    <div style="background-color:#ffffff;padding:30px;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+      <h2 style="color:#e74c3c;margin:0 0 20px;font-size:18px;border-bottom:2px solid #e74c3c;padding-bottom:10px;">アカウントが無効化されました</h2>
+      <p style="color:#212529;font-size:15px;line-height:1.6;">管理画面のアカウントが無効化されました。</p>
+      <p style="color:#6c757d;font-size:14px;line-height:1.6;">詳細については管理者にお問い合わせください。</p>
+    </div>
+    <p style="color:#adb5bd;font-size:11px;text-align:center;margin-top:15px;">日本交通誘導 デジタル警備報告書システム【ほうこちゃん】</p>
+  </div>
+</body>
+</html>`
+        });
+      } catch (emailError) {
+        console.error('[ADMIN_DELETE] Email send failed (deactivation still succeeded):', emailError);
+      }
+    }
 
     logAudit({ req, actorEmail: adminUser.email, action: 'DELETE_ADMIN', targetType: 'admin', targetId: adminId, payload: {} });
 
