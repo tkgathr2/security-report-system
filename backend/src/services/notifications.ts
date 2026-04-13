@@ -209,6 +209,7 @@ export async function sendReportApprovalNotifications(params: {
   location: string;
   pdfBytes: Buffer;
   skipSlack?: boolean;
+  skipClientEmail?: boolean;
 }): Promise<{ emailSent: boolean; slackSent: boolean; castEmailSent: boolean; adminEmailSent: boolean; warnings: string[] }> {
   const warnings: string[] = [];
 
@@ -258,23 +259,29 @@ export async function sendReportApprovalNotifications(params: {
   }
   detailItems.push(`作業名称: ${params.projectName}`);
 
-  const emailResult = await sendEmail({
-    to: params.clientEmails,
-    subject: `【デジタル警備報告書システム ほうこちゃん】警備報告書 ${params.projectName} (${params.workDate})`,
-    text: `${params.companyName}\n${contactLine ? contactLine + ' ' : ''}様\n\n` +
-      `デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。\n\n` +
-      detailItems.join('\n') + `\n\n` +
-      `添付のPDFファイルをご確認ください。`,
-    html: `<p>${params.companyName}<br>${contactLine ? contactLine + ' ' : ''}様</p>` +
-      `<p>デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。</p>` +
-      `<ul>` +
-      detailItems.map(item => `<li>${item}</li>`).join('') +
-      `</ul>` +
-      `<p>添付のPDFファイルをご確認ください。</p>`,
-    attachments
-  });
+  let emailResult: { success: boolean; error?: string };
+  if (params.skipClientEmail) {
+    console.log('[EMAIL] Client email sending is DISABLED. Skipping client email.');
+    emailResult = { success: false, error: 'Client email disabled by system setting' };
+  } else {
+    emailResult = await sendEmail({
+      to: params.clientEmails,
+      subject: `【デジタル警備報告書システム ほうこちゃん】警備報告書 ${params.projectName} (${params.workDate})`,
+      text: `${params.companyName}\n${contactLine ? contactLine + ' ' : ''}様\n\n` +
+        `デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。\n\n` +
+        detailItems.join('\n') + `\n\n` +
+        `添付のPDFファイルをご確認ください。`,
+      html: `<p>${params.companyName}<br>${contactLine ? contactLine + ' ' : ''}様</p>` +
+        `<p>デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。</p>` +
+        `<ul>` +
+        detailItems.map(item => `<li>${item}</li>`).join('') +
+        `</ul>` +
+        `<p>添付のPDFファイルをご確認ください。</p>`,
+      attachments
+    });
+  }
 
-  if (!emailResult.success) {
+  if (!emailResult.success && !params.skipClientEmail) {
     warnings.push(`クライアントメール送信失敗: ${emailResult.error}`);
   }
 

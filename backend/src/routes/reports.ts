@@ -381,6 +381,19 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         console.error(`[ASYNC] Slack notification failed for report ${reportId}:`, slackError);
       }
 
+      // クライアントメール送信フラグを確認
+      let clientEmailEnabled = false;
+      try {
+        const clientEmailSetting = await pool.query(
+          `SELECT value FROM system_settings WHERE key = 'client_email_enabled'`
+        );
+        if (clientEmailSetting.rows.length > 0 && clientEmailSetting.rows[0].value === 'true') {
+          clientEmailEnabled = true;
+        }
+      } catch (settingErr) {
+        console.warn('[ASYNC] Failed to check client_email_enabled setting, defaulting to OFF:', settingErr);
+      }
+
       // メール通知（独立したtry-catch）
       try {
         let clientEmails: string[] = Array.isArray(project.client_emails) ? project.client_emails : [];
@@ -389,6 +402,10 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         }
         const castEmail = castUser.email;
         const displayWriterName = resolvedWriterName;
+
+        if (!clientEmailEnabled) {
+          console.log(`[ASYNC] Client email is DISABLED (system_settings). Skipping client email for report ${reportId}`);
+        }
 
         const notificationResult = await sendReportApprovalNotifications({
           reportId,
@@ -404,7 +421,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           supervisorName: supervisor_name || '',
           location: project.location || '',
           pdfBytes: pdfBuffer,
-          skipSlack: true
+          skipSlack: true,
+          skipClientEmail: !clientEmailEnabled
         });
 
         console.log(`[ASYNC] Email notifications sent for report ${reportId}:`, notificationResult);
