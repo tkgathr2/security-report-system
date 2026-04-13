@@ -3,6 +3,7 @@ import pool from '../db/pool';
 import { sendDailyReminderEmail } from '../utils/email';
 
 const REMINDER_HOUR_JST = 11; // 11:00 JST
+const SERVICE_START_DATE = '2026-04-20'; // 来週月曜日から送信開始
 
 const alreadySent = new Set<string>();
 
@@ -163,6 +164,12 @@ async function runCheck(): Promise<void> {
 
   // Only run at 11:00 JST (within first 5 minutes of the hour)
   if (hour !== REMINDER_HOUR_JST || minute > 5) return;
+
+  // Don't send before the service start date
+  const { dateStr } = getJSTNow();
+  if (dateStr < SERVICE_START_DATE) {
+    return;
+  }
 
   try {
     await sendReminders();
