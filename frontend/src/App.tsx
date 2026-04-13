@@ -1027,6 +1027,17 @@ function AdminApp() {
   }
 
   if (!admin) {
+    // If cast user has a valid session, redirect to cast screen instead of showing admin login
+    const castToken = localStorage.getItem('castToken');
+    if (castToken && !pendingAccessEmail) {
+      window.location.href = '/cast/today';
+      return (
+        <div style={styles.loadingContainer}>
+          <p>読み込み中...</p>
+        </div>
+      );
+    }
+
     if (pendingAccessEmail) {
       return (
         <div style={styles.loginContainer}>
