@@ -21,6 +21,7 @@ import pool from './db/pool';
 import { requestTimeout } from './middleware/requestTimeout';
 import { sanitizeInput } from './utils/validation';
 import { startDataUploadMonitor, stopDataUploadMonitor } from './services/dataUploadMonitor';
+import { startDailyReminderService, stopDailyReminderService } from './services/dailyReminderService';
 
 dotenv.config();
 
@@ -737,6 +738,7 @@ function gracefulShutdown(source: string, exitCode: number) {
   console.error(`[gracefulShutdown] triggered by ${source}. Closing server and DB pool...`);
   if (cleanupTimer) clearInterval(cleanupTimer);
   stopDataUploadMonitor();
+  stopDailyReminderService();
   const forceExit = setTimeout(() => {
     console.error('[gracefulShutdown] Forced exit after timeout');
     process.exit(exitCode);
@@ -817,3 +819,4 @@ cleanupTimer = setInterval(() => {
 cleanupTimer.unref();
 
 startDataUploadMonitor();
+startDailyReminderService();

@@ -244,6 +244,79 @@ export async function sendInquiryNotificationEmail(params: {
   }
 }
 
+export async function sendDailyReminderEmail(params: {
+  email: string;
+  name: string;
+  magicLoginUrl: string;
+  projects: { workName: string; location: string }[];
+  workDate: string;
+}) {
+  if (!resend) {
+    console.log('RESEND_API_KEY not configured, skipping email');
+    return { success: false, error: 'Email not configured' };
+  }
+
+  const { email, name, magicLoginUrl, projects, workDate } = params;
+
+  // Format date for display (e.g. "2026年4月13日")
+  const [y, m, d] = workDate.split('-');
+  const dateDisplay = `${y}年${parseInt(m)}月${parseInt(d)}日`;
+
+  const projectRows = projects.map(p =>
+    `<tr>
+      <td style="padding: 10px 12px; border: 1px solid #eee;">${escapeHtml(p.workName || '未定')}</td>
+      <td style="padding: 10px 12px; border: 1px solid #eee;">${escapeHtml(p.location || '未定')}</td>
+    </tr>`
+  ).join('');
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: email,
+      subject: `【${APP_NAME}】${dateDisplay}の現場のご案内`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #E67E22;">【${APP_NAME}】本日の現場</h2>
+          <p>${escapeHtml(name)} 様</p>
+          <p>${dateDisplay}の現場をお知らせします。</p>
+          <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+            <thead>
+              <tr style="background: #f8f9fa;">
+                <th style="padding: 10px 12px; border: 1px solid #eee; text-align: left;">業務名</th>
+                <th style="padding: 10px 12px; border: 1px solid #eee; text-align: left;">場所</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${projectRows}
+            </tbody>
+          </table>
+          <p style="margin: 30px 0;">
+            <a href="${magicLoginUrl}" 
+               style="display: inline-block; padding: 15px 30px; background: #E67E22; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+              ログインして現場を確認
+            </a>
+          </p>
+          <p style="color: #666; font-size: 14px;">
+            ボタンを押すだけで自動ログインできます。<br>
+            このリンクは24時間有効です。
+          </p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error('Failed to send daily reminder email:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('Daily reminder email sent:', data);
+    return { success: true, data };
+  } catch (error) {
+    console.error('Email send error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
 export async function sendWelcomeEmail(email: string, name: string, baseUrl: string) {
   if (!resend) {
     console.log('RESEND_API_KEY not configured, skipping email');
