@@ -262,13 +262,20 @@ export async function sendDailyReminderEmail(params: {
   const [y, m, d] = workDate.split('-');
   const dateDisplay = `${y}年${parseInt(m)}月${parseInt(d)}日`;
 
-  const projectInfoBoxes = projects.map(p => `
+  const projectInfoBoxes = projects.map(p => {
+    const loc = p.location || '未定';
+    const escapedLoc = escapeHtml(loc);
+    const mapUrl = loc !== '未定' ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}` : '';
+    const locationHtml = mapUrl
+      ? `<a href="${mapUrl}" style="color: #E67E22; text-decoration: underline;" target="_blank">${escapedLoc} 📍</a>`
+      : escapedLoc;
+    return `
     <div style="background-color: #FFF8F3; border-left: 4px solid #E67E22; padding: 16px; margin: 0 0 12px 0; border-radius: 0 8px 8px 0;">
       <p style="margin: 0 0 6px 0; font-size: 14px;"><strong>実施日：</strong>${dateDisplay}</p>
       <p style="margin: 0 0 6px 0; font-size: 14px;"><strong>業務名：</strong>${escapeHtml(p.workName || '未定')}</p>
-      <p style="margin: 0; font-size: 14px;"><strong>実施場所：</strong>${escapeHtml(p.location || '未定')}</p>
-    </div>`
-  ).join('');
+      <p style="margin: 0; font-size: 14px;"><strong>実施場所：</strong>${locationHtml}</p>
+    </div>`;
+  }).join('');
 
   try {
     const { data, error } = await resend.emails.send({
