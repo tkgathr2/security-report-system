@@ -262,44 +262,38 @@ export async function sendDailyReminderEmail(params: {
   const [y, m, d] = workDate.split('-');
   const dateDisplay = `${y}年${parseInt(m)}月${parseInt(d)}日`;
 
-  const projectRows = projects.map(p =>
-    `<tr>
-      <td style="padding: 10px 12px; border: 1px solid #eee;">${escapeHtml(p.workName || '未定')}</td>
-      <td style="padding: 10px 12px; border: 1px solid #eee;">${escapeHtml(p.location || '未定')}</td>
-    </tr>`
+  const projectInfoBoxes = projects.map(p => `
+    <div style="background-color: #FFF8F3; border-left: 4px solid #E67E22; padding: 16px; margin: 0 0 12px 0; border-radius: 0 8px 8px 0;">
+      <p style="margin: 0 0 6px 0; font-size: 14px;"><strong>実施日：</strong>${dateDisplay}</p>
+      <p style="margin: 0 0 6px 0; font-size: 14px;"><strong>業務名：</strong>${escapeHtml(p.workName || '未定')}</p>
+      <p style="margin: 0; font-size: 14px;"><strong>実施場所：</strong>${escapeHtml(p.location || '未定')}</p>
+    </div>`
   ).join('');
 
   try {
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      subject: `【${APP_NAME}】${dateDisplay}の現場のご案内`,
+      subject: `【ほうこちゃん】本日の現場レポートはこちらから📋`,
       html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #E67E22;">【${APP_NAME}】本日の現場</h2>
-          <p>${escapeHtml(name)} 様</p>
-          <p>${dateDisplay}の現場をお知らせします。</p>
-          <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
-            <thead>
-              <tr style="background: #f8f9fa;">
-                <th style="padding: 10px 12px; border: 1px solid #eee; text-align: left;">業務名</th>
-                <th style="padding: 10px 12px; border: 1px solid #eee; text-align: left;">場所</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${projectRows}
-            </tbody>
-          </table>
-          <p style="margin: 30px 0;">
-            <a href="${magicLoginUrl}" 
-               style="display: inline-block; padding: 15px 30px; background: #E67E22; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
-              ログインして現場を確認
-            </a>
-          </p>
-          <p style="color: #666; font-size: 14px;">
-            ボタンを押すだけで自動ログインできます。<br>
-            このリンクは24時間有効です。
-          </p>
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; background-color: #ffffff;">
+          <div style="background-color: #E67E22; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <p style="color: white; font-size: 12px; margin: 0 0 4px 0; opacity: 0.9;">デジタル警備報告書システム</p>
+            <p style="color: white; font-size: 20px; font-weight: bold; margin: 0;">ほうこちゃん</p>
+          </div>
+          <div style="padding: 24px 20px;">
+            <p style="font-size: 16px; margin: 0 0 20px 0;">おはようございます！<br>本日の現場情報をお届けします🌅</p>
+            ${projectInfoBoxes}
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${magicLoginUrl}" style="display: inline-block; padding: 16px 32px; background: #E67E22; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                📝 報告書を入力する
+              </a>
+            </div>
+            <p style="color: #888; font-size: 12px; margin: 0;">※ このリンクの有効期限は24時間です。</p>
+          </div>
+          <div style="background-color: #f8f9fa; padding: 16px 20px; text-align: center; border-top: 1px solid #eee;">
+            <p style="color: #999; font-size: 12px; margin: 0;">このメールは【ほうこちゃん】から自動送信されています。</p>
+          </div>
         </div>
       `,
     });
