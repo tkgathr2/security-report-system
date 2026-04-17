@@ -102,15 +102,23 @@ export async function sendSlackNotification(notification: SlackNotification): Pr
     };
 
     console.log('[SLACK] Sending notification for report:', notification.reportId);
-    
-    const response = await fetch(SLACK_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(message)
-    });
 
-    if (!response.ok) {
-      throw new Error(`Slack API returned ${response.status}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch(SLACK_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(message),
+        signal: controller.signal
+      });
+
+      if (response.status < 200 || response.status >= 300) {
+        const body = await response.text().catch(() => '');
+        throw new Error(`Slack Webhook failed: HTTP ${response.status} - ${body}`);
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     console.log('[SLACK] Notification sent successfully');
@@ -140,59 +148,72 @@ export async function uploadPdfToSlack(params: {
   try {
     console.log(`[SLACK-PDF] Starting PDF upload for report ${params.reportId} (${params.pdfBuffer.length} bytes)`);
 
-    const urlRes = await fetch('https://slack.com/api/files.getUploadURLExternal', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: new URLSearchParams({
-        filename: params.filename,
-        length: String(params.pdfBuffer.length)
-      })
-    });
-    const urlData = await urlRes.json() as { ok: boolean; upload_url: string; file_id: string; error?: string };
-    if (!urlData.ok) {
-      throw new Error(`getUploadURLExternal failed: ${urlData.error}`);
-    }
-    console.log(`[SLACK-PDF] Got upload URL, file_id: ${urlData.file_id}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    try {
+      const urlRes = await fetch('https://slack.com/api/files.getUploadURLExternal', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          filename: params.filename,
+          length: String(params.pdfBuffer.length)
+        }),
+        signal: controller.signal
+      });
+      const urlData = await urlRes.json() as { ok: boolean; upload_url: string; file_id: string; error?: string };
+      if (!urlData.ok) {
+        throw new Error(`getUploadURLExternal failed: ${urlData.error}`);
+      }
+      console.log(`[SLACK-PDF] Got upload URL, file_id: ${urlData.file_id}`);
 
-    const uploadRes = await fetch(urlData.upload_url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: params.pdfBuffer
-    });
-    if (!uploadRes.ok) {
-      throw new Error(`File upload failed: ${uploadRes.status}`);
-    }
-    console.log('[SLACK-PDF] File uploaded successfully');
+      const uploadRes = await fetch(urlData.upload_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: params.pdfBuffer,
+        signal: controller.signal
+      });
+      if (!uploadRes.ok) {
+        throw new Error(`File upload failed: ${uploadRes.status}`);
+      }
+      console.log('[SLACK-PDF] File uploaded successfully');
 
-    const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        files: [{ id: urlData.file_id, title: params.title }],
-        channel_id: SLACK_CHANNEL_ID,
-        initial_comment: params.initialComment || `報告書PDF（報告書ID: ${params.reportId}）`
-      })
-    });
-    const completeData = await completeRes.json() as { ok: boolean; error?: string };
-    if (!completeData.ok) {
-      throw new Error(`completeUploadExternal failed: ${completeData.error}`);
-    }
+      const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          files: [{ id: urlData.file_id, title: params.title }],
+          channel_id: SLACK_CHANNEL_ID,
+          initial_comment: params.initialComment || `報告書PDF（報告書ID: ${params.reportId}）`
+        }),
+        signal: controller.signal
+      });
+      const completeData = await completeRes.json() as { ok: boolean; error?: string };
+      if (!completeData.ok) {
+        throw new Error(`completeUploadExternal failed: ${completeData.error}`);
+      }
 
-    console.log(`[SLACK-PDF] PDF shared to channel successfully`);
-    return { success: true };
+      console.log(`[SLACK-PDF] PDF shared to channel successfully`);
+      return { success: true };
+    } finally {
+      clearTimeout(timeoutId);
+    }
   } catch (error) {
     console.error('[SLACK-PDF] Failed to upload PDF to Slack:', error);
     return { success: false, error: String(error) };
   }
 }
 
-const ADMIN_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const ADMIN_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAILS || '')
+  .split(',')
+  .map(e => e.trim())
+  .filter(e => e && emailRegex.test(e));
 
 export async function sendReportApprovalNotifications(params: {
   reportId: string;
@@ -213,13 +234,13 @@ export async function sendReportApprovalNotifications(params: {
 }): Promise<{ emailSent: boolean; slackSent: boolean; castEmailSent: boolean; adminEmailSent: boolean; warnings: string[] }> {
   const warnings: string[] = [];
 
-  const attachments = [
+  const attachments = (params.pdfBytes && params.pdfBytes.length > 0) ? [
     {
       filename: `report_${params.workDate}.pdf`,
       content: params.pdfBytes,
       contentType: 'application/pdf'
     }
-  ];
+  ] : [];
 
   let slackSent = false;
   if (!params.skipSlack) {

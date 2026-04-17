@@ -59,33 +59,46 @@ router.put('/:project_unique_url', authenticateCast, async (req: Request, res: R
 
     const now = new Date();
 
-    const upsertResult = await pool.query(
-      `INSERT INTO report_drafts (project_id, cast_user_id, payload_json, client_updated_at, server_updated_at)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (project_id, cast_user_id) DO UPDATE
-         SET payload_json = EXCLUDED.payload_json,
-             client_updated_at = EXCLUDED.client_updated_at,
-             server_updated_at = EXCLUDED.server_updated_at
-         WHERE report_drafts.client_updated_at <= EXCLUDED.client_updated_at
-       RETURNING server_updated_at`,
-      [projectId, castUserId, payload_json, clientUpdatedAtDate, now]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (upsertResult.rows.length > 0) {
-      res.status(200).json({
-        ok: true,
-        server_updated_at: upsertResult.rows[0].server_updated_at
-      });
-    } else {
-      const existing = await pool.query(
-        'SELECT server_updated_at FROM report_drafts WHERE project_id = $1 AND cast_user_id = $2',
-        [projectId, castUserId]
+      const upsertResult = await client.query(
+        `INSERT INTO report_drafts (project_id, cast_user_id, payload_json, client_updated_at, server_updated_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (project_id, cast_user_id) DO UPDATE
+           SET payload_json = EXCLUDED.payload_json,
+               client_updated_at = EXCLUDED.client_updated_at,
+               server_updated_at = EXCLUDED.server_updated_at
+           WHERE report_drafts.client_updated_at <= EXCLUDED.client_updated_at
+         RETURNING server_updated_at, client_updated_at`,
+        [projectId, castUserId, payload_json, clientUpdatedAtDate, now]
       );
-      res.status(200).json({
-        ok: false,
-        message: '競合により更新されませんでした（既存データの方が新しい）',
-        server_updated_at: existing.rows[0]?.server_updated_at
-      });
+
+      await client.query('COMMIT');
+
+      if (upsertResult.rows.length > 0) {
+        res.status(200).json({
+          ok: true,
+          server_updated_at: upsertResult.rows[0].server_updated_at
+        });
+      } else {
+        const existing = await client.query(
+          'SELECT server_updated_at, client_updated_at FROM report_drafts WHERE project_id = $1 AND cast_user_id = $2',
+          [projectId, castUserId]
+        );
+        res.status(200).json({
+          ok: false,
+          message: '競合により更新されませんでした（既存データの方が新しい）',
+          server_updated_at: existing.rows[0]?.server_updated_at,
+          existing_client_updated_at: existing.rows[0]?.client_updated_at
+        });
+      }
+    } catch (txErr: unknown) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
     }
 
   } catch (error) {

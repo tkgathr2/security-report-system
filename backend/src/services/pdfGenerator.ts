@@ -202,7 +202,7 @@ async function generateReportPdfHandwritten(data: ReportData): Promise<Buffer> {
         doc.registerFont('IPAGothic', fontPath);
         doc.font('IPAGothic');
       } else {
-        console.warn('[PDF] No Japanese font found, using default Helvetica');
+        console.error('[PDF] No Japanese font found. PDF may show garbled text.');
         doc.font('Helvetica');
       }
 
@@ -323,7 +323,9 @@ async function generateReportPdfHandwritten(data: ReportData): Promise<Buffer> {
       if (logoBuffer) {
         try {
           doc.image(logoBuffer, ML + 10, COMPANY_INFO_TOP + 5, { height: 28 });
-        } catch { /* logo load failure is non-fatal */ }
+        } catch (e) {
+          console.warn('[PDF] Logo image load failed, skipping logo:', e instanceof Error ? e.message : e);
+        }
       }
 
       doc.fillColor(TEXT_COLOR).fontSize(7);

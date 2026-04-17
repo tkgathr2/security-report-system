@@ -17,7 +17,14 @@ export default function CastMagic() {
       return;
     }
 
-    fetch(`${API_BASE}/api/cast/magic?token=${token}`)
+    // Remove token from URL history for security
+    window.history.replaceState({}, '', window.location.pathname);
+
+    fetch(`${API_BASE}/api/cast/magic`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    })
       .then((res) => res.json())
       .then((data) => {
         if (data.token) {

@@ -6,6 +6,7 @@ import pool from '../db/pool';
 import { sendEmail } from '../services/notifications';
 import { logAudit } from '../utils/auditLog';
 import { validateStringField, MAX_LENGTHS } from '../utils/validation';
+import { checkRateLimitDb, recordFailedAttemptDb } from '../utils/rateLimit';
 
 const router = Router();
 
@@ -222,6 +223,20 @@ router.post('/request-access', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'INVALID_PAYLOAD', message: 'メールアドレスは必須です' });
       return;
     }
+
+    // Apply rate limiting by IP address (1 hour limit, 5 requests max)
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || 'unknown';
+    const rateLimitKey = `admin-access-request:${clientIp}`;
+    const rateCheck = await checkRateLimitDb(rateLimitKey);
+    if (!rateCheck.allowed) {
+      const remainMin = Math.ceil((rateCheck.remainingMs || 0) / 60000);
+      return res.status(429).json({
+        error: 'RATE_LIMITED',
+        message: `アクセス申請の試行回数が上限を超えました。${remainMin}分後にお試しください`,
+        details: {}
+      });
+    }
+
     const dnErr = validateStringField(display_name, '表示名', MAX_LENGTHS.DISPLAY_NAME);
     if (dnErr) { res.status(400).json({ error: 'INVALID_PAYLOAD', message: dnErr }); return; }
 
@@ -230,6 +245,7 @@ router.post('/request-access', async (req: Request, res: Response) => {
       [email, 'pending']
     );
     if (existing.rows.length > 0) {
+      await recordFailedAttemptDb(rateLimitKey);
       res.json({ ok: true, message: '申請済みです。承認をお待ちください。' });
       return;
     }
@@ -239,6 +255,7 @@ router.post('/request-access', async (req: Request, res: Response) => {
       [email]
     );
     if (alreadyAdmin.rows.length > 0) {
+      await recordFailedAttemptDb(rateLimitKey);
       res.json({ ok: true, message: '既にアクセス権があります。ログインしてください。' });
       return;
     }

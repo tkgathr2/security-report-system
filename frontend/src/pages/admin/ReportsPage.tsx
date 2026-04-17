@@ -100,7 +100,7 @@ export function ReportsPage({
                             </button>
                           )}
                         </div>
-                        {adminEmail === 'atsuhiro@takagi.bz' && selectedReportIds.size > 0 && (
+                        {selectedReportIds.size > 0 && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', padding: '10px 16px', background: '#FFF3E0', borderRadius: '8px', border: '1px solid #FFB74D' }}>
                             <span style={{ fontSize: '14px', color: '#E65100', fontWeight: 'bold' }}>{selectedReportIds.size}件選択中</span>
                             <button
@@ -127,15 +127,13 @@ export function ReportsPage({
                             {reports.map(report => (
                               <div key={report.id} style={{...styles.mobileCard, cursor: 'pointer'}} onClick={() => fetchReportDetail(report.id)}>
                                 <div style={{...styles.mobileCardHeader, display: 'flex', alignItems: 'center', gap: '8px'}}>
-                                  {adminEmail === 'atsuhiro@takagi.bz' && (
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedReportIds.has(report.id)}
-                                      onChange={(e) => { e.stopPropagation(); const next = new Set(selectedReportIds); if (next.has(report.id)) next.delete(report.id); else next.add(report.id); setSelectedReportIds(next) }}
-                                      onClick={(e) => e.stopPropagation()}
-                                      style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }}
-                                    />
-                                  )}
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedReportIds.has(report.id)}
+                                    onChange={(e) => { e.stopPropagation(); const next = new Set(selectedReportIds); if (next.has(report.id)) next.delete(report.id); else next.add(report.id); setSelectedReportIds(next) }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }}
+                                  />
                                   <span style={styles.mobileCardDate}>{formatDateTime(report.approved_at)}</span>
                                 </div>
                                 <div style={styles.mobileCardBody}>
@@ -198,16 +196,14 @@ export function ReportsPage({
                               <table style={styles.table}>
                                 <thead>
                                   <tr>
-                                    {adminEmail === 'atsuhiro@takagi.bz' && (
-                                      <th style={{...styles.th, width: '40px', textAlign: 'center'}}>
-                                        <input
-                                          type="checkbox"
-                                          checked={reports.length > 0 && reports.every(r => selectedReportIds.has(r.id))}
-                                          onChange={() => { if (reports.every(r => selectedReportIds.has(r.id))) { setSelectedReportIds(new Set()) } else { setSelectedReportIds(new Set(reports.map(r => r.id))) } }}
-                                          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                                        />
-                                      </th>
-                                    )}
+                                    <th style={{...styles.th, width: '40px', textAlign: 'center'}}>
+                                      <input
+                                        type="checkbox"
+                                        checked={reports.length > 0 && reports.every(r => selectedReportIds.has(r.id))}
+                                        onChange={() => { if (reports.every(r => selectedReportIds.has(r.id))) { setSelectedReportIds(new Set()) } else { setSelectedReportIds(new Set(reports.map(r => r.id))) } }}
+                                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                      />
+                                    </th>
                                     <th style={styles.th}>承認日時</th>
                                     <th style={styles.th}>会社名</th>
                                     <th style={styles.th}>実施日</th>
@@ -221,17 +217,15 @@ export function ReportsPage({
                                 <tbody>
                                   {reports.map(report => (
                                     <tr key={report.id} style={{...styles.tr, cursor: 'pointer', background: selectedReportIds.has(report.id) ? '#FFF8E1' : undefined}} onClick={() => fetchReportDetail(report.id)}>
-                                      {adminEmail === 'atsuhiro@takagi.bz' && (
-                                        <td style={{...styles.td, textAlign: 'center'}}>
-                                          <input
-                                            type="checkbox"
-                                            checked={selectedReportIds.has(report.id)}
-                                            onChange={() => { const next = new Set(selectedReportIds); if (next.has(report.id)) next.delete(report.id); else next.add(report.id); setSelectedReportIds(next) }}
-                                            onClick={(e) => e.stopPropagation()}
-                                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                                          />
-                                        </td>
-                                      )}
+                                      <td style={{...styles.td, textAlign: 'center'}}>
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedReportIds.has(report.id)}
+                                          onChange={() => { const next = new Set(selectedReportIds); if (next.has(report.id)) next.delete(report.id); else next.add(report.id); setSelectedReportIds(next) }}
+                                          onClick={(e) => e.stopPropagation()}
+                                          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                        />
+                                      </td>
                                       <td style={styles.td}>{formatDateTime(report.approved_at)}</td>
                                       <td style={styles.td}>{report.client_name_raw}</td>
                                       <td style={styles.td}>{formatDate(report.work_date)}</td>
@@ -253,15 +247,13 @@ export function ReportsPage({
                                         )}
                                       </td>
                                       <td style={{...styles.td, whiteSpace: 'nowrap'}}>
-                                        {adminEmail === 'atsuhiro@takagi.bz' && (
-                                          <button
-                                            style={{...styles.primaryButton, fontSize: '13px', padding: '6px 12px', background: '#d32f2f', color: '#fff', marginRight: '6px'}}
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteReport(report.id) }}
-                                            disabled={deleting}
-                                          >
-                                            削除
-                                          </button>
-                                        )}
+                                        <button
+                                          style={{...styles.primaryButton, fontSize: '13px', padding: '6px 12px', background: '#d32f2f', color: '#fff', marginRight: '6px'}}
+                                          onClick={(e) => { e.stopPropagation(); handleDeleteReport(report.id) }}
+                                          disabled={deleting}
+                                        >
+                                          削除
+                                        </button>
                                         <button
                                           style={{...styles.primaryButton, fontSize: '13px', padding: '6px 16px'}}
                                           onClick={(e) => { e.stopPropagation(); fetchReportDetail(report.id) }}
@@ -325,9 +317,15 @@ export function ReportsPage({
                               </div>
 
                               {selectedReportDetail.guards_json && (() => {
-                                const guards = typeof selectedReportDetail.guards_json === 'string'
-                                  ? JSON.parse(selectedReportDetail.guards_json) as Array<{index?: number; name?: string; start_time?: string; end_time?: string; early_overtime_hours?: number | null}>
-                                  : selectedReportDetail.guards_json as unknown as Array<{index?: number; name?: string; start_time?: string; end_time?: string; early_overtime_hours?: number | null}>;
+                                let guards: Array<{index?: number; name?: string; start_time?: string; end_time?: string; early_overtime_hours?: number | null}> = [];
+                                try {
+                                  guards = typeof selectedReportDetail.guards_json === 'string'
+                                    ? JSON.parse(selectedReportDetail.guards_json) as Array<{index?: number; name?: string; start_time?: string; end_time?: string; early_overtime_hours?: number | null}>
+                                    : selectedReportDetail.guards_json as unknown as Array<{index?: number; name?: string; start_time?: string; end_time?: string; early_overtime_hours?: number | null}>;
+                                  if (!Array.isArray(guards)) guards = [];
+                                } catch (e) {
+                                  guards = [];
+                                }
                                 return guards.length > 0 ? (
                                   <div style={{marginBottom: '20px'}}>
                                     <h4 style={{margin: '0 0 8px', color: '#333'}}>警備員一覧</h4>
@@ -377,7 +375,6 @@ export function ReportsPage({
                               )}
 
                               <div style={{display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px'}}>
-                                {adminEmail === 'atsuhiro@takagi.bz' && (
                                 <button
                                   style={{...styles.primaryButton, background: '#d32f2f', color: '#fff', opacity: deleting ? 0.6 : 1}}
                                   onClick={() => handleDeleteReport(selectedReportDetail.id)}
@@ -385,7 +382,6 @@ export function ReportsPage({
                                 >
                                   {deleting ? '削除中...' : '削除'}
                                 </button>
-                                )}
                                 <button
                                   style={{...styles.primaryButton, background: '#1976D2', opacity: resending ? 0.6 : 1}}
                                   onClick={() => handleResendNotifications(selectedReportDetail.id)}

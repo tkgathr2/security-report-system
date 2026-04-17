@@ -4,6 +4,7 @@ import express, { Request, Response } from 'express';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import passport from 'passport';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
@@ -48,6 +49,15 @@ app.use((req: Request, _res: Response, next: () => void) => {
   next();
 });
 app.use(requestTimeout);
+
+// Security headers (manual implementation)
+app.use((req: Request, res: Response, next: () => void) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
 
 // PostgreSQL session store for persistent sessions
 const PgSession = connectPgSimple(session);
@@ -661,28 +671,40 @@ async function seedTakagiProjectData() {
           }
         }
       } else {
-        const uniqueUrl = Math.random().toString(36).substring(2, 10);
+        const uniqueUrl = crypto.randomUUID();
         const urlExpires = new Date(targetDate);
         urlExpires.setDate(urlExpires.getDate() + 3);
         urlExpires.setHours(23, 59, 59, 999);
         const projectKey = `SEED-${dateStr}`;
 
-        const newProj = await pool.query(
-          `INSERT INTO projects (project_key, work_date, work_name, location, start_time, end_time, unique_url, url_expires_at, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-           ON CONFLICT DO NOTHING
-           RETURNING id`,
-          [projectKey, dateStr, '警備業務', '現場A', '09:00', '18:00', uniqueUrl, urlExpires, 'active']
-        );
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
 
-        if (newProj.rows.length > 0) {
-          await pool.query(
-            `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
-             VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT DO NOTHING`,
-            [newProj.rows[0].id, 'TAKAGI-001', TAKAGI_ID, 0, '高木 豊大']
+          const newProj = await client.query(
+            `INSERT INTO projects (project_key, work_date, work_name, location, start_time, end_time, unique_url, url_expires_at, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             ON CONFLICT DO NOTHING
+             RETURNING id`,
+            [projectKey, dateStr, '警備業務', '現場A', '09:00', '18:00', uniqueUrl, urlExpires, 'active']
           );
-          addedCount++;
+
+          if (newProj.rows.length > 0) {
+            await client.query(
+              `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT DO NOTHING`,
+              [newProj.rows[0].id, 'TAKAGI-001', TAKAGI_ID, 0, '高木 豊大']
+            );
+            addedCount++;
+          }
+
+          await client.query('COMMIT');
+        } catch (txErr: unknown) {
+          await client.query('ROLLBACK');
+          throw txErr;
+        } finally {
+          client.release();
         }
       }
     }

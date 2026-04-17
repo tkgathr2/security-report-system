@@ -190,50 +190,65 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     const writerStaffIdResult = await pool.query<{ staff_id: string | null }>('SELECT staff_id FROM cast_users WHERE id = $1',[castUser.userId]);
     const writerStaffId: string | null = writerStaffIdResult.rows[0]?.staff_id ?? null;
 
-    const reportResult = await pool.query(
-      `INSERT INTO reports (
-        project_id, cast_user_id, supervisor_name, writer_staff_id, weather,
-        guard_contents, guard_other_text, overtime_hours, has_qualifier, qualifier_name,
-        signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json, notes, partner_company_name
-      ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
-      WHERE EXISTS (SELECT 1 FROM projects WHERE id = $1 AND url_expires_at > NOW() AND deleted_at IS NULL)
-      ON CONFLICT (project_id) WHERE deleted_at IS NULL DO NOTHING
-      RETURNING id`,
-      [
-        project.id,
-        castUser.userId,
-        supervisor_name || '',
-        writerStaffId,
-        weather || 'sunny',
-        guard_contents,
-        guard_other_text || null,
-        null,
-        has_qualifier || false,
-        JSON.stringify(Array.isArray(qualifier_name) ? qualifier_name : (qualifier_name ? [qualifier_name] : [])),
-        signaturePngBuffer,
-        initialPdfBuffer,
-        'approved',
-        now,
-        'pending',
-        null,
-        Array.isArray(guards) ? JSON.stringify(guards) : null,
-        typeof notes === 'string' ? notes.slice(0, 1000) : null,
-        typeof partner_company_name === 'string' && partner_company_name.trim() ? partner_company_name.trim().slice(0, 200) : null
-      ]
-    );
+    const client = await pool.connect();
+    let reportId: string | null = null;
 
-    if (reportResult.rows.length === 0) {
-      const dupCheck = await pool.query('SELECT 1 FROM reports WHERE project_id = $1 AND deleted_at IS NULL', [project.id]);
-      if (dupCheck.rows.length > 0) {
-        sendConflict(res, 'この案件の報告書は既に提出されています');
-      } else {
-        sendExpired(res, 'この案件のURLは期限切れです');
+    try {
+      await client.query('BEGIN');
+
+      const reportResult = await client.query(
+        `INSERT INTO reports (
+          project_id, cast_user_id, supervisor_name, writer_staff_id, weather,
+          guard_contents, guard_other_text, overtime_hours, has_qualifier, qualifier_name,
+          signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json, notes, partner_company_name
+        ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+        WHERE EXISTS (SELECT 1 FROM projects WHERE id = $1 AND url_expires_at > NOW() AND deleted_at IS NULL)
+        ON CONFLICT (project_id) WHERE deleted_at IS NULL DO NOTHING
+        RETURNING id`,
+        [
+          project.id,
+          castUser.userId,
+          supervisor_name || '',
+          writerStaffId,
+          weather || 'sunny',
+          guard_contents,
+          guard_other_text || null,
+          null,
+          has_qualifier || false,
+          JSON.stringify(Array.isArray(qualifier_name) ? qualifier_name : (qualifier_name ? [qualifier_name] : [])),
+          signaturePngBuffer,
+          initialPdfBuffer,
+          'approved',
+          now,
+          'pending',
+          null,
+          Array.isArray(guards) ? JSON.stringify(guards) : null,
+          typeof notes === 'string' ? notes.slice(0, 1000) : null,
+          typeof partner_company_name === 'string' && partner_company_name.trim() ? partner_company_name.trim().slice(0, 200) : null
+        ]
+      );
+
+      if (reportResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        const dupCheck = await pool.query('SELECT 1 FROM reports WHERE project_id = $1 AND deleted_at IS NULL', [project.id]);
+        if (dupCheck.rows.length > 0) {
+          sendConflict(res, 'この案件の報告書は既に提出されています');
+        } else {
+          sendExpired(res, 'この案件のURLは期限切れです');
+        }
+        return;
       }
-      return;
-    }
 
-    const reportId = reportResult.rows[0].id;
-    console.log('[APPROVE] Report inserted successfully, id:', reportId);
+      reportId = reportResult.rows[0].id;
+      console.log('[APPROVE] Report inserted successfully, id:', reportId);
+
+      await client.query('COMMIT');
+    } catch (err: unknown) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
 
     logAudit({ req, actorEmail: castUser.email, actorType: 'cast', action: 'APPROVE_REPORT', targetType: 'report', targetId: reportId, payload: { project_id: project.id, supervisor_name: supervisor_name || '' } });
 

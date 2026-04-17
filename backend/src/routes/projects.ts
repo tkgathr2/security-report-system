@@ -32,7 +32,7 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
     const { unique_url } = req.params;
 
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(String(unique_url))) {
+    if (unique_url && !uuidRegex.test(unique_url)) {
       sendNotFound(res, '案件が見つかりません');
       return;
     }
