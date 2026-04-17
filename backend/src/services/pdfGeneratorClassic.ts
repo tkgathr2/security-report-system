@@ -119,7 +119,13 @@ function drawHeader(
   if (design === 'A') {
     doc.rect(0, 0, W, 70).fill(colors.primary);
     doc.rect(0, 70, W, 4).fill(colors.secondary);
-    if (logoBuffer) doc.image(logoBuffer, 12, 10, { height: 45 });
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, 12, 10, { height: 45 });
+      } catch (e) {
+        console.warn('[PDF] Logo image load failed, skipping logo:', e instanceof Error ? e.message : e);
+      }
+    }
     doc.fillColor('#FFFFFF').fontSize(20).text('警備報告書', M, 14, { width: CW, align: 'right' });
     doc.fillColor('#FFFFFF').fontSize(7).text('SECURITY REPORT', M, 38, { width: CW, align: 'right' });
     doc.fillColor('#FFFFFF').fontSize(6).text('デジタル警備報告書システム【ほうこちゃん】', M, 50, { width: CW, align: 'right' });
@@ -127,14 +133,26 @@ function drawHeader(
   } else if (design === 'B') {
     doc.rect(0, 0, W, 85).fill(colors.primary);
     doc.rect(0, 0, 8, 85).fill(colors.secondary);
-    if (logoBuffer) doc.image(logoBuffer, 22, 10, { height: 28 });
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, 22, 10, { height: 28 });
+      } catch (e) {
+        console.warn('[PDF] Logo image load failed, skipping logo:', e instanceof Error ? e.message : e);
+      }
+    }
     doc.fillColor('#FFFFFF').fontSize(18).text('警備報告書', M, 42, { width: CW });
     doc.fillColor('#DDDDDD').fontSize(8).text('SECURITY REPORT', M, 42, { width: CW, align: 'right' });
     doc.rect(0, 85, W, 3).fill(colors.secondary);
     doc.y = 100;
   } else if (design === 'C') {
     doc.rect(0, 0, W, 110).fill(colors.primary);
-    if (logoBuffer) doc.image(logoBuffer, W / 2 - 100, 12, { height: 32 });
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, W / 2 - 100, 12, { height: 32 });
+      } catch (e) {
+        console.warn('[PDF] Logo image load failed, skipping logo:', e instanceof Error ? e.message : e);
+      }
+    }
     doc.fillColor(colors.secondary).fontSize(24).text('警備報告書', 0, 56, { width: W, align: 'center' });
     doc.fillColor('#999999').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', 0, 84, { width: W, align: 'center' });
     doc.save(); doc.rect(W / 2 - 40, 96, 80, 2).fill(colors.secondary); doc.restore();
@@ -142,7 +160,13 @@ function drawHeader(
   } else if (design === 'D') {
     doc.rect(0, 0, W, 100).fill('#FFFFFF');
     doc.rect(0, 0, 8, 100).fill(colors.primary);
-    if (logoBuffer) doc.image(logoBuffer, 20, 12, { height: 30 });
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, 20, 12, { height: 30 });
+      } catch (e) {
+        console.warn('[PDF] Logo image load failed, skipping logo:', e instanceof Error ? e.message : e);
+      }
+    }
     doc.fillColor(colors.primary).fontSize(28).text('警備報告書', M, 55, { width: CW, align: 'left' });
     doc.fillColor('#999999').fontSize(8).text('SECURITY REPORT', M, 55, { width: CW, align: 'right' });
     doc.fillColor('#999999').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 85, { width: CW, align: 'right' });
@@ -152,7 +176,13 @@ function drawHeader(
     doc.rect(0, 0, W, 95).fill(colors.primary);
     doc.rect(0, 95, W, 8).fill(colors.secondary);
     doc.rect(0, 103, W, 3).fill(colors.primary);
-    if (logoBuffer) doc.image(logoBuffer, 20, 15, { height: 55 });
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, 20, 15, { height: 55 });
+      } catch (e) {
+        console.warn('[PDF] Logo image load failed, skipping logo:', e instanceof Error ? e.message : e);
+      }
+    }
     doc.fillColor('#FFFFFF').fontSize(24).text('警備報告書', M, 18, { width: CW, align: 'right' });
     doc.fillColor('#FFE0C0').fontSize(9).text('SECURITY REPORT', M, 48, { width: CW, align: 'right' });
     doc.fillColor('#FFE0C0').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 65, { width: CW, align: 'right' });
@@ -160,7 +190,13 @@ function drawHeader(
   } else if (design === 'G') {
     doc.rect(0, 0, W, 6).fill(colors.primary);
     doc.rect(0, 6, W, 6).fill(colors.secondary);
-    if (logoBuffer) doc.image(logoBuffer, M, 22, { height: 30 });
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, M, 22, { height: 30 });
+      } catch (e) {
+        console.warn('[PDF] Logo image load failed, skipping logo:', e instanceof Error ? e.message : e);
+      }
+    }
     doc.fillColor(colors.primary).fontSize(26).text('警備報告書', M, 58, { width: CW, align: 'left' });
     doc.fillColor(colors.secondary).fontSize(8).text('SECURITY REPORT', M, 58, { width: CW, align: 'right' });
     doc.fillColor('#999999').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 88, { width: CW, align: 'right' });
@@ -170,7 +206,13 @@ function drawHeader(
   } else if (design === 'H') {
     doc.rect(0, 0, W, 85).fill(colors.primary);
     doc.save(); doc.moveTo(W - 180, 0).lineTo(W - 130, 85).lineTo(W - 120, 85).lineTo(W - 70, 0).closePath().fill(colors.secondary).opacity(0.3); doc.restore();
-    if (logoBuffer) doc.image(logoBuffer, 22, 12, { height: 26 });
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, 22, 12, { height: 26 });
+      } catch (e) {
+        console.warn('[PDF] Logo image load failed, skipping logo:', e instanceof Error ? e.message : e);
+      }
+    }
     doc.fillColor('#FFFFFF').fontSize(22).text('警備報告書', M, 14, { width: CW, align: 'right' });
     doc.fillColor('#FFD8B8').fontSize(8).text('SECURITY REPORT', M, 42, { width: CW, align: 'right' });
     doc.fillColor('#FFD8B8').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 58, { width: CW, align: 'right' });
@@ -180,7 +222,13 @@ function drawHeader(
     doc.rect(0, 0, 12, 110).fill(colors.primary);
     doc.rect(0, 0, W, 5).fill(colors.secondary);
     doc.rect(12, 5, W - 12, 105).fill('#FFFFFF');
-    if (logoBuffer) doc.image(logoBuffer, 24, 14, { height: 30 });
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, 24, 14, { height: 30 });
+      } catch (e) {
+        console.warn('[PDF] Logo image load failed, skipping logo:', e instanceof Error ? e.message : e);
+      }
+    }
     doc.fillColor(colors.primary).fontSize(24).text('警備報告書', M, 50, { width: CW, align: 'left' });
     doc.fillColor(colors.secondary).fontSize(8).text('SECURITY REPORT', M, 50, { width: CW, align: 'right' });
     doc.fillColor('#999999').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', M, 85, { width: CW, align: 'right' });
@@ -189,7 +237,13 @@ function drawHeader(
   } else {
     doc.rect(0, 0, W, 100).fill(colors.primary);
     doc.rect(0, 100, W, 4).fill(colors.secondary);
-    if (logoBuffer) doc.image(logoBuffer, W / 2 - 100, 8, { height: 30 });
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, W / 2 - 100, 8, { height: 30 });
+      } catch (e) {
+        console.warn('[PDF] Logo image load failed, skipping logo:', e instanceof Error ? e.message : e);
+      }
+    }
     doc.fillColor('#FFFFFF').fontSize(26).text('警備報告書', 0, 44, { width: W, align: 'center' });
     doc.fillColor('#FFD8B0').fontSize(8).text('SECURITY REPORT', 0, 74, { width: W, align: 'center' });
     doc.fillColor('#FFD8B0').fontSize(7).text('デジタル警備報告書システム【ほうこちゃん】', 0, 86, { width: W, align: 'center' });
@@ -220,7 +274,7 @@ export async function generateReportPdfClassic(data: ReportData, design: PdfDesi
         doc.registerFont('IPAGothic', fontPath);
         doc.font('IPAGothic');
       } else {
-        console.warn('[PDF] No Japanese font found, using default Helvetica');
+        console.error('[PDF] No Japanese font found. PDF may show garbled text.');
         doc.font('Helvetica');
       }
 

@@ -49,7 +49,7 @@ export function CsvImportPage({
             id="csv-upload"
           />
           <label htmlFor="csv-upload" style={styles.uploadLabel}>
-            <span style={styles.uploadIcon}>{isDragging ? '\u{1F4E5}' : '\u{1F4C1}'}</span>
+            <span style={styles.uploadIcon}>{isDragging ? '📥' : '📁'}</span>
             <span>{importing ? 'インポート中...' : (isDragging ? 'ここにドロップ' : 'CSVファイルを選択またはドラッグ＆ドロップ')}</span>
           </label>
         </div>

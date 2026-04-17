@@ -235,7 +235,15 @@ function generateUniqueUrl(): string {
 function parseDate(dateStr: string): Date | null {
   const match = dateStr.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
   if (match) {
-    return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+    const year = parseInt(match[1]);
+    const month = parseInt(match[2]);
+    const day = parseInt(match[3]);
+
+    // Validate month and day ranges
+    if (month < 1 || month > 12) return null;
+    if (day < 1 || day > 31) return null;
+
+    return new Date(year, month - 1, day);
   }
   return null;
 }
@@ -431,312 +439,338 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
 
   const dbClient = await pool.connect();
   try {
-  await dbClient.query('BEGIN');
+    await dbClient.query('BEGIN');
 
-  for (let i = 0; i < records.length; i++) {
-    const row = records[i];
-    const rowNum = i + 2;
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
+      const rowNum = i + 2;
 
-    const projectName = row[mapping.projectName]?.trim();
-    const clientNameRaw = row[mapping.clientName]?.trim();
-    const location = row[mapping.location]?.trim();
-    const workDateStr = row[mapping.workDate]?.trim();
+      const projectName = row[mapping.projectName]?.trim();
+      const clientNameRaw = row[mapping.clientName]?.trim();
+      const location = row[mapping.location]?.trim();
+      const workDateStr = row[mapping.workDate]?.trim();
 
-    const emptyFields: string[] = [];
-    if (!projectName) emptyFields.push('案件名');
-    if (isEmptyClientName(clientNameRaw)) emptyFields.push('クライアント名');
-    if (!location) emptyFields.push('実施場所');
-    if (!workDateStr) emptyFields.push('実施日');
-    
-    if (emptyFields.length > 0) {
-      errors.push({ row: rowNum, reason: `以下の項目が空です: ${emptyFields.join(', ')}` });
-      skippedRowsCount++;
-      continue;
-    }
+      const emptyFields: string[] = [];
+      if (!projectName) emptyFields.push('案件名');
+      if (isEmptyClientName(clientNameRaw)) emptyFields.push('クライアント名');
+      if (!location) emptyFields.push('実施場所');
+      if (!workDateStr) emptyFields.push('実施日');
 
-    // At this point, all required fields are guaranteed to be non-empty strings
-    const validProjectName = projectName as string;
-    const validClientNameRaw = clientNameRaw as string;
-    const validLocation = location as string;
-    const validWorkDateStr = workDateStr as string;
-
-    const workDates = validWorkDateStr.includes('・') ? validWorkDateStr.split('・') : [validWorkDateStr];
-    
-    for (const singleDateStr of workDates) {
-      const trimmedDate = singleDateStr.trim();
-      if (!trimmedDate) continue;
-
-      const workDate = parseDate(trimmedDate);
-      if (!workDate) {
-        errors.push({ row: rowNum, reason: `実施日の形式が不正です: ${trimmedDate}` });
+      if (emptyFields.length > 0) {
+        errors.push({ row: rowNum, reason: `以下の項目が空です: ${emptyFields.join(', ')}` });
         skippedRowsCount++;
         continue;
       }
 
-      const projectKey = generateProjectKey(
-        workDate.toISOString().split('T')[0],
-        validProjectName,
-        validLocation,
-        validClientNameRaw
-      );
+      // At this point, all required fields are guaranteed to be non-empty strings
+      const validProjectName = projectName as string;
+      const validClientNameRaw = clientNameRaw as string;
+      const validLocation = location as string;
+      const validWorkDateStr = workDateStr as string;
 
-      if (!processedWorkDates.has(validProjectName)) {
-        processedWorkDates.set(validProjectName, new Set());
-      }
-      const dateKey = workDate.toISOString().split('T')[0];
-      processedWorkDates.get(validProjectName)!.add(dateKey);
+      const workDates = validWorkDateStr.includes('・') ? validWorkDateStr.split('・') : [validWorkDateStr];
 
-      const workName = (mapping.workContent && row[mapping.workContent]?.trim()) || validProjectName;
-      const startTime = (mapping.startTime && row[mapping.startTime]?.trim()) || null;
-      const endTime = (mapping.endTime && row[mapping.endTime]?.trim()) || null;
-      const breakTime = (mapping.breakTime && row[mapping.breakTime]?.trim()) || null;
-      const supervisorName = (mapping.supervisorName && row[mapping.supervisorName]?.trim()) || null;
-      const qualifierHint = extractQualifierHint(validProjectName);
+      for (const singleDateStr of workDates) {
+        const trimmedDate = singleDateStr.trim();
+        if (!trimmedDate) continue;
 
-      try {
-        if (!projectMap.has(projectKey)) {
-          const existingProject = await dbClient.query(
-            'SELECT id FROM projects WHERE project_key = $1 AND deleted_at IS NULL',
-            [projectKey]
-          );
-
-          if (existingProject.rows.length > 0) {
-            const existingProjectId = existingProject.rows[0].id;
-            const clientNameNormalized = normalizeClientName(validClientNameRaw);
-            const clientResult = await dbClient.query(
-              'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true AND deleted_at IS NULL',
-              [clientNameNormalized]
-            );
-            let clientId: string | null = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
-            if (!clientId) {
-              const newClient = await dbClient.query(
-                `INSERT INTO clients (name, name_normalized, emails, is_active)
-                 VALUES ($1, $2, $3, true)
-                 ON CONFLICT DO NOTHING
-                 RETURNING id`,
-                [validClientNameRaw, clientNameNormalized, []]
-              );
-              if (newClient.rows.length > 0) {
-                clientId = newClient.rows[0].id;
-                clientAutoCreatedCount++;
-              } else {
-                const retryResult = await dbClient.query(
-                  'SELECT id FROM clients WHERE name_normalized = $1 AND deleted_at IS NULL',
-                  [clientNameNormalized]
-                );
-                clientId = retryResult.rows.length > 0 ? retryResult.rows[0].id : null;
-              }
-            }
-            await dbClient.query(
-              `UPDATE projects SET client_id = $1, work_name = $2, location = $3,
-               start_time = $4, end_time = $5, break_time = $6,
-               work_title_raw = $7, qualifier_hint = $8, supervisor_name = $9,
-               updated_at = NOW()
-               WHERE id = $10`,
-              [clientId, workName, validLocation, startTime, endTime, breakTime,
-               validProjectName, qualifierHint, supervisorName, existingProjectId]
-            );
-            await dbClient.query(
-              `UPDATE project_casts SET deleted_at = NOW() WHERE project_id = $1 AND deleted_at IS NULL`,
-              [existingProjectId]
-            );
-            projectMap.set(projectKey, { projectId: existingProjectId, casts: new Set() });
-            updatedProjectsCount++;
-          } else {
-            const clientNameNormalized = normalizeClientName(validClientNameRaw);
-            const clientResult = await dbClient.query(
-              'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true AND deleted_at IS NULL',
-              [clientNameNormalized]
-            );
-
-            let clientId: string | null = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
-            const status = 'active';
-
-            if (!clientId) {
-              const newClient = await dbClient.query(
-                `INSERT INTO clients (name, name_normalized, emails, is_active)
-                 VALUES ($1, $2, $3, true)
-                 ON CONFLICT DO NOTHING
-                 RETURNING id`,
-                [validClientNameRaw, clientNameNormalized, []]
-              );
-              if (newClient.rows.length > 0) {
-                clientId = newClient.rows[0].id;
-                clientAutoCreatedCount++;
-              } else {
-                const retryResult = await dbClient.query(
-                  'SELECT id FROM clients WHERE name_normalized = $1 AND deleted_at IS NULL',
-                  [clientNameNormalized]
-                );
-                clientId = retryResult.rows.length > 0 ? retryResult.rows[0].id : null;
-              }
-              if (!clientId) {
-                pendingClientRowsCount++;
-              }
-            }
-
-            const uniqueUrl = generateUniqueUrl();
-            const urlExpiresAt = new Date(workDate);
-            urlExpiresAt.setDate(urlExpiresAt.getDate() + 3);
-            urlExpiresAt.setHours(23, 59, 59, 999);
-
-            const insertResult = await dbClient.query(
-              `INSERT INTO projects (
-                project_key, client_id, work_date, work_name, location,
-                start_time, end_time, break_time, work_title_raw, qualifier_hint,
-                unique_url, url_expires_at, status, supervisor_name
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-              RETURNING id`,
-              [
-                projectKey, clientId, workDate, workName, validLocation,
-                startTime, endTime, breakTime, validProjectName, qualifierHint,
-                uniqueUrl, urlExpiresAt, status, supervisorName
-              ]
-            );
-
-            projectMap.set(projectKey, { projectId: insertResult.rows[0].id, casts: new Set() });
-            createdProjectsCount++;
-          }
+        const workDate = parseDate(trimmedDate);
+        if (!workDate) {
+          errors.push({ row: rowNum, reason: `実施日の形式が不正です: ${trimmedDate}` });
+          skippedRowsCount++;
+          continue;
         }
 
-        if (mapping.staffName) {
-          const rawCastName = row[mapping.staffName]?.trim();
-          const castName = rawCastName ? normalizeNameSpaces(rawCastName) : undefined;
-          const staffNo = mapping.staffNo ? row[mapping.staffNo]?.trim() : null;
-          const rawCastNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
-          const castNameKana = rawCastNameKana ? normalizeNameSpaces(rawCastNameKana) : undefined;
-          
-          // Check required cast fields
-          const castEmptyFields: string[] = [];
-          if (!castName) castEmptyFields.push('氏名');
-          if (!staffNo) castEmptyFields.push('スタッフNo.');
-          if (!castNameKana) castEmptyFields.push('フリガナ');
-          
-          if (castEmptyFields.length > 0) {
-            errors.push({ row: rowNum, reason: `以下の項目が空です: ${castEmptyFields.join(', ')}` });
-          }
-          
-          if (castName) {
-            const projectInfo = projectMap.get(projectKey)!;
-            const castIdentifier = staffNo || castName;
+        const projectKey = generateProjectKey(
+          workDate.toISOString().split('T')[0],
+          validProjectName,
+          validLocation,
+          validClientNameRaw
+        );
 
-            const castDateKey = `${castName}::${dateKey}`;
-            if (castDateAssignments.has(castDateKey)) {
-              const existingWork = castDateAssignments.get(castDateKey)!;
-              errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingWork}」に割り当て済みです（1日1現場まで）` });
-              duplicateCastAssignments++;
-            } else {
-              castDateAssignments.set(castDateKey, workName);
-            }
+        if (!processedWorkDates.has(validProjectName)) {
+          processedWorkDates.set(validProjectName, new Set());
+        }
+        const dateKey = workDate.toISOString().split('T')[0];
+        const dateSet = processedWorkDates.get(validProjectName);
+        if (dateSet) {
+          dateSet.add(dateKey);
+        }
 
-            if (!castDateAssignments.has(castDateKey) || castDateAssignments.get(castDateKey) === workName) {
-              if (!projectInfo.casts.has(castIdentifier)) {
-                const existingAssignment = await dbClient.query(
-                                    `SELECT p.work_name FROM project_casts pc
-                                     JOIN projects p ON pc.project_id = p.id
-                                     LEFT JOIN staff_master sm ON pc.staff_id = sm.id AND sm.deleted_at IS NULL
-                                     WHERE REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
-                                       AND p.work_date = $2
-                                       AND p.id != $3
-                                       AND pc.deleted_at IS NULL
-                                       AND p.deleted_at IS NULL`,
-                  [castName, workDate, projectInfo.projectId]
+        const workName = (mapping.workContent && row[mapping.workContent]?.trim()) || validProjectName;
+        const startTime = (mapping.startTime && row[mapping.startTime]?.trim()) || null;
+        const endTime = (mapping.endTime && row[mapping.endTime]?.trim()) || null;
+        const breakTime = (mapping.breakTime && row[mapping.breakTime]?.trim()) || null;
+        const supervisorName = (mapping.supervisorName && row[mapping.supervisorName]?.trim()) || null;
+        const qualifierHint = extractQualifierHint(validProjectName);
+
+        try {
+          if (!projectMap.has(projectKey)) {
+            const existingProject = await dbClient.query(
+              'SELECT id FROM projects WHERE project_key = $1 AND deleted_at IS NULL',
+              [projectKey]
+            );
+
+            if (existingProject.rows.length > 0) {
+              const existingProjectId = existingProject.rows[0].id;
+              const clientNameNormalized = normalizeClientName(validClientNameRaw);
+              const clientResult = await dbClient.query(
+                'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true AND deleted_at IS NULL',
+                [clientNameNormalized]
+              );
+              let clientId: string | null = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
+              if (!clientId) {
+                const newClient = await dbClient.query(
+                  `INSERT INTO clients (name, name_normalized, emails, is_active)
+                   VALUES ($1, $2, $3, true)
+                   ON CONFLICT DO NOTHING
+                   RETURNING id`,
+                  [validClientNameRaw, clientNameNormalized, []]
                 );
-                if (existingAssignment.rows.length > 0 && !forceImport) {
-                  errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingAssignment.rows[0].work_name}」に割り当て済みです（1日1現場まで）` });
-                  duplicateCastAssignments++;
+                if (newClient.rows.length > 0) {
+                  clientId = newClient.rows[0].id;
+                  clientAutoCreatedCount++;
                 } else {
-                  if (existingAssignment.rows.length > 0) {
-                    await dbClient.query(
-                      `UPDATE project_casts SET deleted_at = NOW()
-                       WHERE staff_id IN (SELECT sm.id FROM staff_master sm WHERE REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND sm.deleted_at IS NULL)
-                         AND project_id IN (SELECT p.id FROM projects p WHERE p.work_date = $2 AND p.id != $3 AND p.deleted_at IS NULL)
-                         AND deleted_at IS NULL`,
-                      [castName, workDate, projectInfo.projectId]
-                    );
-                  }
-                  let staffIdRow = await dbClient.query(
-                    `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
-                    [castName]
+                  const retryResult = await dbClient.query(
+                    'SELECT id FROM clients WHERE name_normalized = $1 AND deleted_at IS NULL',
+                    [clientNameNormalized]
                   );
-                  const staffKana = castNameKana || castName;
-                  if (!staffIdRow.rows[0]) {
-                    staffIdRow = await dbClient.query(
-                      `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
-                      [staffKana]
-                    );
-                  }
-                  if (!staffIdRow.rows[0]) {
-                    const softDeleted = await dbClient.query(
-                      `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NOT NULL LIMIT 1`,
-                      [staffKana]
-                    );
-                    if (softDeleted.rows[0]) {
-                      await dbClient.query(`UPDATE staff_master SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [softDeleted.rows[0].id]);
-                      staffIdRow = softDeleted;
-                    } else {
-                      const normalizedKana = staffKana.replace(/\s+/g, ' ').replace(/\u3000/g, ' ').trim();
-                      const newStaff = await dbClient.query(
-                        `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
-                         VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
-                         ON CONFLICT (display_name_kana) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-                         RETURNING id`,
-                        [castName, normalizedKana, adminUser.email]
-                      );
-                      staffIdRow = newStaff;
-                      staffAutoAddedCount++;
-                    }
-                  }
-                  processedStaffKana.add(staffKana);
-                  await dbClient.query(
-                    `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
-                     VALUES ($1, $2, $3, $4, $5)
-                     ON CONFLICT (project_id, staff_no) DO UPDATE SET staff_id = EXCLUDED.staff_id, cast_name = EXCLUDED.cast_name, deleted_at = NULL`,
-                    [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i, castName]
-                  );
-                  projectInfo.casts.add(castIdentifier);
+                  clientId = retryResult.rows.length > 0 ? retryResult.rows[0].id : null;
                 }
               }
-            }
-            const staffKanaKey = castNameKana || castName;
-            if (staffKanaKey && !processedStaffKana.has(staffKanaKey)) {
-              processedStaffKana.add(staffKanaKey);
+
+              // Check if clientId is still null before updating
+              if (!clientId) {
+                errors.push({ row: rowNum, reason: 'クライアントIDが取得できませんでした' });
+                skippedRowsCount++;
+                continue;
+              }
+
+              await dbClient.query(
+                `UPDATE projects SET client_id = $1, work_name = $2, location = $3,
+                 start_time = $4, end_time = $5, break_time = $6,
+                 work_title_raw = $7, qualifier_hint = $8, supervisor_name = $9,
+                 updated_at = NOW()
+                 WHERE id = $10`,
+                [clientId, workName, validLocation, startTime, endTime, breakTime,
+                 validProjectName, qualifierHint, supervisorName, existingProjectId]
+              );
+              await dbClient.query(
+                `UPDATE project_casts SET deleted_at = NOW() WHERE project_id = $1 AND deleted_at IS NULL`,
+                [existingProjectId]
+              );
+              projectMap.set(projectKey, { projectId: existingProjectId, casts: new Set() });
+              updatedProjectsCount++;
+            } else {
+              const clientNameNormalized = normalizeClientName(validClientNameRaw);
+              const clientResult = await dbClient.query(
+                'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true AND deleted_at IS NULL',
+                [clientNameNormalized]
+              );
+
+              let clientId: string | null = clientResult.rows.length > 0 ? clientResult.rows[0].id : null;
+              const status = 'active';
+
+              if (!clientId) {
+                const newClient = await dbClient.query(
+                  `INSERT INTO clients (name, name_normalized, emails, is_active)
+                   VALUES ($1, $2, $3, true)
+                   ON CONFLICT DO NOTHING
+                   RETURNING id`,
+                  [validClientNameRaw, clientNameNormalized, []]
+                );
+                if (newClient.rows.length > 0) {
+                  clientId = newClient.rows[0].id;
+                  clientAutoCreatedCount++;
+                } else {
+                  const retryResult = await dbClient.query(
+                    'SELECT id FROM clients WHERE name_normalized = $1 AND deleted_at IS NULL',
+                    [clientNameNormalized]
+                  );
+                  clientId = retryResult.rows.length > 0 ? retryResult.rows[0].id : null;
+                }
+              }
+
+              // Check if clientId is null before proceeding with INSERT
+              if (!clientId) {
+                errors.push({ row: rowNum, reason: 'クライアントIDが取得できませんでした' });
+                skippedRowsCount++;
+                pendingClientRowsCount++;
+                continue;
+              }
+
+              const uniqueUrl = generateUniqueUrl();
+              const urlExpiresAt = new Date(workDate);
+              urlExpiresAt.setDate(urlExpiresAt.getDate() + 3);
+              urlExpiresAt.setHours(23, 59, 59, 999);
+
+              const insertResult = await dbClient.query(
+                `INSERT INTO projects (
+                  project_key, client_id, work_date, work_name, location,
+                  start_time, end_time, break_time, work_title_raw, qualifier_hint,
+                  unique_url, url_expires_at, status, supervisor_name
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                RETURNING id`,
+                [
+                  projectKey, clientId, workDate, workName, validLocation,
+                  startTime, endTime, breakTime, validProjectName, qualifierHint,
+                  uniqueUrl, urlExpiresAt, status, supervisorName
+                ]
+              );
+
+              projectMap.set(projectKey, { projectId: insertResult.rows[0].id, casts: new Set() });
+              createdProjectsCount++;
             }
           }
-        }
 
-      } catch (error) {
-        console.error('Row processing error:', error);
-        errors.push({ row: rowNum, reason: `処理エラー: ${String(error)}` });
-        skippedRowsCount++;
+          if (mapping.staffName) {
+            const rawCastName = row[mapping.staffName]?.trim();
+            const castName = rawCastName ? normalizeNameSpaces(rawCastName) : undefined;
+            const staffNo = mapping.staffNo ? row[mapping.staffNo]?.trim() : null;
+            const rawCastNameKana = row['フリガナ']?.trim() || row['カナ']?.trim() || row['氏名カナ']?.trim();
+            const castNameKana = rawCastNameKana ? normalizeNameSpaces(rawCastNameKana) : undefined;
+
+            // Check required cast fields
+            const castEmptyFields: string[] = [];
+            if (!castName) castEmptyFields.push('氏名');
+            if (!staffNo) castEmptyFields.push('スタッフNo.');
+            if (!castNameKana) castEmptyFields.push('フリガナ');
+
+            if (castEmptyFields.length > 0) {
+              errors.push({ row: rowNum, reason: `以下の項目が空です: ${castEmptyFields.join(', ')}` });
+            }
+
+            if (castName) {
+              const projectInfo = projectMap.get(projectKey);
+              if (!projectInfo) {
+                errors.push({ row: rowNum, reason: 'プロジェクト情報が見つかりません' });
+                skippedRowsCount++;
+                continue;
+              }
+              const castIdentifier = staffNo || castName;
+
+              const castDateKey = `${castName}::${dateKey}`;
+              if (castDateAssignments.has(castDateKey)) {
+                const existingWork = castDateAssignments.get(castDateKey)!;
+                errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingWork}」に割り当て済みです（1日1現場まで）` });
+                duplicateCastAssignments++;
+              } else {
+                castDateAssignments.set(castDateKey, workName);
+              }
+
+              if (!castDateAssignments.has(castDateKey) || castDateAssignments.get(castDateKey) === workName) {
+                  const existingAssignment = await dbClient.query(
+                    `SELECT p.work_name FROM project_casts pc
+                     JOIN projects p ON pc.project_id = p.id
+                     LEFT JOIN staff_master sm ON pc.staff_id = sm.id AND sm.deleted_at IS NULL
+                     WHERE REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
+                       AND p.work_date = $2
+                       AND p.id != $3
+                       AND pc.deleted_at IS NULL
+                       AND p.deleted_at IS NULL`,
+                    [castName, workDate, projectInfo.projectId]
+                  );
+                  if (existingAssignment.rows.length > 0 && !forceImport) {
+                    errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingAssignment.rows[0].work_name}」に割り当て済みです（1日1現場まで）` });
+                    duplicateCastAssignments++;
+                  } else {
+                    if (existingAssignment.rows.length > 0) {
+                      await dbClient.query(
+                        `UPDATE project_casts SET deleted_at = NOW()
+                         WHERE staff_id IN (SELECT sm.id FROM staff_master sm WHERE REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND sm.deleted_at IS NULL)
+                           AND project_id IN (SELECT p.id FROM projects p WHERE p.work_date = $2 AND p.id != $3 AND p.deleted_at IS NULL)
+                           AND deleted_at IS NULL`,
+                        [castName, workDate, projectInfo.projectId]
+                      );
+                    }
+                    let staffIdRow = await dbClient.query(
+                      `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
+                      [castName]
+                    );
+                    const staffKana = castNameKana || castName;
+                    if (!staffIdRow.rows[0]) {
+                      staffIdRow = await dbClient.query(
+                        `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
+                        [staffKana]
+                      );
+                    }
+                    if (!staffIdRow.rows[0]) {
+                      const softDeleted = await dbClient.query(
+                        `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NOT NULL LIMIT 1`,
+                        [staffKana]
+                      );
+                      if (softDeleted.rows[0]) {
+                        await dbClient.query(`UPDATE staff_master SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [softDeleted.rows[0].id]);
+                        staffIdRow = softDeleted;
+                      } else {
+                        const normalizedKana = staffKana.replace(/\s+/g, ' ').replace(/\u3000/g, ' ').trim();
+                        const newStaff = await dbClient.query(
+                          `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
+                           VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
+                           ON CONFLICT (display_name_kana) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+                           RETURNING id`,
+                          [castName, normalizedKana, adminUser.email]
+                        );
+                        staffIdRow = newStaff;
+                        staffAutoAddedCount++;
+                      }
+                    }
+                    processedStaffKana.add(staffKana);
+                    await dbClient.query(
+                      `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
+                       VALUES ($1, $2, $3, $4, $5)
+                       ON CONFLICT (project_id, staff_no) DO UPDATE SET staff_id = EXCLUDED.staff_id, cast_name = EXCLUDED.cast_name, deleted_at = NULL`,
+                      [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i, castName]
+                    );
+                    projectInfo.casts.add(castIdentifier);
+                  }
+                }
+              }
+              const staffKanaKey = castNameKana || castName;
+              if (staffKanaKey && !processedStaffKana.has(staffKanaKey)) {
+                processedStaffKana.add(staffKanaKey);
+              }
+            }
+          }
+
+        } catch (error) {
+          console.error('Row processing error:', error);
+          errors.push({ row: rowNum, reason: `処理エラー: ${String(error)}` });
+          skippedRowsCount++;
+        }
       }
     }
-  }
 
-  if (duplicateCastAssignments > 0 && !forceImport) {
-    await dbClient.query('ROLLBACK');
-    dbClient.release();
+    if (duplicateCastAssignments > 0 && !forceImport) {
+      await dbClient.query('ROLLBACK');
+      const doubleBookingErrors = errors.filter(e => e.reason.includes('に既に「'));
+      res.status(200).json({
+        ok: false,
+        blocked: true,
+        blocked_reason: 'DOUBLE_BOOKING',
+        message: `ダブルブッキングが${duplicateCastAssignments}件検出されました。インポートをブロックしました。`,
+        duplicate_cast_assignments: duplicateCastAssignments,
+        errors: doubleBookingErrors.slice(0, 20)
+      });
+      return;
+    }
 
-    const doubleBookingErrors = errors.filter(e => e.reason.includes('に既に「'));
-    res.status(200).json({
-      ok: false,
-      blocked: true,
-      blocked_reason: 'DOUBLE_BOOKING',
-      message: `ダブルブッキングが${duplicateCastAssignments}件検出されました。インポートをブロックしました。`,
-      duplicate_cast_assignments: duplicateCastAssignments,
-      errors: doubleBookingErrors.slice(0, 20)
+    await dbClient.query('COMMIT');
+  } catch (txError) {
+    try {
+      await dbClient.query('ROLLBACK');
+    } catch {
+      /* already rolled back */
+    }
+    console.error('CSV import transaction error:', txError);
+    res.status(500).json({
+      error: 'IMPORT_FAILED',
+      message: 'インポート処理中にエラーが発生しました',
+      details: { error: String(txError) }
     });
     return;
-  }
-
-  await dbClient.query('COMMIT');
-  dbClient.release();
-  } catch (txError) {
-    try { await dbClient.query('ROLLBACK'); } catch { /* already released */ }
-    try { dbClient.release(); } catch { /* already released */ }
-    console.error('CSV import transaction error:', txError);
-    res.status(500).json({ error: 'IMPORT_FAILED', message: 'インポート処理中にエラーが発生しました', details: { error: String(txError) } });
-    return;
+  } finally {
+    dbClient.release();
   }
 
   // 全行がエラーの場合、または80%以上がエラーの場合は「形式が違う」エラーを返す

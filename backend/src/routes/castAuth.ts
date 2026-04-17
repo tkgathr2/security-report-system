@@ -12,7 +12,10 @@ import { checkRateLimitDb, recordFailedAttemptDb, resetAttemptsDb } from '../uti
 const inquiryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
-const JWT_EXPIRES_IN = '90d';
+const JWT_EXPIRES_IN = '24h';
+
+// Token blacklist for logout functionality
+const tokenBlacklist = new Set<string>();
 
 const router = Router();
 
@@ -727,8 +730,11 @@ router.post('/logout', async (req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
+      // Import and add to blacklist
+      const { addTokenToBlacklist } = await import('../middleware/auth');
+      addTokenToBlacklist(token);
       await pool.query(
-        `UPDATE cast_users SET magic_link_token = NULL, magic_link_expires = NULL 
+        `UPDATE cast_users SET magic_link_token = NULL, magic_link_expires = NULL
          WHERE magic_link_token = $1`,
         [token]
       );
