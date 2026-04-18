@@ -11,7 +11,7 @@ import pdfStorage from '../services/pdfStorage';
 
 const router = Router();
 
-function generateDummyPdf(): Buffer {
+function generateDummyPdf(): Buffer {h
   const pdfContent = `%PDF-1.4
 1 0 obj
 << /Type /Catalog /Pages 2 0 R >>
@@ -191,7 +191,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     const writerStaffId: string | null = writerStaffIdResult.rows[0]?.staff_id ?? null;
 
     const client = await pool.connect();
-    let reportId: string | null = null;
+    let reportId: string = '';
 
     try {
       await client.query('BEGIN');
