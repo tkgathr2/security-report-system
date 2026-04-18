@@ -29,7 +29,6 @@ export default function CastMagic() {
       .then((data) => {
         if (data.token) {
           localStorage.setItem('castToken', data.token);
-          localStorage.setItem('castUser', JSON.stringify(data.user));
           navigate('/cast/today');
         } else {
           setError(data.message || 'リンクが無効または期限切れです');

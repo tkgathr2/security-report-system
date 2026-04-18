@@ -400,9 +400,9 @@ router.post('/magic-link', async (req: Request, res: Response) => {
 });
 
 // Verify magic link
-router.get('/magic', async (req: Request, res: Response) => {
+router.post('/magic', async (req: Request, res: Response) => {
   try {
-    const { token } = req.query;
+    const { token } = req.body;
 
     if (!token || typeof token !== 'string') {
       return res.status(400).json({ message: '無効なリンクです' });
@@ -643,7 +643,7 @@ router.post('/reset-pin', async (req: Request, res: Response) => {
 // Verify PIN reset token
 router.get('/reset-pin/verify', async (req: Request, res: Response) => {
   try {
-    const { token } = req.query;
+    const { token } = req.body;
 
     if (!token || typeof token !== 'string') {
       return res.status(400).json({ message: '無効なリンクです' });
