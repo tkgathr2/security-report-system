@@ -11,7 +11,7 @@ import pdfStorage from '../services/pdfStorage';
 
 const router = Router();
 
-function generateDummyPdf(): Buffer {h
+function generateDummyPdf(): Buffer {
   const pdfContent = `%PDF-1.4
 1 0 obj
 << /Type /Catalog /Pages 2 0 R >>
