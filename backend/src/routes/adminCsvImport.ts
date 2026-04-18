@@ -731,8 +731,7 @@ router.post('/import', requireAdminAuth, upload.single('file'), async (req: Requ
                 processedStaffKana.add(staffKanaKey);
               }
             }
-          }
-
+          
         } catch (error) {
           console.error('Row processing error:', error);
           errors.push({ row: rowNum, reason: `処理エラー: ${String(error)}` });
