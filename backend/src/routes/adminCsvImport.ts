@@ -1,10 +1,20 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import Encoding from 'encoding-japanese';
 import crypto from 'crypto';
 import pool from '../db/pool';
 import { logAudit } from '../utils/auditLog';
+import { requireApiKey } from '../middleware/apiKeyAuth';
+
+// APIキーまたは管理者JWTで認証する複合ミドルウェア（機械間通信対応）
+function requireAdminOrApiKey(req: Request, res: Response, next: NextFunction): void {
+  const key = req.headers['x-api-key'];
+  if (key && process.env.HOUKO_API_KEY && key === process.env.HOUKO_API_KEY) {
+    next(); return;
+  }
+  requireAdminAuth(req, res, next);
+}
 
 const router = Router();
 
@@ -270,7 +280,7 @@ function requireAdminAuth(req: Request, res: Response, next: () => void): void {
   next();
 }
 
-router.post('/import', requireAdminAuth, upload.single('file'), async (req: Request, res: Response) => {
+router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: Request, res: Response) => {
   const adminUser = req.user as AdminUser;
   const forceImport = req.body?.force_import === 'true';
   
