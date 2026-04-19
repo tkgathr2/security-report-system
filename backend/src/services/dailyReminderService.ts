@@ -198,3 +198,13 @@ export function stopDailyReminderService(): void {
     console.log('[DailyReminder] Stopped');
   }
 }
+
+// 手動即時配信（時刻チェック・送信済みチェックをスキップ）
+export async function sendRemindersNow(): Promise<{ sent: number; errors: number; date: string }> {
+  const { dateStr } = getJSTNow();
+  console.log(`[DailyReminder] Manual send triggered for ${dateStr}`);
+  // 送信済みフラグをリセットして強制送信
+  alreadySent.delete(dateStr);
+  await sendReminders();
+  return { sent: 0, errors: 0, date: dateStr };
+}

@@ -8,6 +8,7 @@ import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '.
 import { isValidEmail, validateStringField, validateArrayItems, MAX_LENGTHS } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
 import { sendLoginUrlEmail } from '../utils/email';
+import { sendRemindersNow } from '../services/dailyReminderService';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
 
@@ -1690,6 +1691,16 @@ router.post('/bulk-cleanup', requireAdmin, async (req: Request, res: Response) =
     res.json({ ok: true, results });
   } catch (error) {
     handleDbError(res, error, 'Bulk cleanup');
+  }
+});
+
+// 手動リマインダー即時配信
+router.post('/reminders/send-now', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await sendRemindersNow();
+    res.json({ ok: true, message: '本日の現場リマインダーを即時配信しました', ...result });
+  } catch (error) {
+    handleDbError(res, error, 'Manual reminder send');
   }
 });
 
