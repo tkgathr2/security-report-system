@@ -1697,8 +1697,12 @@ router.post('/bulk-cleanup', requireAdmin, async (req: Request, res: Response) =
 // 手動リマインダー即時配信
 router.post('/reminders/send-now', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const result = await sendRemindersNow();
-    res.json({ ok: true, message: '本日の現場リマインダーを即時配信しました', ...result });
+    const { timing = 'morning' } = req.body as { timing?: 'morning' | 'evening' };
+    const result = await sendRemindersNow(timing);
+    const message = timing === 'evening'
+      ? '明日の現場リマインダーを即時配信しました'
+      : '本日の現場リマインダーを即時配信しました';
+    res.json({ ok: true, message, ...result });
   } catch (error) {
     handleDbError(res, error, 'Manual reminder send');
   }

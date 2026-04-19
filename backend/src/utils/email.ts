@@ -250,17 +250,26 @@ export async function sendDailyReminderEmail(params: {
   magicLoginUrl: string;
   projects: { workName: string; location: string }[];
   workDate: string;
+  timing?: 'morning' | 'evening'; // morning=当日9時, evening=前日21時
 }) {
   if (!resend) {
     console.log('RESEND_API_KEY not configured, skipping email');
     return { success: false, error: 'Email not configured' };
   }
 
-  const { email, name, magicLoginUrl, projects, workDate } = params;
+  const { email, name, magicLoginUrl, projects, workDate, timing = 'morning' } = params;
 
   // Format date for display (e.g. "2026年4月13日")
   const [y, m, d] = workDate.split('-');
   const dateDisplay = `${y}年${parseInt(m)}月${parseInt(d)}日`;
+
+  const isEvening = timing === 'evening';
+  const subject = isEvening
+    ? `【ほうこちゃん】明日の現場のご案内📋`
+    : `【ほうこちゃん】本日の現場レポートはこちらから📋`;
+  const greeting = isEvening
+    ? `こんばんは！<br>明日（${dateDisplay}）の現場情報をお届けします🌙`
+    : `おはようございます！<br>本日（${dateDisplay}）の現場情報をお届けします🌅`;
 
   const projectInfoBoxes = projects.map(p => {
     const loc = p.location || '未定';
@@ -281,7 +290,7 @@ export async function sendDailyReminderEmail(params: {
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      subject: `【ほうこちゃん】本日の現場レポートはこちらから📋`,
+      subject,
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; background-color: #ffffff;">
           <div style="background-color: #E67E22; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0;">
@@ -289,7 +298,7 @@ export async function sendDailyReminderEmail(params: {
             <p style="color: white; font-size: 20px; font-weight: bold; margin: 0;">ほうこちゃん</p>
           </div>
           <div style="padding: 24px 20px;">
-            <p style="font-size: 16px; margin: 0 0 20px 0;">おはようございます！<br>本日の現場情報をお届けします🌅</p>
+            <p style="font-size: 16px; margin: 0 0 20px 0;">${greeting}</p>
             ${projectInfoBoxes}
             <div style="text-align: center; margin: 24px 0;">
               <a href="${magicLoginUrl}" style="display: inline-block; padding: 16px 32px; background: #E67E22; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">

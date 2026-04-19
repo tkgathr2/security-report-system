@@ -2,8 +2,9 @@ import crypto from 'crypto';
 import pool from '../db/pool';
 import { sendDailyReminderEmail } from '../utils/email';
 
-const REMINDER_HOUR_JST = 11; // 11:00 JST
-const SERVICE_START_DATE = '2026-04-20'; // 来週月曜日から送信開始
+const MORNING_HOUR_JST = 7;  // 7:00 JST → 今日の現場（日勤向け）
+const EVENING_HOUR_JST = 18; // 18:00 JST → 明日の現場（夜勤向け）
+const SERVICE_START_DATE = '2026-04-20';
 
 const alreadySent = new Set<string>();
 
@@ -14,6 +15,13 @@ function getJSTNow(): { dateStr: string; hour: number; minute: number } {
   const hour = jst.getUTCHours();
   const minute = jst.getUTCMinutes();
   return { dateStr, hour, minute };
+}
+
+function getJSTDateOffset(days: number): string {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  jst.setUTCDate(jst.getUTCDate() + days);
+  return jst.toISOString().split('T')[0];
 }
 
 function generateToken(): string {
@@ -35,8 +43,7 @@ interface CastWithProjects {
   projects: ProjectInfo[];
 }
 
-async function getTodaysCastMembers(dateStr: string): Promise<CastWithProjects[]> {
-  // Get all casts assigned to today's projects who have registered (email_verified + pin_hash)
+async function getCastMembers(dateStr: string): Promise<CastWithProjects[]> {
   const result = await pool.query(
     `SELECT DISTINCT
        cu.id as cast_user_id,
@@ -57,7 +64,6 @@ async function getTodaysCastMembers(dateStr: string): Promise<CastWithProjects[]
     [dateStr]
   );
 
-  // Group by cast user
   const castMap = new Map<string, CastWithProjects>();
   for (const row of result.rows) {
     const existing = castMap.get(row.cast_user_id);
@@ -83,37 +89,36 @@ async function getTodaysCastMembers(dateStr: string): Promise<CastWithProjects[]
   return Array.from(castMap.values());
 }
 
-async function sendReminders(): Promise<void> {
-  const { dateStr } = getJSTNow();
-
-  const sendKey = dateStr;
+async function sendReminders(
+  targetDate: string,
+  timing: 'morning' | 'evening'
+): Promise<{ sent: number; errors: number }> {
+  const sendKey = `${targetDate}-${timing}`;
   if (alreadySent.has(sendKey)) {
-    return;
+    return { sent: 0, errors: 0 };
   }
 
-  console.log(`[DailyReminder] Sending reminders for ${dateStr}`);
+  console.log(`[DailyReminder] Sending ${timing} reminders for ${targetDate}`);
 
-  const casts = await getTodaysCastMembers(dateStr);
+  const casts = await getCastMembers(targetDate);
 
   if (casts.length === 0) {
-    console.log(`[DailyReminder] No registered cast members with projects for ${dateStr}`);
+    console.log(`[DailyReminder] No registered cast members for ${targetDate} (${timing})`);
     alreadySent.add(sendKey);
-    return;
+    return { sent: 0, errors: 0 };
   }
 
-  console.log(`[DailyReminder] Found ${casts.length} cast members with projects for ${dateStr}`);
+  console.log(`[DailyReminder] Found ${casts.length} cast members for ${targetDate} (${timing})`);
 
   let sentCount = 0;
   let errorCount = 0;
 
-  // Get base URL from environment
   const baseUrl = process.env.BASE_URL
     || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
     || 'https://security-report.up.railway.app';
 
   for (const cast of casts) {
     try {
-      // Generate magic link token for auto-login
       const token = generateToken();
       const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
@@ -133,12 +138,13 @@ async function sendReminders(): Promise<void> {
           workName: p.work_name,
           location: p.location,
         })),
-        workDate: dateStr,
+        workDate: targetDate,
+        timing,
       });
 
       if (emailResult.success) {
         sentCount++;
-        console.log(`[DailyReminder] Sent to ${cast.staff_name} (${cast.email})`);
+        console.log(`[DailyReminder] Sent to ${cast.staff_name} (${cast.email}) [${timing}]`);
       } else {
         errorCount++;
         console.error(`[DailyReminder] Failed to send to ${cast.email}: ${emailResult.error}`);
@@ -149,45 +155,52 @@ async function sendReminders(): Promise<void> {
     }
   }
 
-  console.log(`[DailyReminder] Completed for ${dateStr}: sent=${sentCount}, errors=${errorCount}`);
+  console.log(`[DailyReminder] Completed ${timing} for ${targetDate}: sent=${sentCount}, errors=${errorCount}`);
   alreadySent.add(sendKey);
 
-  // Cleanup old entries
-  if (alreadySent.size > 30) {
+  if (alreadySent.size > 60) {
     const entries = Array.from(alreadySent);
-    entries.slice(0, entries.length - 14).forEach(k => alreadySent.delete(k));
+    entries.slice(0, entries.length - 30).forEach(k => alreadySent.delete(k));
   }
+
+  return { sent: sentCount, errors: errorCount };
 }
 
 async function runCheck(): Promise<void> {
-  const { hour, minute } = getJSTNow();
+  const { hour, minute, dateStr } = getJSTNow();
 
-  // Only run at 11:00 JST (within first 5 minutes of the hour)
-  if (hour !== REMINDER_HOUR_JST || minute > 5) return;
+  if (minute > 5) return;
+  if (dateStr < SERVICE_START_DATE) return;
 
-  // Don't send before the service start date
-  const { dateStr } = getJSTNow();
-  if (dateStr < SERVICE_START_DATE) {
-    return;
+  // 朝7:00: 今日の現場を配信（日勤向け）
+  if (hour === MORNING_HOUR_JST) {
+    try {
+      await sendReminders(dateStr, 'morning');
+    } catch (err) {
+      console.error('[DailyReminder] Error during morning send:', err);
+    }
   }
 
-  try {
-    await sendReminders();
-  } catch (err) {
-    console.error('[DailyReminder] Error during reminder send:', err);
+  // 夜18:00: 明日の現場を配信（夜勤向け）
+  if (hour === EVENING_HOUR_JST) {
+    try {
+      const tomorrow = getJSTDateOffset(1);
+      await sendReminders(tomorrow, 'evening');
+    } catch (err) {
+      console.error('[DailyReminder] Error during evening send:', err);
+    }
   }
 }
 
 let reminderTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startDailyReminderService(): void {
-  console.log(`[DailyReminder] Starting daily reminder service (sends at ${REMINDER_HOUR_JST}:00 JST)`);
+  console.log(`[DailyReminder] Starting daily reminder service (morning=${MORNING_HOUR_JST}:00 JST / evening=${EVENING_HOUR_JST}:00 JST)`);
   reminderTimer = setInterval(() => {
     runCheck().catch(err => console.error('[DailyReminder] Unexpected error:', err));
   }, 60_000); // Check every minute
   reminderTimer.unref();
 
-  // Run initial check
   runCheck().catch(err => console.error('[DailyReminder] Initial check error:', err));
 }
 
@@ -200,11 +213,15 @@ export function stopDailyReminderService(): void {
 }
 
 // 手動即時配信（時刻チェック・送信済みチェックをスキップ）
-export async function sendRemindersNow(): Promise<{ sent: number; errors: number; date: string }> {
-  const { dateStr } = getJSTNow();
-  console.log(`[DailyReminder] Manual send triggered for ${dateStr}`);
+// timing: 'morning'=今日の現場, 'evening'=明日の現場
+export async function sendRemindersNow(
+  timing: 'morning' | 'evening' = 'morning'
+): Promise<{ sent: number; errors: number; date: string }> {
+  const targetDate = timing === 'evening' ? getJSTDateOffset(1) : getJSTNow().dateStr;
+  console.log(`[DailyReminder] Manual ${timing} send triggered for ${targetDate}`);
+
   // 送信済みフラグをリセットして強制送信
-  alreadySent.delete(dateStr);
-  await sendReminders();
-  return { sent: 0, errors: 0, date: dateStr };
+  alreadySent.delete(`${targetDate}-${timing}`);
+  const result = await sendReminders(targetDate, timing);
+  return { ...result, date: targetDate };
 }
