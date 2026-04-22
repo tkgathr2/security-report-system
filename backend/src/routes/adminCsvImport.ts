@@ -11,6 +11,8 @@ import { requireApiKey } from '../middleware/apiKeyAuth';
 function requireAdminOrApiKey(req: Request, res: Response, next: NextFunction): void {
   const key = req.headers['x-api-key'];
   if (key && process.env.HOUKO_API_KEY && key === process.env.HOUKO_API_KEY) {
+    // API key authentication - set a system user for audit logging
+    (req as any).user = { id: 'system-api', email: 'system@api-key', is_active: true };
     next(); return;
   }
   requireAdminAuth(req, res, next);
