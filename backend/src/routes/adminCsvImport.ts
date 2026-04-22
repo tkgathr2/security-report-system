@@ -450,9 +450,45 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
   const processedWorkDates = new Map<string, Set<string>>();
   const castDateAssignments = new Map<string, string>();
 
+  // 上書きモード: CSVに含まれる全日付を事前に収集
+  // トランザクション開始前にCSVの日付を把握し、既存データをソフトデリートする
+  const csvDatesPreScan = new Set<string>();
+  for (const row of records) {
+    const workDateStr = row[mapping.workDate]?.trim();
+    if (workDateStr) {
+      const dates = workDateStr.includes('・') ? workDateStr.split('・') : [workDateStr];
+      for (const d of dates) {
+        const parsed = parseDate(d.trim());
+        if (parsed) {
+          csvDatesPreScan.add(parsed.toISOString().split('T')[0]);
+        }
+      }
+    }
+  }
+
   const dbClient = await pool.connect();
   try {
     await dbClient.query('BEGIN');
+
+    // 上書きモード: CSVに含まれる日付の既存案件を全てソフトデリート（後で新データで上書き）
+    // これにより、ダブルブッキングチェックで旧データと衝突しなくなる
+    for (const dateStr of csvDatesPreScan) {
+      const existingProjects = await dbClient.query(
+        `SELECT id FROM projects WHERE work_date = $1 AND deleted_at IS NULL`,
+        [dateStr]
+      );
+      for (const row of existingProjects.rows) {
+        await dbClient.query(
+          `UPDATE projects SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1`,
+          [row.id]
+        );
+        await dbClient.query(
+          `UPDATE project_casts SET deleted_at = NOW() WHERE project_id = $1 AND deleted_at IS NULL`,
+          [row.id]
+        );
+        softDeletedProjectsCount++;
+      }
+    }
 
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
@@ -796,43 +832,6 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
         errors: doubleBookingErrors.slice(0, 20)
       });
       return;
-    }
-
-    // 上書きモード: CSVに含まれる日付の案件で、CSVに含まれていないものをソフトデリート
-    // 「最新のCSVデータが全て」という方針
-    const processedProjectIds = new Set<string>();
-    for (const info of projectMap.values()) {
-      processedProjectIds.add(info.projectId);
-    }
-
-    // CSVに含まれる全日付を収集
-    const csvDates = new Set<string>();
-    for (const dateSet of processedWorkDates.values()) {
-      for (const d of dateSet) {
-        csvDates.add(d);
-      }
-    }
-
-    // 各日付について、CSVに含まれていない既存案件をソフトデリート
-    for (const dateStr of csvDates) {
-      const existingProjects = await dbClient.query(
-        `SELECT id FROM projects WHERE work_date = $1 AND deleted_at IS NULL`,
-        [dateStr]
-      );
-      for (const row of existingProjects.rows) {
-        if (!processedProjectIds.has(row.id)) {
-          await dbClient.query(
-            `UPDATE projects SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1`,
-            [row.id]
-          );
-          // 関連するキャスト割り当てもソフトデリート
-          await dbClient.query(
-            `UPDATE project_casts SET deleted_at = NOW() WHERE project_id = $1 AND deleted_at IS NULL`,
-            [row.id]
-          );
-          softDeletedProjectsCount++;
-        }
-      }
     }
 
     await dbClient.query('COMMIT');
