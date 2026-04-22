@@ -722,18 +722,20 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                         staffIdRow = softDeleted;
                       } else {
                         const normalizedKana = staffKana.replace(/\s+/g, ' ').replace(/\u3000/g, ' ').trim();
-                        // Use try-catch for INSERT in case of unique constraint on display_name_kana
-                        try {
-                          const newStaff = await dbClient.query(
-                            `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
-                             VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
-                             RETURNING id`,
-                            [castName, normalizedKana, adminUser.email]
-                          );
+                        // Use INSERT ... ON CONFLICT DO NOTHING + SELECT fallback
+                        // to handle potential unique constraint on display_name_kana
+                        const newStaff = await dbClient.query(
+                          `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
+                           VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
+                           ON CONFLICT DO NOTHING
+                           RETURNING id`,
+                          [castName, normalizedKana, adminUser.email]
+                        );
+                        if (newStaff.rows[0]) {
                           staffIdRow = newStaff;
                           staffAutoAddedCount++;
-                        } catch (insertErr) {
-                          // Duplicate key - fetch existing record
+                        } else {
+                          // INSERT was skipped due to conflict - fetch existing record
                           const fallback = await dbClient.query(
                             `SELECT id FROM staff_master WHERE display_name_kana = $1 LIMIT 1`,
                             [normalizedKana]
@@ -741,7 +743,15 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                           if (fallback.rows[0]) {
                             staffIdRow = fallback;
                           } else {
-                            throw insertErr;
+                            // No constraint conflict, record truly missing - try insert without ON CONFLICT
+                            const retryStaff = await dbClient.query(
+                              `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
+                               VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
+                               RETURNING id`,
+                              [castName, normalizedKana, adminUser.email]
+                            );
+                            staffIdRow = retryStaff;
+                            staffAutoAddedCount++;
                           }
                         }
                       }
