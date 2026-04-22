@@ -443,6 +443,7 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
   let staffAutoAddedCount = 0;
   let duplicateCastAssignments = 0;
   let clientAutoCreatedCount = 0;
+  let softDeletedProjectsCount = 0;
 
   const projectMap = new Map<string, { projectId: string; casts: Set<string> }>();
   const processedStaffKana = new Set<string>();
@@ -797,6 +798,43 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
       return;
     }
 
+    // 上書きモード: CSVに含まれる日付の案件で、CSVに含まれていないものをソフトデリート
+    // 「最新のCSVデータが全て」という方針
+    const processedProjectIds = new Set<string>();
+    for (const info of projectMap.values()) {
+      processedProjectIds.add(info.projectId);
+    }
+
+    // CSVに含まれる全日付を収集
+    const csvDates = new Set<string>();
+    for (const dateSet of processedWorkDates.values()) {
+      for (const d of dateSet) {
+        csvDates.add(d);
+      }
+    }
+
+    // 各日付について、CSVに含まれていない既存案件をソフトデリート
+    for (const dateStr of csvDates) {
+      const existingProjects = await dbClient.query(
+        `SELECT id FROM projects WHERE work_date = $1 AND deleted_at IS NULL`,
+        [dateStr]
+      );
+      for (const row of existingProjects.rows) {
+        if (!processedProjectIds.has(row.id)) {
+          await dbClient.query(
+            `UPDATE projects SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1`,
+            [row.id]
+          );
+          // 関連するキャスト割り当てもソフトデリート
+          await dbClient.query(
+            `UPDATE project_casts SET deleted_at = NOW() WHERE project_id = $1 AND deleted_at IS NULL`,
+            [row.id]
+          );
+          softDeletedProjectsCount++;
+        }
+      }
+    }
+
     await dbClient.query('COMMIT');
   } catch (txError) {
     try {
@@ -905,6 +943,7 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
     status: importStatus,
     created_projects_count: createdProjectsCount,
     updated_projects_count: updatedProjectsCount,
+    soft_deleted_projects_count: softDeletedProjectsCount,
     skipped_rows_count: skippedRowsCount,
     pending_client_rows_count: pendingClientRowsCount,
     staff_auto_added_count: staffAutoAddedCount,
