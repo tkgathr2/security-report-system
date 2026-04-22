@@ -516,13 +516,21 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
 
         try {
           if (!projectMap.has(projectKey)) {
+            // Check for both active and soft-deleted projects with same key
             const existingProject = await dbClient.query(
-              'SELECT id FROM projects WHERE project_key = $1 AND deleted_at IS NULL',
+              'SELECT id, deleted_at FROM projects WHERE project_key = $1',
               [projectKey]
             );
 
             if (existingProject.rows.length > 0) {
               const existingProjectId = existingProject.rows[0].id;
+              // If soft-deleted, restore it
+              if (existingProject.rows[0].deleted_at) {
+                await dbClient.query(
+                  'UPDATE projects SET deleted_at = NULL, updated_at = NOW() WHERE id = $1',
+                  [existingProjectId]
+                );
+              }
               const clientNameNormalized = normalizeClientName(validClientNameRaw);
               const clientResult = await dbClient.query(
                 'SELECT id FROM clients WHERE name_normalized = $1 AND is_active = true AND deleted_at IS NULL',
@@ -714,14 +722,28 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                         staffIdRow = softDeleted;
                       } else {
                         const normalizedKana = staffKana.replace(/\s+/g, ' ').replace(/\u3000/g, ' ').trim();
-                        const newStaff = await dbClient.query(
-                          `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
-                           VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
-                           RETURNING id`,
-                          [castName, normalizedKana, adminUser.email]
-                        );
-                        staffIdRow = newStaff;
-                        staffAutoAddedCount++;
+                        // Use try-catch for INSERT in case of unique constraint on display_name_kana
+                        try {
+                          const newStaff = await dbClient.query(
+                            `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
+                             VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
+                             RETURNING id`,
+                            [castName, normalizedKana, adminUser.email]
+                          );
+                          staffIdRow = newStaff;
+                          staffAutoAddedCount++;
+                        } catch (insertErr) {
+                          // Duplicate key - fetch existing record
+                          const fallback = await dbClient.query(
+                            `SELECT id FROM staff_master WHERE display_name_kana = $1 LIMIT 1`,
+                            [normalizedKana]
+                          );
+                          if (fallback.rows[0]) {
+                            staffIdRow = fallback;
+                          } else {
+                            throw insertErr;
+                          }
+                        }
                       }
                     }
                     processedStaffKana.add(staffKana);
@@ -807,7 +829,7 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
         empty_fields: emptyFieldsList.length > 0 ? emptyFieldsList : ['データが不足しています'],
         total_rows: records.length,
         error_rows: skippedRowsCount,
-        sample_errors: errors.slice(0, 5)
+        sample_errors: errors.slice(0, 10)
       }
     });
     return;

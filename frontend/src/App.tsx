@@ -676,8 +676,20 @@ function AdminApp() {
       if (!response.ok) {
         if (data.error === 'CSV_FORMAT_INVALID' && data.details) {
           const emptyFields = data.details.empty_fields || data.details.missing_headers || []
+          const sampleErrors = data.details.sample_errors || []
+          if (sampleErrors.length > 0) {
+            const errorDetails = sampleErrors.slice(0, 3).map((e: { row: number; reason: string }) => `行${e.row}: ${e.reason}`).join('\n')
+            throw new Error(`${data.message}\n${errorDetails}`)
+          }
           if (emptyFields.length > 0) {
             throw new Error(`${data.message} 以下の項目が入っていません: ${emptyFields.join(', ')}`)
+          }
+        }
+        if (data.error === 'CSV_ROW_INVALID' && data.details) {
+          const rowErrors = data.details.errors || []
+          if (rowErrors.length > 0) {
+            const errorDetails = rowErrors.slice(0, 5).map((e: { row: number; reason: string }) => `行${e.row}: ${e.reason}`).join('\n')
+            throw new Error(`${data.message}\n${errorDetails}`)
           }
         }
         throw new Error(data.message || 'インポートに失敗しました')
