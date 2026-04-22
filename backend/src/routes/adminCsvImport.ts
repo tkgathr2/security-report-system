@@ -717,7 +717,6 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                         const newStaff = await dbClient.query(
                           `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
                            VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
-                           ON CONFLICT (display_name_kana) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
                            RETURNING id`,
                           [castName, normalizedKana, adminUser.email]
                         );
