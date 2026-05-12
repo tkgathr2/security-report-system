@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import './App.css'
 import { COLORS, COMPANY_LOGO_URL } from './constants/admin'
 import { styles } from './styles/adminStyles'
@@ -35,6 +35,8 @@ function AdminApp() {
   const [error, setError] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
+  const abortRef = useRef<AbortController | null>(null)
+  const navCounterRef = useRef(0)
 
   const [projects, setProjects] = useState<Project[]>([])
   const [reports, setReports] = useState<Report[]>([])
@@ -131,6 +133,10 @@ function AdminApp() {
     return () => document.removeEventListener('keydown', handleCtrlEnter)
   }, [handleCtrlEnter])
 
+  useEffect(() => {
+    return () => { if (abortRef.current) abortRef.current.abort() }
+  }, [])
+
   const checkAuth = async () => {
     try {
       const response = await fetch('/api/admin/me', {
@@ -181,9 +187,9 @@ function AdminApp() {
     }
   }
 
-  const fetchAccessRequests = async () => {
+  const fetchAccessRequests = async (signal?: AbortSignal) => {
     try {
-      const response = await fetch('/api/admin/auth/access-requests', { credentials: 'include' })
+      const response = await fetch('/api/admin/auth/access-requests', { credentials: 'include', signal })
       if (response.ok) {
         const data = await response.json()
         setAccessRequests(data.requests || [])
@@ -192,9 +198,9 @@ function AdminApp() {
     }
   }
 
-  const fetchAdminAccounts = async () => {
+  const fetchAdminAccounts = async (signal?: AbortSignal) => {
     try {
-      const response = await fetch('/api/admin/auth/admins', { credentials: 'include' })
+      const response = await fetch('/api/admin/auth/admins', { credentials: 'include', signal })
       if (response.ok) {
         const data = await response.json()
         setAdminAccounts(data.admins || [])
@@ -271,17 +277,17 @@ function AdminApp() {
     }
   }
 
-  const fetchDashboardStats = async () => {
+  const fetchDashboardStats = async (signal?: AbortSignal) => {
     try {
       const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
-      const [projectsRes, reportsRes, staffRes, clientsRes, todayProjectsRes, todayReportsRes, recentReportsRes] = await Promise.all([
-        fetch('/api/admin/projects', { credentials: 'include' }),
-        fetch('/api/admin/reports', { credentials: 'include' }),
-        fetch('/api/admin/staff', { credentials: 'include' }),
-        fetch('/api/admin/clients', { credentials: 'include' }),
-        fetch(`/api/admin/projects?date=${todayStr}`, { credentials: 'include' }),
-        fetch(`/api/admin/reports?date=${todayStr}`, { credentials: 'include' }),
-        fetch('/api/admin/reports', { credentials: 'include' })
+      const fetchOpts: RequestInit = { credentials: 'include', signal }
+      const [projectsRes, reportsRes, staffRes, clientsRes, todayProjectsRes, todayReportsRes] = await Promise.all([
+        fetch('/api/admin/projects', fetchOpts),
+        fetch('/api/admin/reports', fetchOpts),
+        fetch('/api/admin/staff', fetchOpts),
+        fetch('/api/admin/clients', fetchOpts),
+        fetch(`/api/admin/projects?date=${todayStr}`, fetchOpts),
+        fetch(`/api/admin/reports?date=${todayStr}`, fetchOpts)
       ])
 
       const projectsData = projectsRes.ok ? await projectsRes.json() : { projects: [] }
@@ -290,11 +296,9 @@ function AdminApp() {
       const clientsData = clientsRes.ok ? await clientsRes.json() : { clients: [] }
       const todayProjectsData = todayProjectsRes.ok ? await todayProjectsRes.json() : { projects: [] }
       const todayReportsData = todayReportsRes.ok ? await todayReportsRes.json() : { reports: [] }
-      const recentReportsData = recentReportsRes.ok ? await recentReportsRes.json() : { reports: [] }
-
       setClients(clientsData.clients || [])
       setTodayProjects(todayProjectsData.projects || [])
-      setRecentReports((recentReportsData.reports || []).slice(0, 5))
+      setRecentReports((reportsData.reports || []).slice(0, 5))
 
       const todayProjectIds = new Set((todayProjectsData.projects || []).map((p: Project) => p.id))
       const todayReportedCount = (todayReportsData.reports || []).filter((r: Report) => todayProjectIds.has(r.project_id)).length
@@ -308,76 +312,97 @@ function AdminApp() {
         today_projects: todayProjectsData.projects?.length || 0,
         today_reported: todayReportedCount
       })
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
     }
   }
 
-  const fetchProjectsByDate = async (dateStr: string) => {
+  const fetchProjectsByDate = async (dateStr: string, signal?: AbortSignal) => {
+    const myNav = ++navCounterRef.current
     setLoading(true)
     setError(null)
     try {
       const response = await fetch(`/api/admin/projects?date=${dateStr}`, {
-        credentials: 'include'
+        credentials: 'include',
+        signal
       })
       if (!response.ok) throw new Error('Failed to fetch projects')
       const data = await response.json()
+      if (navCounterRef.current !== myNav) return
       setProjects(data.projects)
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (navCounterRef.current !== myNav) return
       setError('案件一覧の取得に失敗しました')
     } finally {
-      setLoading(false)
+      if (navCounterRef.current === myNav) setLoading(false)
     }
   }
 
-  const fetchReports = async (dateStr?: string) => {
+  const fetchReports = async (dateStr?: string, signal?: AbortSignal) => {
+    const myNav = ++navCounterRef.current
     setLoading(true)
     setError(null)
     try {
       const url = dateStr ? `/api/admin/reports?date=${dateStr}` : '/api/admin/reports'
       const response = await fetch(url, {
-        credentials: 'include'
+        credentials: 'include',
+        signal
       })
       if (!response.ok) throw new Error('Failed to fetch reports')
       const data = await response.json()
+      if (navCounterRef.current !== myNav) return
       setReports(data.reports)
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (navCounterRef.current !== myNav) return
       setError('報告書一覧の取得に失敗しました')
     } finally {
-      setLoading(false)
+      if (navCounterRef.current === myNav) setLoading(false)
     }
   }
 
-  const fetchStaff = async () => {
+  const fetchStaff = async (signal?: AbortSignal) => {
+    const myNav = ++navCounterRef.current
     setLoading(true)
     setError(null)
     try {
       const response = await fetch('/api/admin/staff', {
-        credentials: 'include'
+        credentials: 'include',
+        signal
       })
       if (!response.ok) throw new Error('Failed to fetch staff')
       const data = await response.json()
+      if (navCounterRef.current !== myNav) return
       setStaff(data.staff || [])
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (navCounterRef.current !== myNav) return
       setError('キャスト一覧の取得に失敗しました')
     } finally {
-      setLoading(false)
+      if (navCounterRef.current === myNav) setLoading(false)
     }
   }
 
-  const fetchImportHistory = async () => {
+  const fetchImportHistory = async (signal?: AbortSignal) => {
+    const myNav = ++navCounterRef.current
     setLoading(true)
     setError(null)
     try {
       const response = await fetch('/api/admin/csv/imports', {
-        credentials: 'include'
+        credentials: 'include',
+        signal
       })
       if (!response.ok) throw new Error('Failed to fetch import history')
       const data = await response.json()
+      if (navCounterRef.current !== myNav) return
       setImportHistory(data.imports || [])
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (navCounterRef.current !== myNav) return
       setError('インポート履歴の取得に失敗しました')
     } finally {
-      setLoading(false)
+      if (navCounterRef.current === myNav) setLoading(false)
     }
   }
 
@@ -402,20 +427,25 @@ function AdminApp() {
     fetchImportedProjects(importItem.id)
   }
 
-  const fetchClients = async () => {
+  const fetchClients = async (signal?: AbortSignal) => {
+    const myNav = ++navCounterRef.current
     setLoading(true)
     setError(null)
     try {
       const response = await fetch('/api/admin/clients', {
-        credentials: 'include'
+        credentials: 'include',
+        signal
       })
       if (!response.ok) throw new Error('Failed to fetch clients')
       const data = await response.json()
+      if (navCounterRef.current !== myNav) return
       setClients(data.clients || [])
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (navCounterRef.current !== myNav) return
       setError('会社一覧の取得に失敗しました')
     } finally {
-      setLoading(false)
+      if (navCounterRef.current === myNav) setLoading(false)
     }
   }
 
@@ -845,19 +875,24 @@ function AdminApp() {
   }
 
   const navigateTo = (newScreen: Screen) => {
+    if (abortRef.current) abortRef.current.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
+    const signal = ac.signal
+
     setScreen(newScreen)
     setError(null)
     setSelectedImport(null)
     setImportedProjects([])
     if (isMobile) setSidebarOpen(false)
-    if (newScreen === 'dashboard') fetchDashboardStats()
-    if (newScreen === 'projects') fetchProjectsByDate(selectedDate)
-    if (newScreen === 'reports') fetchReports(reportDate)
-    if (newScreen === 'staff') { fetchStaff() }
-    if (newScreen === 'send_url') { fetchStaff() }
-    if (newScreen === 'import_history') fetchImportHistory()
-    if (newScreen === 'clients') fetchClients()
-    if (newScreen === 'accounts') { setLoadingAccounts(true); Promise.all([fetchAccessRequests(), fetchAdminAccounts()]).finally(() => setLoadingAccounts(false)) }
+    if (newScreen === 'dashboard') fetchDashboardStats(signal)
+    if (newScreen === 'projects') fetchProjectsByDate(selectedDate, signal)
+    if (newScreen === 'reports') fetchReports(reportDate, signal)
+    if (newScreen === 'staff') { fetchStaff(signal) }
+    if (newScreen === 'send_url') { fetchStaff(signal) }
+    if (newScreen === 'import_history') fetchImportHistory(signal)
+    if (newScreen === 'clients') fetchClients(signal)
+    if (newScreen === 'accounts') { setLoadingAccounts(true); Promise.all([fetchAccessRequests(signal), fetchAdminAccounts(signal)]).finally(() => setLoadingAccounts(false)) }
   }
 
   const formatDate = (dateStr: string) => {
@@ -879,13 +914,13 @@ function AdminApp() {
     }
   }
 
-  const sortedProjects = [...projects].sort((a, b) => {
+  const sortedProjects = useMemo(() => [...projects].sort((a, b) => {
     if (!sortColumn) return 0
     const aVal = a[sortColumn] ?? ''
     const bVal = b[sortColumn] ?? ''
     const comparison = String(aVal).localeCompare(String(bVal), 'ja')
     return sortDirection === 'asc' ? comparison : -comparison
-  })
+  }), [projects, sortColumn, sortDirection])
 
   const getSortIndicator = (column: keyof Project) => {
     if (sortColumn !== column) return ' ↕'
@@ -941,16 +976,16 @@ function AdminApp() {
 
   const filteredProjects = sortedProjects
 
-  const projectsByDate = filteredProjects.reduce((acc, project) => {
+  const projectsByDate = useMemo(() => filteredProjects.reduce((acc, project) => {
     const date = project.work_date
     if (!acc[date]) {
       acc[date] = []
     }
     acc[date].push(project)
     return acc
-  }, {} as Record<string, Project[]>)
+  }, {} as Record<string, Project[]>), [filteredProjects])
 
-  const sortedDates = Object.keys(projectsByDate).sort()
+  const sortedDates = useMemo(() => Object.keys(projectsByDate).sort(), [projectsByDate])
 
   const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
 
@@ -1009,25 +1044,34 @@ function AdminApp() {
   }
 
   const navigateDate = (offset: number) => {
+    if (abortRef.current) abortRef.current.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
     const d = new Date(selectedDate + 'T12:00:00')
     d.setDate(d.getDate() + offset)
     const newDate = d.toISOString().split('T')[0]
     setSelectedDate(newDate)
-    fetchProjectsByDate(newDate)
+    fetchProjectsByDate(newDate, ac.signal)
   }
 
   const navigateReportDate = (offset: number) => {
+    if (abortRef.current) abortRef.current.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
     const d = new Date(reportDate + 'T12:00:00')
     d.setDate(d.getDate() + offset)
     const newDate = d.toISOString().split('T')[0]
     setReportDate(newDate)
-    fetchReports(newDate)
+    fetchReports(newDate, ac.signal)
   }
 
   const goToReportToday = () => {
+    if (abortRef.current) abortRef.current.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
     const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
     setReportDate(today)
-    fetchReports(today)
+    fetchReports(today, ac.signal)
   }
 
   if (loading && !admin) {
