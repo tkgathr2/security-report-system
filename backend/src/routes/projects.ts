@@ -56,16 +56,20 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
 
     // Check if report already exists for this project
     const existingReportResult = await pool.query(
-      'SELECT id FROM reports WHERE project_id = $1 AND deleted_at IS NULL',
+      'SELECT id, writer_name, approved_at FROM reports WHERE project_id = $1 AND deleted_at IS NULL',
       [project.id]
     );
 
     if (existingReportResult.rows.length > 0) {
+      const existingReport = existingReportResult.rows[0];
       res.status(200).json({
         error: 'ALREADY_SUBMITTED',
         already_submitted: true,
         message: 'この案件の報告書は既に提出されています',
-        details: {}
+        details: {
+          writer_name: existingReport.writer_name || null,
+          submitted_at: existingReport.approved_at || null
+        }
       });
       return;
     }

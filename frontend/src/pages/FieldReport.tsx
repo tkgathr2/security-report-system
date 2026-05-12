@@ -72,6 +72,7 @@ export default function FieldReport() {
   const [pageState, setPageState] = useState<PageState>('loading')
   const [project, setProject] = useState<Project | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
+  const [submittedInfo, setSubmittedInfo] = useState<{ writer_name: string | null; submitted_at: string | null } | null>(null)
   
   const isViewMode = searchParams.get('mode') === 'view'
   const [token, setToken] = useState<string | null>(null)
@@ -139,6 +140,12 @@ export default function FieldReport() {
       if (response.ok) {
         const peek = await response.clone().json()
         if (peek.already_submitted) {
+          if (peek.details) {
+            setSubmittedInfo({
+              writer_name: peek.details.writer_name || null,
+              submitted_at: peek.details.submitted_at || null
+            })
+          }
           setPageState('completed')
           return
         }
@@ -442,6 +449,12 @@ export default function FieldReport() {
         })
       })
       
+      if (response.status === 409) {
+        setSubmittedInfo(null)
+        setPageState('completed')
+        return
+      }
+      
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.message || '送信に失敗しました')
@@ -596,11 +609,36 @@ export default function FieldReport() {
   }
 
   if (pageState === 'completed') {
+    const formatSubmittedAt = (isoStr: string | null) => {
+      if (!isoStr) return '不明'
+      try {
+        const d = new Date(isoStr)
+        return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      } catch { return '不明' }
+    }
     return (
       <div style={styles.container}>
         <div style={styles.completedBox}>
-          <h2>報告書は既に提出済みです</h2>
-          <p>この案件の報告書は既に提出されています。</p>
+          <div style={styles.completedIcon}>\u2705</div>
+          <h2 style={styles.completedTitle}>この報告書は送信済みです</h2>
+          {submittedInfo && (submittedInfo.writer_name || submittedInfo.submitted_at) ? (
+            <div style={styles.completedDetails}>
+              {submittedInfo.writer_name && (
+                <p style={styles.completedDetailRow}>
+                  <span style={styles.completedDetailLabel}>送信者：</span>
+                  <span style={styles.completedDetailValue}>{submittedInfo.writer_name}</span>
+                </p>
+              )}
+              {submittedInfo.submitted_at && (
+                <p style={styles.completedDetailRow}>
+                  <span style={styles.completedDetailLabel}>送信時刻：</span>
+                  <span style={styles.completedDetailValue}>{formatSubmittedAt(submittedInfo.submitted_at)}</span>
+                </p>
+              )}
+            </div>
+          ) : (
+            <p style={styles.completedMessage}>この案件の報告書は既に提出されています。</p>
+          )}
         </div>
       </div>
     )
@@ -1271,9 +1309,46 @@ const styles: Record<string, React.CSSProperties> = {
   completedBox: {
     backgroundColor: '#d4edda',
     padding: '40px',
-    borderRadius: '8px',
+    borderRadius: '12px',
     textAlign: 'center',
-    color: '#155724'
+    color: '#155724',
+    maxWidth: '450px',
+    width: '100%'
+  },
+  completedIcon: {
+    fontSize: '48px',
+    marginBottom: '16px'
+  },
+  completedTitle: {
+    margin: '0 0 16px',
+    fontSize: '20px',
+    color: '#155724',
+    fontWeight: 'bold'
+  },
+  completedDetails: {
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    padding: '16px 20px',
+    borderRadius: '8px',
+    textAlign: 'left' as const
+  },
+  completedDetailRow: {
+    margin: '8px 0',
+    fontSize: '15px',
+    color: '#155724',
+    display: 'flex',
+    gap: '8px'
+  },
+  completedDetailLabel: {
+    fontWeight: 'bold',
+    whiteSpace: 'nowrap' as const
+  },
+  completedDetailValue: {
+    color: '#1b5e20'
+  },
+  completedMessage: {
+    fontSize: '15px',
+    color: '#155724',
+    margin: '8px 0 0'
   },
   successBox: {
     backgroundColor: 'white',
