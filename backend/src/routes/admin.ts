@@ -157,7 +157,7 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response) => {
       result = await pool.query(
         `SELECT r.id, r.project_id, COALESCE(NULLIF(r.supervisor_name, ''), p.supervisor_name, '') as supervisor_name, r.weather,
                 r.status, r.approved_at, r.created_at, r.pdf_generation_status,
-                length(r.pdf_bytes) as pdf_size,
+                octet_length(r.pdf_bytes) as pdf_size,
                 c.name as client_name_raw, p.work_date, p.work_name, p.location,
                 sm_w.display_name_kanji as writer_name
          FROM reports r
@@ -172,7 +172,7 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response) => {
       result = await pool.query(
         `SELECT r.id, r.project_id, COALESCE(NULLIF(r.supervisor_name, ''), p.supervisor_name, '') as supervisor_name, r.weather,
                 r.status, r.approved_at, r.created_at, r.pdf_generation_status,
-                length(r.pdf_bytes) as pdf_size,
+                octet_length(r.pdf_bytes) as pdf_size,
                 c.name as client_name_raw, p.work_date, p.work_name, p.location,
                 sm_w.display_name_kanji as writer_name
          FROM reports r
@@ -200,7 +200,7 @@ router.get('/reports/:id/detail', requireAdmin, async (req: Request, res: Respon
       `SELECT r.id, r.project_id, COALESCE(NULLIF(r.supervisor_name, ''), p.supervisor_name, '') as supervisor_name, r.weather,
               r.guard_contents, r.guard_other_text, r.has_qualifier, r.qualifier_name,
               r.guards_json, r.status, r.approved_at, r.created_at,
-              r.pdf_generation_status, length(r.pdf_bytes) as pdf_size,
+              r.pdf_generation_status, octet_length(r.pdf_bytes) as pdf_size,
               encode(r.signature_png, 'base64') as signature_png_base64,
               c.name as client_name_raw, p.work_date, p.work_name, p.location, p.work_title_raw,
               sm_w.display_name_kanji as writer_name
