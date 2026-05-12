@@ -9,7 +9,7 @@ import { logAudit } from '../utils/auditLog';
 import { validateStringField, validateArrayItems, MAX_LENGTHS } from '../utils/validation';
 import pdfStorage from '../services/pdfStorage';
 
-const router = Router();
+const router = Router();h
 
 function generateDummyPdf(): Buffer {
   const pdfContent = `%PDF-1.4
@@ -161,7 +161,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       return;
     }
 
-    const signaturePngBuffer = Buffer.from(signature_png_base64, 'base64');
+    const rawBase64 = signature_png_base64.replace(/^data:image\/[a-z+]+;base64,/, '');
+    const signaturePngBuffer = Buffer.from(rawBase64, 'base64');
 
     let resolvedWriterName = writer_name || '';
     if (!resolvedWriterName) {
