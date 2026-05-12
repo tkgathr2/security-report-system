@@ -619,7 +619,7 @@ export default function FieldReport() {
     return (
       <div style={styles.container}>
         <div style={styles.completedBox}>
-          <div style={styles.completedIcon}>\u2705</div>
+          <div style={styles.completedIcon}>{"✅"}</div>
           <h2 style={styles.completedTitle}>この報告書は送信済みです</h2>
           {submittedInfo && (submittedInfo.writer_name || submittedInfo.submitted_at) ? (
             <div style={styles.completedDetails}>
