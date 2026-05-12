@@ -56,10 +56,12 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
 
     // Check if report already exists for this project
     const existingReportResult = await pool.query(
-      'SELECT id, writer_name, approved_at FROM reports WHERE project_id = $1 AND deleted_at IS NULL',
-      [project.id]
-    );
-
+            `SELECT r.id, sm.display_name_kanji as writer_name, r.approved_at
+                   FROM reports r
+                          LEFT JOIN staff_master sm ON r.writer_staff_id = sm.id
+                                 WHERE r.project_id = $1 AND r.deleted_at IS NULL`,
+            [project.id]
+          );
     if (existingReportResult.rows.length > 0) {
       const existingReport = existingReportResult.rows[0];
       res.status(200).json({
