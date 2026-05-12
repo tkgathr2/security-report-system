@@ -9,7 +9,7 @@ import { logAudit } from '../utils/auditLog';
 import { validateStringField, validateArrayItems, MAX_LENGTHS } from '../utils/validation';
 import pdfStorage from '../services/pdfStorage';
 
-const router = Router();h
+const router = Router();
 
 function generateDummyPdf(): Buffer {
   const pdfContent = `%PDF-1.4
