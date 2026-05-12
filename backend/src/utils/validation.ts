@@ -31,8 +31,12 @@ export function stripNullBytes(value: string): string {
   return value.replace(/\0/g, '');
 }
 
+export function stripHtmlTags(value: string): string {
+  return value.replace(/<[^>]*>/g, '');
+}
+
 export function sanitizeInput(value: unknown): unknown {
-  if (typeof value === 'string') return stripNullBytes(value);
+  if (typeof value === 'string') return stripHtmlTags(stripNullBytes(value));
   if (Array.isArray(value)) return value.map(sanitizeInput);
   if (value !== null && typeof value === 'object') {
     const result: Record<string, unknown> = {};
