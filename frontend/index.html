@@ -7,7 +7,17 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/site.webmanifest" />
+    <script>
+      // キャスト配下では cast.webmanifest（start_url=/cast/today）、それ以外は管理者向け site.webmanifest を読み込む。
+      // ホーム画面に追加した時の起動先を、追加した画面の文脈に合わせるための仕組み。
+      (function () {
+        var isCast = /^\/cast(\/|$)/.test(window.location.pathname);
+        var link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = isCast ? '/cast.webmanifest' : '/site.webmanifest';
+        document.head.appendChild(link);
+      })();
+    </script>
     <meta name="theme-color" content="#e67e22" />
     <title>デジタル警備報告書システム【ほうこちゃん】</title>
   </head>

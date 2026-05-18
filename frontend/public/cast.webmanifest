@@ -1,9 +1,9 @@
 {
-  "id": "/",
-  "name": "デジタル警備報告書システム【ほうこちゃん】",
+  "id": "/cast/today",
+  "name": "ほうこちゃん（キャスト用）",
   "short_name": "ほうこちゃん",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "/cast/today",
+  "scope": "/cast/",
   "icons": [
     {
       "src": "/icon-192.png",
