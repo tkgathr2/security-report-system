@@ -8,6 +8,7 @@ import { sendVerificationEmail, sendMagicLinkEmail, sendWelcomeEmail, sendPinRes
 import { isValidEmail, validateStringField, MAX_LENGTHS } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
 import { checkRateLimitDb, recordFailedAttemptDb, resetAttemptsDb } from '../utils/rateLimit';
+import { todayJST, escapeLikePattern } from '../utils/dateUtil';
 
 const inquiryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -506,7 +507,7 @@ router.get('/today', async (req: Request, res: Response) => {
     const dateParam = req.query.date as string | undefined;
     const today = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
       ? dateParam
-      : new Date().toISOString().split('T')[0];
+      : todayJST();
 
     const matchName = user.staff_name || '';
 
@@ -560,23 +561,23 @@ router.get('/search-staff', async (req: Request, res: Response) => {
     const searchNormalized = normalizeKanjiVariants(searchTerm);
 
     const result = await pool.query(
-      `SELECT id, display_name_kanji, display_name_kana 
-       FROM staff_master 
+      `SELECT id, display_name_kanji, display_name_kana
+       FROM staff_master
        WHERE deleted_at IS NULL
-         AND (REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') ILIKE $1
-          OR display_name_kana ILIKE $2
-          OR display_name_kanji ILIKE $2
-          OR REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $1
-          OR REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $3)
+         AND (REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') ILIKE $1 ESCAPE '\\'
+          OR display_name_kana ILIKE $2 ESCAPE '\\'
+          OR display_name_kanji ILIKE $2 ESCAPE '\\'
+          OR REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $1 ESCAPE '\\'
+          OR REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $3 ESCAPE '\\')
        ORDER BY
-         CASE 
-           WHEN REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') ILIKE $2 THEN 0
-           WHEN REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $2 THEN 1
+         CASE
+           WHEN REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') ILIKE $2 ESCAPE '\\' THEN 0
+           WHEN REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') ILIKE $2 ESCAPE '\\' THEN 1
            ELSE 2
          END,
          display_name_kana
        LIMIT 10`,
-      [`%${searchNoSpace}%`, `%${searchTerm}%`, `%${searchNormalized}%`]
+      [`%${escapeLikePattern(searchNoSpace)}%`, `%${escapeLikePattern(searchTerm)}%`, `%${escapeLikePattern(searchNormalized)}%`]
     );
 
     res.json({ staff: result.rows });
@@ -643,7 +644,7 @@ router.post('/reset-pin', async (req: Request, res: Response) => {
 // Verify PIN reset token
 router.get('/reset-pin/verify', async (req: Request, res: Response) => {
   try {
-    const { token } = req.body;
+    const { token } = req.query;
 
     if (!token || typeof token !== 'string') {
       return res.status(400).json({ message: '無効なリンクです' });
@@ -732,7 +733,7 @@ router.post('/logout', async (req: Request, res: Response) => {
       const token = authHeader.substring(7);
       // Import and add to blacklist
       const { addTokenToBlacklist } = await import('../middleware/auth');
-      addTokenToBlacklist(token);
+      await addTokenToBlacklist(token);
       await pool.query(
         `UPDATE cast_users SET magic_link_token = NULL, magic_link_expires = NULL
          WHERE magic_link_token = $1`,

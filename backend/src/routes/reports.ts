@@ -7,6 +7,7 @@ import { AuthenticatedCastRequest } from '../types';
 import { sendBadRequest, sendNotFound, sendConflict, sendForbidden, sendExpired, sendInternalError } from '../utils/errorHandler';
 import { logAudit } from '../utils/auditLog';
 import { validateStringField, validateArrayItems, MAX_LENGTHS, stripHtmlTags } from '../utils/validation';
+import { todayJST, toJSTDateString } from '../utils/dateUtil';
 import pdfStorage from '../services/pdfStorage';
 
 const router = Router();
@@ -172,11 +173,11 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       return;
     }
 
-    const todayJST = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const todayJstStr = todayJST();
     const workDate = project.work_date instanceof Date
-      ? project.work_date.toISOString().split('T')[0]
+      ? toJSTDateString(project.work_date)
       : String(project.work_date).split('T')[0];
-    if (workDate > todayJST) {
+    if (workDate > todayJstStr) {
       sendBadRequest(res, 'この案件の作業日はまだ到来していません。当日以降に報告してください。');
       return;
     }
@@ -200,8 +201,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       }
     }
     
-    const workDateStr = project.work_date instanceof Date 
-      ? project.work_date.toISOString().split('T')[0]
+    const workDateStr = project.work_date instanceof Date
+      ? toJSTDateString(project.work_date)
       : String(project.work_date).split('T')[0];
 
     // レポートを保存（PDF/通知は後で非同期処理）
@@ -219,10 +220,10 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
       const reportResult = await client.query(
         `INSERT INTO reports (
-          project_id, cast_user_id, supervisor_name, writer_staff_id, weather,
+          project_id, cast_user_id, supervisor_name, writer_staff_id, writer_name, weather,
           guard_contents, guard_other_text, overtime_hours, has_qualifier, qualifier_name,
           signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json, notes, partner_company_name
-        ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+        ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
         WHERE EXISTS (SELECT 1 FROM projects WHERE id = $1 AND url_expires_at > NOW() AND deleted_at IS NULL)
         ON CONFLICT (project_id) WHERE deleted_at IS NULL DO NOTHING
         RETURNING id`,
@@ -231,6 +232,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           castUser.userId,
           supervisor_name || '',
           writerStaffId,
+          resolvedWriterName,
           weather || 'sunny',
           guard_contents,
           guard_other_text || null,
@@ -266,6 +268,11 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       await client.query('COMMIT');
     } catch (err: unknown) {
       await client.query('ROLLBACK');
+      const pgCode = (err as { code?: string } | null)?.code;
+      if (pgCode === '23505') {
+        sendConflict(res, 'この案件の報告書は既に提出されています');
+        return;
+      }
       throw err;
     } finally {
       client.release();
@@ -288,6 +295,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     // 以下は非同期で実行（レスポンス後にバックグラウンドで処理）
     setImmediate(async () => {
+      try {
       console.log(`[ASYNC] Starting background processing for report ${reportId}`);
 
       // PDF設定を取得
@@ -465,12 +473,14 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       } catch (emailError) {
         console.error(`[ASYNC] Email notification failed for report ${reportId}:`, emailError);
       }
+      } catch (asyncError) {
+        console.error(`[ASYNC] Unhandled error in background processing for report ${reportId}:`, asyncError);
+      }
     });
 
   } catch (error) {
     console.error('Approve error:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    sendInternalError(res, `承認処理中にエラーが発生しました: ${errorMessage}`);
+    sendInternalError(res, '承認処理中にエラーが発生しました');
   }
 });
 
@@ -491,6 +501,24 @@ router.get('/:reportId/pdf', (req: Request, res: Response, next: () => void) => 
     return;
   }
   try {
+    // Authorization check for cast users: only allow access to reports they're involved in
+    const castUser = (req as AuthenticatedCastRequest).castUser;
+    if (castUser && !(req.isAuthenticated && req.isAuthenticated())) {
+      const ownerCheck = await pool.query(
+        `SELECT 1 FROM reports r
+         LEFT JOIN cast_users cu ON cu.id = $2
+         LEFT JOIN project_casts pc ON pc.project_id = r.project_id AND pc.deleted_at IS NULL
+         WHERE r.id = $1 AND r.deleted_at IS NULL
+           AND (r.cast_user_id = $2 OR (cu.staff_id IS NOT NULL AND pc.staff_id = cu.staff_id))
+         LIMIT 1`,
+        [reportId, castUser.userId]
+      );
+      if (ownerCheck.rows.length === 0) {
+        res.status(403).json({ error: 'FORBIDDEN', message: 'この報告書を閲覧する権限がありません' });
+        return;
+      }
+    }
+
     const pdf = await pdfStorage.getPdf(reportId);
     if (!pdf) {
       res.status(404).json({ error: 'PDF_NOT_READY', message: 'PDFが見つからないか、まだ生成されていません' });

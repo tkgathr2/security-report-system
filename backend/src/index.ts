@@ -20,6 +20,7 @@ import staffRouter from './routes/staff';
 import castAuthRouter from './routes/castAuth';
 import pool from './db/pool';
 import { requestTimeout } from './middleware/requestTimeout';
+import { requireJsonContentType } from './middleware/contentType';
 import { sanitizeInput } from './utils/validation';
 import { startDataUploadMonitor, stopDataUploadMonitor } from './services/dataUploadMonitor';
 import { startDailyReminderService, stopDailyReminderService } from './services/dailyReminderService';
@@ -99,6 +100,7 @@ app.get('/version', (_req: Request, res: Response) => {
   res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v89', seedStatus, seedError, seedDetail, castFixDetail, cleanupDetail });
 });
 
+app.use('/api', requireJsonContentType);
 app.use('/api/admin/auth', adminAuthRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/admin/reports', adminReportsRouter);
@@ -805,6 +807,10 @@ pool.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS partner_company_name TE
   .then(() => console.log('[Startup] reports.partner_company_name column ensured'))
   .catch((err: unknown) => console.error('[Startup] reports.partner_company_name column error:', err));
 
+pool.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS writer_name TEXT`)
+  .then(() => console.log('[Startup] reports.writer_name snapshot column ensured'))
+  .catch((err: unknown) => console.error('[Startup] reports.writer_name column error:', err));
+
 pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cast_users_email_active ON cast_users (email) WHERE deleted_at IS NULL`)
   .then(() => console.log('[Startup] Unique index on cast_users.email ensured'))
   .catch((err: unknown) => console.error('[Startup] cast_users index creation error:', err));
@@ -823,6 +829,14 @@ pool.query(`CREATE TABLE IF NOT EXISTS inquiries (
 )`)
   .then(() => console.log('[Startup] Inquiries table ensured'))
   .catch((err: unknown) => console.error('[Startup] Inquiries table creation error:', err));
+
+pool.query(`CREATE TABLE IF NOT EXISTS jwt_token_blacklist (
+  token TEXT PRIMARY KEY,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`)
+  .then(() => console.log('[Startup] jwt_token_blacklist table ensured'))
+  .catch((err: unknown) => console.error('[Startup] jwt_token_blacklist table creation error:', err));
 
 seedStaffData()
   .then(() => fixProjectCasts())

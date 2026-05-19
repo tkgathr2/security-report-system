@@ -125,13 +125,14 @@ function toReiwa(dateStr: string): { year: number; month: number; day: number; d
   return { year: reiwaYear, month: m, day: d, dayOfWeek: dow[date.getDay()] };
 }
 
-function weatherToJapanese(weather?: string | null): { sunny: boolean; cloudy: boolean; rainy: boolean } {
-  if (!weather) return { sunny: false, cloudy: false, rainy: false };
+function weatherToJapanese(weather?: string | null): { sunny: boolean; cloudy: boolean; rainy: boolean; snowy: boolean } {
+  if (!weather) return { sunny: false, cloudy: false, rainy: false, snowy: false };
   const w = weather.toLowerCase();
   return {
     sunny: w === 'sunny' || w === 'clear' || w === '晴れ' || w === '晴',
     cloudy: w === 'cloudy' || w === '曇り' || w === '曇',
     rainy: w === 'rainy' || w === '雨' || w === 'stormy' || w === '嵐',
+    snowy: w === 'snowy' || w === 'snow' || w === '雪',
   };
 }
 
@@ -380,8 +381,9 @@ async function generateReportPdfHandwritten(data: ReportData): Promise<Buffer> {
       const sunnyMark = weatherState.sunny ? '◉晴' : '晴';
       const cloudyMark = weatherState.cloudy ? '◉曇' : '曇';
       const rainyMark = weatherState.rainy ? '◉雨' : '雨';
+      const snowyMark = weatherState.snowy ? '◉雪' : '雪';
       drawCell(doc, RX + COL1_W + dateColW + dayColW, ROW2_Y, weatherColW, ROW_H,
-        `${sunnyMark}・${cloudyMark}・${rainyMark}`, 9, { align: 'center' });
+        `${sunnyMark}・${cloudyMark}・${rainyMark}・${snowyMark}`, 9, { align: 'center' });
 
       const ROW3_Y = ROW2_Y + ROW_H;
       doc.save();

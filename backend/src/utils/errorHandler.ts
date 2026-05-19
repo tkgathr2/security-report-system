@@ -14,6 +14,17 @@ export const ErrorCodes = {
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
 
+const isProduction = (): boolean => process.env.NODE_ENV === 'production';
+
+const GENERIC_INTERNAL_MESSAGE = 'サーバーエラーが発生しました。時間を置いて再度お試しください。';
+
+// Strip stack traces, DB references, file paths from error messages before
+// returning to clients in production.
+function sanitizeErrorMessage(message: string): string {
+  if (!isProduction()) return message;
+  return GENERIC_INTERNAL_MESSAGE;
+}
+
 export function sendError(
   res: Response,
   statusCode: number,
@@ -21,10 +32,11 @@ export function sendError(
   message: string,
   details: Record<string, unknown> = {}
 ): void {
+  const safeDetails = isProduction() ? {} : details;
   const response: ErrorResponse = {
     error: errorCode,
     message,
-    details
+    details: safeDetails
   };
   res.status(statusCode).json(response);
 }
@@ -37,8 +49,8 @@ export function sendBadRequest(res: Response, message: string, details?: Record<
   sendError(res, 400, ErrorCodes.INVALID_PAYLOAD, message, details);
 }
 
-export function sendInternalError(res: Response, message: string = 'データベースエラーが発生しました'): void {
-  sendError(res, 500, ErrorCodes.INTERNAL_ERROR, message);
+export function sendInternalError(res: Response, message: string = GENERIC_INTERNAL_MESSAGE): void {
+  sendError(res, 500, ErrorCodes.INTERNAL_ERROR, sanitizeErrorMessage(message));
 }
 
 export function sendUnauthorized(res: Response, message: string = '認証が必要です'): void {

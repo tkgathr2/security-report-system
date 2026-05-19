@@ -184,7 +184,7 @@ export default function FieldReport() {
       const emailToUse = queryEmail || savedEmail
       if (emailToUse) {
         setWriterEmail(emailToUse)
-        setWriterName(emailToUse)
+        setWriterName(emailToUse.split('@')[0] || emailToUse)
         await authenticateWithEmail(emailToUse, data.project)
       } else {
         setPageState('email_registration')
@@ -304,8 +304,8 @@ export default function FieldReport() {
     
     try {
       setWriterEmail(emailInput)
-      setWriterName(emailInput)
-      
+      setWriterName(emailInput.split('@')[0] || emailInput)
+
       if (project) {
         await authenticateWithEmail(emailInput, project)
       }
@@ -324,7 +324,9 @@ export default function FieldReport() {
       if (response.ok) {
         const data: Draft = await response.json()
         if (data.payload_json) {
-          setWriterName(data.payload_json.writer_name || '')
+          if (data.payload_json.writer_name && data.payload_json.writer_name.trim()) {
+            setWriterName(data.payload_json.writer_name)
+          }
           setWeather(data.payload_json.weather || 'sunny')
           setGuardContents(data.payload_json.guard_contents || [])
           setGuardContentsOther(data.payload_json.guard_other_text || '')

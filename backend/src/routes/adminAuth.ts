@@ -424,7 +424,17 @@ router.post('/access-requests/:requestId/reject', requireSuperAdmin, async (req:
     const requestId = req.params.requestId as string;
     const adminUser = req.user as Express.User;
 
-    const requestResult = await pool.query('SELECT * FROM access_requests WHERE id = $1', [requestId]);
+    const existsResult = await pool.query('SELECT status FROM access_requests WHERE id = $1', [requestId]);
+    if (existsResult.rows.length === 0) {
+      res.status(404).json({ error: 'NOT_FOUND', message: '申請が見つかりません' });
+      return;
+    }
+
+    const requestResult = await pool.query('SELECT * FROM access_requests WHERE id = $1 AND status = $2', [requestId, 'pending']);
+    if (requestResult.rows.length === 0) {
+      res.status(404).json({ error: 'NOT_FOUND', message: '保留中の申請が見つかりません' });
+      return;
+    }
     const request = requestResult.rows[0];
 
     await pool.query(

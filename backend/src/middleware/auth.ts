@@ -8,11 +8,42 @@ if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
   console.error('[SECURITY] AUTH_SECRET is not set in production! Authentication will fail.');
 }
 
-// Token blacklist for logout functionality
-export const jwtTokenBlacklist = new Set<string>();
+// Persistent JWT blacklist (Postgres-backed). Each row records the token's
+// natural expiry so the table can be pruned without losing logout state on restart.
+export async function addTokenToBlacklist(token: string): Promise<void> {
+  try {
+    let expiresAt: Date | null = null;
+    try {
+      const decoded = jwt.decode(token) as { exp?: number } | null;
+      if (decoded && typeof decoded.exp === 'number') {
+        expiresAt = new Date(decoded.exp * 1000);
+      }
+    } catch {
+      // fall back to NULL — middleware will still treat it as blacklisted
+    }
+    await pool.query(
+      `INSERT INTO jwt_token_blacklist (token, expires_at) VALUES ($1, $2)
+       ON CONFLICT (token) DO NOTHING`,
+      [token, expiresAt]
+    );
+    // Best-effort cleanup of expired entries
+    await pool.query('DELETE FROM jwt_token_blacklist WHERE expires_at IS NOT NULL AND expires_at < NOW()');
+  } catch (err) {
+    console.error('[AUTH] Failed to persist token blacklist entry:', err);
+  }
+}
 
-export function addTokenToBlacklist(token: string): void {
-  jwtTokenBlacklist.add(token);
+async function isTokenBlacklisted(token: string): Promise<boolean> {
+  try {
+    const result = await pool.query(
+      'SELECT 1 FROM jwt_token_blacklist WHERE token = $1 LIMIT 1',
+      [token]
+    );
+    return result.rows.length > 0;
+  } catch (err) {
+    console.error('[AUTH] Failed to check token blacklist:', err);
+    return false;
+  }
 }
 
 export async function authenticateCast(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -29,7 +60,7 @@ export async function authenticateCast(req: Request, res: Response, next: NextFu
 
   const token = authHeader.substring(7);
 
-  if (jwtTokenBlacklist.has(token)) {
+  if (await isTokenBlacklisted(token)) {
     res.status(401).json({
       error: 'UNAUTHORIZED',
       message: 'トークンが無効化されています',

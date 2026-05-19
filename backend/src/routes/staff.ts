@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { authenticateCast } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
+import { escapeLikePattern } from '../utils/dateUtil';
 
 const router = Router();
 
@@ -36,12 +37,12 @@ router.get('/search', authenticateCast, async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      `SELECT id, display_name_kanji, display_name_kana 
-       FROM staff_master 
-       WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), '　', '') ILIKE $1 AND deleted_at IS NULL
+      `SELECT id, display_name_kanji, display_name_kana
+       FROM staff_master
+       WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), '　', '') ILIKE $1 ESCAPE '\\' AND deleted_at IS NULL
        ORDER BY display_name_kana
        LIMIT 20`,
-      [`%${normalizedQuery}%`]
+      [`%${escapeLikePattern(normalizedQuery)}%`]
     );
 
     res.json({
@@ -109,7 +110,7 @@ router.post('/select', authenticateCast, async (req: Request, res: Response) => 
 
 router.post('/register', authenticateCast, async (req: Request, res: Response) => {
   try {
-    const { display_name_kanji, display_name_kana } = req.body;
+    const { display_name_kanji, display_name_kana, email } = req.body;
 
     if (!display_name_kanji || typeof display_name_kanji !== 'string' || display_name_kanji.trim().length === 0) {
       res.status(400).json({ error: 'INVALID_PAYLOAD', message: '漢字名は必須です' });
@@ -124,15 +125,53 @@ router.post('/register', authenticateCast, async (req: Request, res: Response) =
       return;
     }
 
-    const result = await pool.query(
-      `INSERT INTO staff_master (display_name_kanji, display_name_kana)
-       VALUES ($1, $2)
-       RETURNING id, display_name_kanji, display_name_kana`,
-      [display_name_kanji.trim(), display_name_kana.trim()]
+    const trimmedKanji = display_name_kanji.trim();
+    const trimmedKana = display_name_kana.trim();
+    const normalizedEmail = typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null;
+
+    if (normalizedEmail) {
+      const emailDup = await pool.query(
+        `SELECT id FROM staff_master WHERE LOWER(email) = $1 AND deleted_at IS NULL LIMIT 1`,
+        [normalizedEmail]
+      );
+      if (emailDup.rows.length > 0) {
+        res.status(409).json({ error: 'DUPLICATE', message: 'このメールアドレスは既に登録されています' });
+        return;
+      }
+    }
+
+    const kanaDup = await pool.query(
+      `SELECT id FROM staff_master
+       WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), '　', '')
+           = REPLACE(REPLACE($1, ' ', ''), '　', '')
+         AND deleted_at IS NULL
+       LIMIT 1`,
+      [trimmedKana]
     );
+    if (kanaDup.rows.length > 0) {
+      res.status(409).json({ error: 'DUPLICATE', message: '同じカナ名のスタッフが既に登録されています' });
+      return;
+    }
+
+    let result;
+    try {
+      result = await pool.query(
+        `INSERT INTO staff_master (display_name_kanji, display_name_kana, email)
+         VALUES ($1, $2, $3)
+         RETURNING id, display_name_kanji, display_name_kana`,
+        [trimmedKanji, trimmedKana, normalizedEmail]
+      );
+    } catch (insertErr: unknown) {
+      const pgCode = (insertErr as { code?: string } | null)?.code;
+      if (pgCode === '23505') {
+        res.status(409).json({ error: 'DUPLICATE', message: '同じ名前またはメールアドレスのスタッフが既に登録されています' });
+        return;
+      }
+      throw insertErr;
+    }
 
     const castUser = (req as AuthenticatedCastRequest).castUser;
-    console.log(`[STAFF_REGISTER] Cast user ${castUser.email} registered new staff: ${display_name_kanji} (${display_name_kana})`);
+    console.log(`[STAFF_REGISTER] Cast user ${castUser.email} registered new staff: ${trimmedKanji} (${trimmedKana})`);
 
     res.status(201).json({
       ok: true,
