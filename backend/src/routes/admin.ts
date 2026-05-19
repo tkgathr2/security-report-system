@@ -5,10 +5,11 @@ import jwt from 'jsonwebtoken';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
 import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '../utils/errorHandler';
-import { isValidEmail, validateStringField, validateArrayItems, MAX_LENGTHS } from '../utils/validation';
+import { isValidEmail, validateStringField, validateArrayItems, MAX_LENGTHS, stripHtmlTags } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
 import { sendLoginUrlEmail } from '../utils/email';
 import { sendRemindersNow } from '../services/dailyReminderService';
+import { checkAndIncrementRateLimitDb } from '../utils/rateLimit';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
 
@@ -745,7 +746,18 @@ router.get('/clients', requireAdmin, async (req: Request, res: Response) => {
 router.put('/clients/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, contact_name, contact_title, contact_email, address, emails } = req.body;
+    const {
+      name: rawName,
+      contact_name: rawContactName,
+      contact_title: rawContactTitle,
+      contact_email,
+      address: rawAddress,
+      emails,
+    } = req.body;
+    const name = typeof rawName === 'string' ? stripHtmlTags(rawName).trim() : rawName;
+    const contact_name = typeof rawContactName === 'string' ? stripHtmlTags(rawContactName) : rawContactName;
+    const contact_title = typeof rawContactTitle === 'string' ? stripHtmlTags(rawContactTitle) : rawContactTitle;
+    const address = typeof rawAddress === 'string' ? stripHtmlTags(rawAddress) : rawAddress;
 
     if (isEmptyClientName(name)) {
       sendBadRequest(res, '会社名は必須です');
@@ -947,7 +959,8 @@ router.post('/maintenance/cleanup-invalid-clients', requireAdmin, async (req: Re
 // POST /api/admin/clients - クライアント登録
 router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { name, emails } = req.body;
+    const { name: rawName, emails } = req.body;
+    const name = typeof rawName === 'string' ? stripHtmlTags(rawName).trim() : rawName;
 
     if (isEmptyClientName(name)) {
       sendBadRequest(res, '会社名は必須です');
@@ -1007,8 +1020,9 @@ router.get('/pending-clients', requireAdmin, async (req: Request, res: Response)
 // POST /api/admin/clients/register-and-activate - 会社登録と案件有効化
 router.post('/clients/register-and-activate', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { client_name_raw, emails } = req.body;
+    const { client_name_raw: rawClientName, emails } = req.body;
     const adminUser = req.user as { id: string; email: string };
+    const client_name_raw = typeof rawClientName === 'string' ? stripHtmlTags(rawClientName).trim() : rawClientName;
 
     if (isEmptyClientName(client_name_raw)) {
       sendBadRequest(res, '会社名は必須です');
@@ -1490,6 +1504,25 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
     const { email, staff_id } = req.body;
     const adminUser = req.user as { id: string; email: string };
 
+    // IP-based rate limit: max 3 attempts per 5 minutes
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+      || req.socket.remoteAddress
+      || 'unknown';
+    const rateLimitKey = `send-login-url:${clientIp}`;
+    const rateCheck = await checkAndIncrementRateLimitDb(rateLimitKey, {
+      maxAttempts: 3,
+      lockDurationMs: 5 * 60 * 1000,
+    });
+    if (!rateCheck.allowed) {
+      const remainSec = Math.ceil((rateCheck.remainingMs || 0) / 1000);
+      res.status(429).json({
+        error: 'RATE_LIMITED',
+        message: `送信回数が上限を超えました。${remainSec}秒後にお試しください`,
+        details: {}
+      });
+      return;
+    }
+
     let targetEmail: string | null = null;
     let targetName: string | null = null;
     let isRegistered = false;
@@ -1544,9 +1577,24 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
       const emailErr = isValidEmail(normalizedEmail) ? null : 'メールアドレスの形式が正しくありません';
       if (emailErr) { sendBadRequest(res, emailErr); return; }
 
+      // Restrict to emails that exist in staff_master OR are already registered cast_users with linked staff
+      const allowedCheck = await pool.query(
+        `SELECT sm.id as staff_id, sm.display_name_kanji as name,
+                cu.id as cu_id
+         FROM staff_master sm
+         LEFT JOIN cast_users cu ON cu.staff_id = sm.id AND cu.email_verified = true AND cu.deleted_at IS NULL
+         WHERE (LOWER(sm.email) = $1 OR LOWER(cu.email) = $1)
+           AND sm.deleted_at IS NULL
+         LIMIT 1`,
+        [normalizedEmail]
+      );
+      if (allowedCheck.rows.length === 0) {
+        sendNotFound(res, 'このメールアドレスはスタッフマスタに登録されていません');
+        return;
+      }
       targetEmail = normalizedEmail;
-      targetName = null;
-      isRegistered = false;
+      targetName = allowedCheck.rows[0].name || null;
+      isRegistered = !!allowedCheck.rows[0].cu_id;
     } else {
       sendBadRequest(res, 'メールアドレスまたはスタッフIDが必要です');
       return;

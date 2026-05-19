@@ -6,7 +6,7 @@ import { authenticateCast, requireAdmin } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
 import { sendBadRequest, sendNotFound, sendConflict, sendForbidden, sendExpired, sendInternalError } from '../utils/errorHandler';
 import { logAudit } from '../utils/auditLog';
-import { validateStringField, validateArrayItems, MAX_LENGTHS } from '../utils/validation';
+import { validateStringField, validateArrayItems, MAX_LENGTHS, stripHtmlTags } from '../utils/validation';
 import pdfStorage from '../services/pdfStorage';
 
 const router = Router();
@@ -59,18 +59,38 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     const castUser = (req as AuthenticatedCastRequest).castUser;
     const {
       project_unique_url,
-      supervisor_name,
-      writer_name,
+      supervisor_name: rawSupervisorName,
+      writer_name: rawWriterName,
       weather,
-      guard_contents,
-      guard_other_text,
-      guards,
+      guard_contents: rawGuardContents,
+      guard_other_text: rawGuardOtherText,
+      guards: rawGuards,
       has_qualifier,
-      qualifier_name,
+      qualifier_name: rawQualifierName,
       signature_png_base64,
-      notes,
-      partner_company_name
+      notes: rawNotes,
+      partner_company_name: rawPartnerCompanyName
     } = req.body;
+
+    const sanitizeStr = <T,>(v: T): T => (typeof v === 'string' ? (stripHtmlTags(v) as unknown as T) : v);
+
+    const supervisor_name: string | undefined = sanitizeStr(rawSupervisorName);
+    const writer_name: string | undefined = sanitizeStr(rawWriterName);
+    const guard_contents: unknown = Array.isArray(rawGuardContents)
+      ? rawGuardContents.map((item: unknown) => (typeof item === 'string' ? stripHtmlTags(item) : item))
+      : rawGuardContents;
+    const guard_other_text: string | undefined = sanitizeStr(rawGuardOtherText);
+    const guards = Array.isArray(rawGuards)
+      ? rawGuards.map((g: { name?: string; [k: string]: unknown }) => ({
+          ...g,
+          name: typeof g?.name === 'string' ? stripHtmlTags(g.name) : g?.name,
+        }))
+      : rawGuards;
+    const qualifier_name: string | string[] | null | undefined = Array.isArray(rawQualifierName)
+      ? (rawQualifierName as unknown[]).map((n) => (typeof n === 'string' ? stripHtmlTags(n) : '')).filter(Boolean) as string[]
+      : (typeof rawQualifierName === 'string' ? stripHtmlTags(rawQualifierName) : rawQualifierName);
+    const notes: string | undefined = sanitizeStr(rawNotes);
+    const partner_company_name: string | undefined = sanitizeStr(rawPartnerCompanyName);
     console.log('[APPROVE] Request body parsed, project_unique_url:', project_unique_url);
 
     if (!signature_png_base64 || typeof signature_png_base64 !== 'string') {

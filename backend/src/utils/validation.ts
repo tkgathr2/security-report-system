@@ -32,7 +32,25 @@ export function stripNullBytes(value: string): string {
 }
 
 export function stripHtmlTags(value: string): string {
-  return value.replace(/<[^>]*>/g, '');
+  return value
+    // Remove full tags (including unclosed tags at end of input)
+    .replace(/<[^>]*>?/g, '')
+    // Remove event handler attributes that survived (e.g. fragments without surrounding tag)
+    .replace(/\bon[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    // Remove dangerous URL schemes
+    .replace(/javascript\s*:/gi, '')
+    .replace(/vbscript\s*:/gi, '')
+    .replace(/data\s*:\s*text\s*\/\s*html/gi, '');
+}
+
+export function escapeHtml(value: string): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
 }
 
 export function sanitizeInput(value: unknown): unknown {

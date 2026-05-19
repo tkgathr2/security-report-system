@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import pool from '../db/pool';
 import { sendEmail } from '../services/notifications';
 import { logAudit } from '../utils/auditLog';
-import { validateStringField, MAX_LENGTHS } from '../utils/validation';
+import { validateStringField, MAX_LENGTHS, escapeHtml } from '../utils/validation';
 import { checkRateLimitDb, recordFailedAttemptDb } from '../utils/rateLimit';
 
 const router = Router();
@@ -269,6 +269,8 @@ router.post('/request-access', async (req: Request, res: Response) => {
     const ownerEmails = OWNER_EMAIL.split(',').map(e => e.trim()).filter(Boolean);
 
     const BASE_URL = process.env.BASE_URL || 'https://security-report.up.railway.app';
+    const safeEmail = escapeHtml(email);
+    const safeDisplayName = escapeHtml(display_name || '未設定');
     await sendEmail({
       to: ownerEmails,
       subject: '【デジタル警備報告書システム ほうこちゃん】管理画面アクセス申請',
@@ -286,11 +288,11 @@ router.post('/request-access', async (req: Request, res: Response) => {
       <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
         <tr>
           <td style="padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;font-weight:bold;color:#495057;width:120px;">メール</td>
-          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${email}</td>
+          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${safeEmail}</td>
         </tr>
         <tr>
           <td style="padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;font-weight:bold;color:#495057;">名前</td>
-          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${display_name || '未設定'}</td>
+          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${safeDisplayName}</td>
         </tr>
       </table>
       <div style="text-align:center;margin:25px 0;">
@@ -392,7 +394,7 @@ router.post('/access-requests/:requestId/approve', requireSuperAdmin, async (req
       <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
         <tr>
           <td style="padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;font-weight:bold;color:#495057;width:120px;">権限</td>
-          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${assignRole}</td>
+          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${escapeHtml(assignRole)}</td>
         </tr>
       </table>
       <div style="text-align:center;margin:25px 0;">
@@ -521,11 +523,11 @@ router.put('/admins/:adminId/role', requireSuperAdmin, async (req: Request, res:
       <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
         <tr>
           <td style="padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;font-weight:bold;color:#495057;width:120px;">変更前</td>
-          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${ROLE_LABELS[oldRole] || oldRole}</td>
+          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${escapeHtml(ROLE_LABELS[oldRole] || oldRole)}</td>
         </tr>
         <tr>
           <td style="padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;font-weight:bold;color:#495057;">変更後</td>
-          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${ROLE_LABELS[role] || role}</td>
+          <td style="padding:10px 12px;border:1px solid #e9ecef;color:#212529;">${escapeHtml(ROLE_LABELS[role] || role)}</td>
         </tr>
       </table>
       <div style="text-align:center;margin:25px 0;">

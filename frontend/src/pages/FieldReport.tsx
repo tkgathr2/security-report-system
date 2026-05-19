@@ -218,20 +218,12 @@ export default function FieldReport() {
         }
 
         if (!response || !response.ok) {
-          const pin = '0000'
-          response = await fetch('/api/cast/field-login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, pin })
-          })
-
-          if (response.status === 401) {
-            response = await fetch('/api/cast/field-register', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, pin })
-            })
-          }
+          // No valid cast session — require explicit login (PIN entered by the user).
+          // Hardcoded PINs are never acceptable; redirect to login flow with a return URL.
+          const returnTo = encodeURIComponent(window.location.pathname + window.location.search)
+          const emailParam = encodeURIComponent(email)
+          window.location.href = `/cast/login?return_to=${returnTo}&email=${emailParam}`
+          return
         }
 
         if (!response.ok) {
@@ -569,7 +561,25 @@ export default function FieldReport() {
           handleSubmit()
         }
       }
-    }, [pageState, registering, submitting])
+    }, [
+      pageState,
+      registering,
+      submitting,
+      token,
+      signatureDataUrl,
+      guards,
+      writerName,
+      weather,
+      guardContents,
+      guardContentsOther,
+      hasQualifier,
+      qualifierNames,
+      notes,
+      partnerCompanyName,
+      uniqueUrl,
+      emailInput,
+      project,
+    ])
 
     useEffect(() => {
       document.addEventListener('keydown', handleCtrlEnterSubmit)
