@@ -23,7 +23,7 @@ interface CompanyEmailManagerProps {
   companyName: string
 }
 
-export function CompanyEmailManager({ companyId, companyName }: CompanyEmailManagerProps) {
+export function CompanyEmailManager({ companyId, companyName: _companyName }: CompanyEmailManagerProps) {
   const [emails, setEmails] = useState<CompanyEmail[]>([])
   const [loading, setLoading] = useState(true)
   const [newEmail, setNewEmail] = useState('')

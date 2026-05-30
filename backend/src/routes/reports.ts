@@ -487,7 +487,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
             clientAddress: project.client_address || '',
             workDate: workDateStr,
             projectName: project.work_title_raw || project.work_name || '',
-            writerName: displayWriterName,
+            writerName: resolvedWriterName,
             supervisorName: supervisor_name || '',
             location: project.location || '',
             pdfBuffer,
