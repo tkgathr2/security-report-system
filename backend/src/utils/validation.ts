@@ -53,6 +53,22 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, '&#x27;');
 }
 
+/**
+ * メールアドレスをログ出力用にマスキングする（PII保護）。
+ * 例: "taro.yamada@example.com" -> "t***@example.com"
+ * 不正・空文字の場合は固定の伏字を返す。
+ */
+export function maskEmail(email: string | null | undefined): string {
+  if (!email || typeof email !== 'string') return '***';
+  const trimmed = email.trim();
+  const atIdx = trimmed.indexOf('@');
+  if (atIdx <= 0) return '***';
+  const local = trimmed.slice(0, atIdx);
+  const domain = trimmed.slice(atIdx + 1);
+  const head = local.slice(0, 1);
+  return `${head}***@${domain}`;
+}
+
 export function sanitizeInput(value: unknown): unknown {
   if (typeof value === 'string') return stripHtmlTags(stripNullBytes(value));
   if (Array.isArray(value)) return value.map(sanitizeInput);

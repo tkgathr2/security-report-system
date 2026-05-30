@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { escapeHtml } from './validation';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
@@ -180,10 +181,6 @@ export async function sendLoginUrlEmail(email: string, name: string, loginUrl: s
     console.error('Email send error:', error);
     return { success: false, error: String(error) };
   }
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 export async function sendInquiryNotificationEmail(params: {

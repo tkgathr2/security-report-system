@@ -29,20 +29,28 @@ export function CompanyEmailManager({ companyId, companyName: _companyName }: Co
   const [newEmail, setNewEmail] = useState('')
   const [newLabel, setNewLabel] = useState('')
   const [adding, setAdding] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [fetchError, setFetchError] = useState('')
+
+  // 簡易メール形式チェック（M-1）
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
   const fetchEmails = useCallback(async () => {
     try {
       setLoading(true)
+      setFetchError('')
       const res = await fetch(`/api/admin/companies/${companyId}/emails`, {
         credentials: 'include',
       })
       if (res.ok) {
         const data = await res.json()
         setEmails(data.emails || [])
+      } else {
+        setFetchError(`通知先メールの取得に失敗しました（${res.status}）`)
       }
-    } catch (err) {
-      console.error('Failed to fetch company emails:', err)
+    } catch {
+      setFetchError('通知先メールの取得に失敗しました。通信状態を確認してください。')
     } finally {
       setLoading(false)
     }
@@ -53,15 +61,21 @@ export function CompanyEmailManager({ companyId, companyName: _companyName }: Co
   }, [fetchEmails])
 
   const handleAdd = async () => {
-    if (!newEmail.trim()) return
+    const trimmed = newEmail.trim()
+    if (!trimmed) return
     setError('')
+    // POST前にメール形式を検証し、不正ならAPIを叩かない（M-1）
+    if (!isValidEmail(trimmed)) {
+      setError('メールアドレスの形式が正しくありません')
+      return
+    }
     setAdding(true)
     try {
       const res = await fetch(`/api/admin/companies/${companyId}/emails`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email: newEmail.trim(), label: newLabel.trim() || null }),
+        body: JSON.stringify({ email: trimmed, label: newLabel.trim() || null }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -79,7 +93,10 @@ export function CompanyEmailManager({ companyId, companyName: _companyName }: Co
   }
 
   const handleDelete = async (emailId: string, emailAddr: string) => {
+    if (deletingId) return // 二重送信防止（M-2）
     if (!confirm(`通知先メール「${emailAddr}」を削除しますか？`)) return
+    setError('')
+    setDeletingId(emailId)
     try {
       const res = await fetch(`/api/admin/companies/${companyId}/emails/${emailId}`, {
         method: 'DELETE',
@@ -88,11 +105,19 @@ export function CompanyEmailManager({ companyId, companyName: _companyName }: Co
       })
       if (res.ok) {
         await fetchEmails()
+      } else {
+        // 失敗をユーザーに通知（M-2）
+        setError('削除に失敗しました。時間をおいて再度お試しください。')
       }
-    } catch (err) {
-      console.error('Failed to delete company email:', err)
+    } catch {
+      setError('通信エラーが発生しました')
+    } finally {
+      setDeletingId(null)
     }
   }
+
+  // 編集（is_active 切替）UIはバック側で PATCH /:companyId/emails/:emailId が
+  // 追加された場合に対応予定。本タスクでは追加/削除に集中する。
 
   return (
     <div style={{ marginTop: '16px', borderTop: `1px solid ${COLORS.lightGray}`, paddingTop: '16px' }}>
@@ -105,6 +130,10 @@ export function CompanyEmailManager({ companyId, companyName: _companyName }: Co
 
       {loading ? (
         <p style={{ fontSize: '13px', color: COLORS.darkGray }}>読み込み中...</p>
+      ) : fetchError ? (
+        <p style={{ fontSize: '13px', color: COLORS.danger, marginBottom: '12px' }}>
+          {fetchError}
+        </p>
       ) : (
         <>
           {/* 登録済みメール一覧 */}
@@ -133,17 +162,20 @@ export function CompanyEmailManager({ companyId, companyName: _companyName }: Co
                     )}
                   </div>
                   <button
+                    type="button"
                     onClick={() => handleDelete(em.id, em.email)}
+                    disabled={deletingId === em.id}
                     style={{
                       background: 'none',
                       border: 'none',
                       color: COLORS.danger,
-                      cursor: 'pointer',
+                      cursor: deletingId === em.id ? 'default' : 'pointer',
                       fontSize: '12px',
                       padding: '2px 6px',
+                      opacity: deletingId === em.id ? 0.5 : 1,
                     }}
                   >
-                    削除
+                    {deletingId === em.id ? '削除中...' : '削除'}
                   </button>
                 </div>
               ))}
@@ -183,6 +215,7 @@ export function CompanyEmailManager({ companyId, companyName: _companyName }: Co
               />
             </div>
             <button
+              type="button"
               onClick={handleAdd}
               disabled={adding || !newEmail.trim()}
               style={{

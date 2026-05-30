@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { escapeHtml, maskEmail } from '../utils/validation';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const EMAIL_FROM = process.env.SMTP_FROM || 'noreply@takagi.bz';
@@ -30,24 +31,22 @@ interface SlackNotification {
 }
 
 export async function sendEmail(options: EmailOptions): Promise<{ success: boolean; error?: string }> {
+  const maskedRecipients = options.to.map(maskEmail).join(', ');
   console.log('[EMAIL] Resend API check:', resend ? 'CONFIGURED' : 'NOT SET');
-  console.log('[EMAIL] FROM:', EMAIL_FROM);
-  console.log('[EMAIL] Recipients:', options.to.length > 0 ? options.to.join(', ') : 'EMPTY');
-  
+  console.log('[EMAIL] Recipients:', options.to.length > 0 ? `${options.to.length} 件 (${maskedRecipients})` : 'EMPTY');
+
   if (options.to.length === 0) {
     console.log('[EMAIL] No recipients, skipping email send');
     return { success: false, error: 'No recipients' };
   }
-  
+
   if (!resend) {
     console.log('[EMAIL] RESEND_API_KEY not configured, skipping email send');
-    console.log('[EMAIL] Would send to:', options.to.join(', '));
-    console.log('[EMAIL] Subject:', options.subject);
     return { success: false, error: 'Resend API not configured' };
   }
 
   try {
-    console.log('[EMAIL] Sending email via Resend to:', options.to.join(', '));
+    console.log(`[EMAIL] Sending email via Resend to ${options.to.length} recipient(s)`);
     const { data, error } = await resend.emails.send({
       from: EMAIL_FROM,
       to: options.to,
@@ -76,7 +75,7 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
 export async function sendSlackNotification(notification: SlackNotification): Promise<{ success: boolean; error?: string }> {
   if (!SLACK_WEBHOOK_URL) {
     console.log('[SLACK] Webhook URL not configured, skipping Slack notification');
-    console.log('[SLACK] Would send:', JSON.stringify(notification, null, 2));
+    console.log(`[SLACK] Would send notification for report ${notification.reportId}`);
     return { success: false, error: 'Slack webhook not configured' };
   }
 
@@ -292,10 +291,10 @@ export async function sendReportApprovalNotifications(params: {
         `デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。\n\n` +
         detailItems.join('\n') + `\n\n` +
         `添付のPDFファイルをご確認ください。`,
-      html: `<p>${params.companyName}<br>${contactLine ? contactLine + ' ' : ''}様</p>` +
+      html: `<p>${escapeHtml(params.companyName)}<br>${contactLine ? escapeHtml(contactLine) + ' ' : ''}様</p>` +
         `<p>デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。</p>` +
         `<ul>` +
-        detailItems.map(item => `<li>${item}</li>`).join('') +
+        detailItems.map(item => `<li>${escapeHtml(item)}</li>`).join('') +
         `</ul>` +
         `<p>添付のPDFファイルをご確認ください。</p>`,
       attachments
@@ -319,14 +318,14 @@ export async function sendReportApprovalNotifications(params: {
         `実施場所: ${params.location}\n` +
         `監督者: ${params.supervisorName}\n\n` +
         `添付のPDFファイルをご確認ください。`,
-      html: `<p>${params.writerName} 様</p>` +
+      html: `<p>${escapeHtml(params.writerName)} 様</p>` +
         `<p><strong>お仕事お疲れ様でした。</strong></p>` +
         `<p>報告書が正常に送信されました。</p>` +
         `<ul>` +
-        `<li>作業名称: ${params.projectName}</li>` +
-        `<li>実施日: ${params.workDate}</li>` +
-        `<li>実施場所: ${params.location}</li>` +
-        `<li>監督者: ${params.supervisorName}</li>` +
+        `<li>作業名称: ${escapeHtml(params.projectName)}</li>` +
+        `<li>実施日: ${escapeHtml(params.workDate)}</li>` +
+        `<li>実施場所: ${escapeHtml(params.location)}</li>` +
+        `<li>監督者: ${escapeHtml(params.supervisorName)}</li>` +
         `</ul>` +
         `<p>添付のPDFファイルをご確認ください。</p>`,
       attachments
@@ -355,13 +354,13 @@ export async function sendReportApprovalNotifications(params: {
       html: `<p>管理者様</p>` +
         `<p><strong>新しい報告書が提出されました。</strong></p>` +
         `<ul>` +
-        `<li>会社名: ${params.companyName}</li>` +
-        `<li>作業名称: ${params.projectName}</li>` +
-        `<li>実施日: ${params.workDate}</li>` +
-        `<li>実施場所: ${params.location}</li>` +
-        `<li>監督者: ${params.supervisorName}</li>` +
-        `<li>記入者: ${params.writerName}</li>` +
-        `<li>報告書ID: ${params.reportId}</li>` +
+        `<li>会社名: ${escapeHtml(params.companyName)}</li>` +
+        `<li>作業名称: ${escapeHtml(params.projectName)}</li>` +
+        `<li>実施日: ${escapeHtml(params.workDate)}</li>` +
+        `<li>実施場所: ${escapeHtml(params.location)}</li>` +
+        `<li>監督者: ${escapeHtml(params.supervisorName)}</li>` +
+        `<li>記入者: ${escapeHtml(params.writerName)}</li>` +
+        `<li>報告書ID: ${escapeHtml(params.reportId)}</li>` +
         `</ul>` +
         `<p>添付のPDFファイルをご確認ください。</p>`,
       attachments
