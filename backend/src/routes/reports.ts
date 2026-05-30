@@ -1,3 +1,4 @@
+import { sendCompanyNotificationEmails } from '../services/emailSender';
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { sendReportApprovalNotifications, sendSlackNotification, uploadPdfToSlack } from '../services/notifications';
@@ -149,7 +150,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     }
 
     const projectResult = await pool.query(
-      `SELECT p.id, p.status, p.url_expires_at, c.name as client_name_raw, p.work_date, p.work_title_raw,
+      `SELECT p.id, p.status, p.url_expires_at, c.id as client_id, c.name as client_name_raw, p.work_date, p.work_title_raw,
               p.location, p.work_name, p.start_time, p.end_time, c.emails as client_emails, c.contact_email,
               c.contact_name as client_contact_name, c.contact_title as client_contact_title,
               c.address as client_address
@@ -472,6 +473,29 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         console.log(`[ASYNC] Email notifications sent for report ${reportId}:`, notificationResult);
       } catch (emailError) {
         console.error(`[ASYNC] Email notification failed for report ${reportId}:`, emailError);
+      }
+
+      // 新機能: company_emails経由での取引先メール送信（冪等性・リトライ・ログ記録付き）
+      try {
+        if (project.client_id) {
+          const companyEmailResult = await sendCompanyNotificationEmails({
+            reportId,
+            companyId: project.client_id,
+            companyName: project.client_name_raw || '',
+            contactName: project.client_contact_name || '',
+            contactTitle: project.client_contact_title || '',
+            clientAddress: project.client_address || '',
+            workDate: workDateStr,
+            projectName: project.work_title_raw || project.work_name || '',
+            writerName: displayWriterName,
+            supervisorName: supervisor_name || '',
+            location: project.location || '',
+            pdfBuffer,
+          });
+          console.log(`[ASYNC] Company notification emails for report ${reportId}:`, companyEmailResult);
+        }
+      } catch (companyEmailErr) {
+        console.error(`[ASYNC] Company notification email failed for report ${reportId}:`, companyEmailErr);
       }
       } catch (asyncError) {
         console.error(`[ASYNC] Unhandled error in background processing for report ${reportId}:`, asyncError);
