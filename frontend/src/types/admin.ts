@@ -150,3 +150,28 @@ export interface Client {
   created_at: string
   updated_at: string
 }
+
+export interface CompanyEmail {
+  id: string
+  email: string
+  label: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface EmailLog {
+  id: string
+  report_id: string
+  company_id: string | null
+  recipient_email: string
+  recipient_type: string
+  status: string
+  error_message: string | null
+  retry_count: number
+  sent_at: string | null
+  created_at: string
+  company_name: string | null
+  work_date: string | null
+  work_name: string | null
+}
