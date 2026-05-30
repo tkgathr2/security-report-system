@@ -11,7 +11,8 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "migrate": "node-pg-migrate",
-    "migrate:up": "node-pg-migrate up"
+    "migrate:up": "node-pg-migrate up",
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
@@ -52,6 +53,7 @@
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/pg": "^8.16.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
   }
 }

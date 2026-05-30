@@ -11,12 +11,41 @@
  */
 import { Resend } from 'resend';
 import pool from '../db/pool';
+import { escapeHtml, isValidEmail, maskEmail } from '../utils/validation';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const EMAIL_FROM = process.env.SMTP_FROM || 'noreply@takagi.bz';
 
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1000; // 指数バックオフ: 1s, 2s, 4s
+
+// ユーザー（管理画面）向けの定型エラーメッセージ。生の例外文はSentry/サーバログのみに残す。
+const GENERIC_SEND_ERROR = 'メール送信に失敗しました。時間をおいて再度お試しください。';
+
+/**
+ * 恒久エラー（4xx, ただし429は除く）かどうかを判定する。
+ * 恒久エラーならリトライせず即failedにする。5xx/タイムアウト/429はリトライ対象。
+ */
+export function isRetryableError(err: unknown): boolean {
+  const status = extractStatusCode(err);
+  if (status !== null) {
+    if (status === 429) return true; // レート制限はバックオフでリトライ
+    if (status >= 400 && status < 500) return false; // その他4xxは恒久エラー
+    return true; // 5xx等はリトライ
+  }
+  // ステータス不明（ネットワーク/タイムアウト等）はリトライ対象
+  return true;
+}
+
+export function extractStatusCode(err: unknown): number | null {
+  if (err && typeof err === 'object') {
+    const e = err as { statusCode?: unknown; status?: unknown };
+    const raw = e.statusCode ?? e.status;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    if (typeof raw === 'string' && /^\d+$/.test(raw)) return parseInt(raw, 10);
+  }
+  return null;
+}
 
 interface SendEmailWithLogParams {
   reportId: string;
@@ -34,6 +63,8 @@ interface SendEmailWithLogParams {
   location: string;
   pdfBuffer: Buffer;
   isResend?: boolean;
+  /** 再送時にフィーチャーフラグ評価をスキップしたくない場合に true（手動再送経路で使用） */
+  enforceFeatureFlag?: boolean;
 }
 
 interface SendResult {
@@ -50,30 +81,34 @@ export async function sendEmailWithLog(params: SendEmailWithLogParams): Promise<
     reportId, companyId, recipientEmail, recipientType,
     companyName, contactName, contactTitle, clientAddress,
     workDate, projectName, writerName, supervisorName, location,
-    pdfBuffer, isResend,
+    pdfBuffer, isResend, enforceFeatureFlag,
   } = params;
+
+  // 宛先メールアドレスの検証（特に手動再送経路で不正なログ値が混入し得るため）
+  if (!isValidEmail(recipientEmail)) {
+    console.warn(`[EMAIL-SENDER] Invalid recipient email, refusing to send: ${maskEmail(recipientEmail)}`);
+    return { success: false, error: '宛先メールアドレスの形式が不正です' };
+  }
+
+  // recipient_type ホワイトリスト検証
+  if (!['client', 'writer', 'admin'].includes(recipientType)) {
+    console.warn(`[EMAIL-SENDER] Invalid recipient type: ${recipientType}`);
+    return { success: false, error: '宛先種別が不正です' };
+  }
+
+  // フィーチャーフラグ評価（手動再送など、呼び出し元でフラグ評価していない経路で使用）
+  if (enforceFeatureFlag && !(await isEmailNotificationEnabled())) {
+    console.log('[EMAIL-SENDER] email_notification_enabled is OFF. Skipping send.');
+    return { success: false, error: 'メール通知機能が無効です' };
+  }
 
   // 冪等性キー生成
   const baseKey = `${reportId}:${recipientEmail}:${recipientType}`;
   const idempotencyKey = isResend ? `${baseKey}:resend:${Date.now()}` : baseKey;
 
-  // 冪等性チェック（再送でない場合）
-  if (!isResend) {
-    try {
-      const existing = await pool.query(
-        `SELECT id, status FROM email_logs WHERE idempotency_key = $1`,
-        [idempotencyKey]
-      );
-      if (existing.rows.length > 0 && existing.rows[0].status === 'sent') {
-        console.log(`[EMAIL-SENDER] Idempotency hit: already sent for key=${idempotencyKey}`);
-        return { success: true, logId: existing.rows[0].id };
-      }
-    } catch (err) {
-      console.error('[EMAIL-SENDER] Idempotency check failed:', err);
-    }
-  }
-
-  // ログレコード作成（pending状態）
+  // ログレコード作成（pending状態）。
+  // チェックとINSERTを単一クエリに統合してTOCTOUを排除する。
+  // 既にsent済み（status='sent'）の場合はUPDATEがWHEREで弾かれRETURNINGが空になる。
   let logId: string;
   try {
     const logResult = await pool.query(
@@ -83,9 +118,21 @@ export async function sendEmailWithLog(params: SendEmailWithLogParams): Promise<
          status = 'pending',
          retry_count = email_logs.retry_count + 1,
          updated_at = NOW()
-       RETURNING id`,
+       WHERE email_logs.status <> 'sent'
+       RETURNING id, status`,
       [reportId, companyId, recipientEmail, recipientType, idempotencyKey]
     );
+
+    // RETURNINGが空 = 既にsent済み（冪等性ヒット）。送信フェーズに進まず早期return。
+    if (logResult.rows.length === 0) {
+      const existing = await pool.query(
+        `SELECT id FROM email_logs WHERE idempotency_key = $1`,
+        [idempotencyKey]
+      );
+      console.log('[EMAIL-SENDER] Idempotency hit: already sent, skipping send.');
+      return { success: true, logId: existing.rows[0]?.id };
+    }
+
     logId = logResult.rows[0].id;
   } catch (err) {
     console.error('[EMAIL-SENDER] Failed to create log record:', err);
@@ -107,16 +154,17 @@ export async function sendEmailWithLog(params: SendEmailWithLogParams): Promise<
   });
 
   // リトライ付き送信
+  const maskedRecipient = maskEmail(recipientEmail);
   let lastError = '';
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       if (attempt > 0) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt - 1);
-        console.log(`[EMAIL-SENDER] Retry ${attempt}/${MAX_RETRIES} after ${delay}ms for ${recipientEmail}`);
+        console.log(`[EMAIL-SENDER] Retry ${attempt}/${MAX_RETRIES} after ${delay}ms for ${maskedRecipient}`);
         await sleep(delay);
       }
 
-      console.log(`[EMAIL-SENDER] Sending to ${recipientEmail} (attempt ${attempt + 1}/${MAX_RETRIES})`);
+      console.log(`[EMAIL-SENDER] Sending to ${maskedRecipient} (attempt ${attempt + 1}/${MAX_RETRIES})`);
 
       const attachments = (pdfBuffer && pdfBuffer.length > 0) ? [{
         filename: `report_${workDate}.pdf`,
@@ -134,11 +182,18 @@ export async function sendEmailWithLog(params: SendEmailWithLogParams): Promise<
 
       if (error) {
         lastError = error.message;
-        console.error(`[EMAIL-SENDER] Resend API error (attempt ${attempt + 1}):`, error);
+        console.error(`[EMAIL-SENDER] Resend API error (attempt ${attempt + 1}) for ${maskedRecipient}:`, error);
+        // error_messageには生の例外文ではなくユーザー向け定型メッセージを保存（詳細はサーバログのみ）
         await pool.query(
           `UPDATE email_logs SET retry_count = $1, error_message = $2, updated_at = NOW() WHERE id = $3`,
-          [attempt + 1, lastError, logId]
+          [attempt + 1, GENERIC_SEND_ERROR, logId]
         );
+        // 恒久エラー（4xx, 429除く）はリトライせず即failedで打ち切り
+        if (!isRetryableError(error)) {
+          console.error(`[EMAIL-SENDER] Permanent error for ${maskedRecipient}, aborting retries.`);
+          await updateLogStatus(logId, 'failed', GENERIC_SEND_ERROR);
+          return { success: false, error: GENERIC_SEND_ERROR, logId };
+        }
         continue;
       }
 
@@ -149,23 +204,29 @@ export async function sendEmailWithLog(params: SendEmailWithLogParams): Promise<
          WHERE id = $3`,
         [messageId, attempt + 1, logId]
       );
-      console.log(`[EMAIL-SENDER] Sent successfully to ${recipientEmail}, messageId=${messageId}`);
+      console.log(`[EMAIL-SENDER] Sent successfully to ${maskedRecipient}, messageId=${messageId}`);
       return { success: true, logId };
 
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
-      console.error(`[EMAIL-SENDER] Exception (attempt ${attempt + 1}):`, lastError);
+      console.error(`[EMAIL-SENDER] Exception (attempt ${attempt + 1}) for ${maskedRecipient}:`, lastError);
       await pool.query(
         `UPDATE email_logs SET retry_count = $1, error_message = $2, updated_at = NOW() WHERE id = $3`,
-        [attempt + 1, lastError, logId]
+        [attempt + 1, GENERIC_SEND_ERROR, logId]
       ).catch(() => {});
+      // 恒久エラーはリトライせず打ち切り
+      if (!isRetryableError(err)) {
+        console.error(`[EMAIL-SENDER] Permanent exception for ${maskedRecipient}, aborting retries.`);
+        await updateLogStatus(logId, 'failed', GENERIC_SEND_ERROR);
+        return { success: false, error: GENERIC_SEND_ERROR, logId };
+      }
     }
   }
 
   // 全リトライ失敗
-  await updateLogStatus(logId, 'failed', lastError);
-  console.error(`[EMAIL-SENDER] All ${MAX_RETRIES} attempts failed for ${recipientEmail}: ${lastError}`);
-  return { success: false, error: lastError, logId };
+  await updateLogStatus(logId, 'failed', GENERIC_SEND_ERROR);
+  console.error(`[EMAIL-SENDER] All ${MAX_RETRIES} attempts failed for ${maskedRecipient}: ${lastError}`);
+  return { success: false, error: GENERIC_SEND_ERROR, logId };
 }
 
 /**
@@ -191,17 +252,7 @@ export async function sendCompanyNotificationEmails(params: {
   let skipped = 0;
 
   // フィーチャーフラグ確認
-  let emailNotificationEnabled = false;
-  try {
-    const flagResult = await pool.query(
-      `SELECT value FROM system_settings WHERE key = 'email_notification_enabled'`
-    );
-    if (flagResult.rows.length > 0 && flagResult.rows[0].value === 'true') {
-      emailNotificationEnabled = true;
-    }
-  } catch (err) {
-    console.warn('[EMAIL-SENDER] Failed to check feature flag, defaulting to OFF:', err);
-  }
+  const emailNotificationEnabled = await isEmailNotificationEnabled();
 
   if (!emailNotificationEnabled) {
     console.log('[EMAIL-SENDER] email_notification_enabled is OFF. Skipping company notification emails.');
@@ -247,7 +298,7 @@ export async function sendCompanyNotificationEmails(params: {
         sent++;
       } else {
         failed++;
-        warnings.push(`メール送信失敗 (${row.email}): ${result.error}`);
+        warnings.push(`メール送信失敗 (${maskEmail(row.email)}): ${result.error}`);
       }
     }
   } catch (err) {
@@ -262,7 +313,7 @@ export async function sendCompanyNotificationEmails(params: {
 
 // --- ヘルパー関数 ---
 
-function buildEmailContent(
+export function buildEmailContent(
   recipientType: 'client' | 'writer' | 'admin',
   data: {
     companyName: string;
@@ -289,6 +340,7 @@ function buildEmailContent(
     if (data.contactName) contactParts.push(data.contactName);
     if (data.contactTitle) contactParts.push(data.contactTitle);
     const contactLine = contactParts.length > 0 ? contactParts.join(' ') : '';
+    const contactLineHtml = contactLine ? escapeHtml(contactLine) + ' ' : '';
 
     return {
       subject: `【デジタル警備報告書システム ほうこちゃん】警備報告書 ${data.projectName} (${data.workDate})`,
@@ -296,9 +348,9 @@ function buildEmailContent(
         `デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。\n\n` +
         detailItems.join('\n') + `\n\n` +
         `添付のPDFファイルをご確認ください。`,
-      html: `<p>${data.companyName}<br>${contactLine ? contactLine + ' ' : ''}様</p>` +
+      html: `<p>${escapeHtml(data.companyName)}<br>${contactLineHtml}様</p>` +
         `<p>デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。</p>` +
-        `<ul>${detailItems.map(item => `<li>${item}</li>`).join('')}</ul>` +
+        `<ul>${detailItems.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` +
         `<p>添付のPDFファイルをご確認ください。</p>`,
     };
   }
@@ -309,11 +361,11 @@ function buildEmailContent(
       text: `${data.writerName} 様\n\nお仕事お疲れ様でした。\n報告書が正常に送信されました。\n\n` +
         `作業名称: ${data.projectName}\n実施日: ${data.workDate}\n実施場所: ${data.location}\n監督者: ${data.supervisorName}\n\n` +
         `添付のPDFファイルをご確認ください。`,
-      html: `<p>${data.writerName} 様</p>` +
+      html: `<p>${escapeHtml(data.writerName)} 様</p>` +
         `<p><strong>お仕事お疲れ様でした。</strong></p>` +
         `<p>報告書が正常に送信されました。</p>` +
-        `<ul><li>作業名称: ${data.projectName}</li><li>実施日: ${data.workDate}</li>` +
-        `<li>実施場所: ${data.location}</li><li>監督者: ${data.supervisorName}</li></ul>` +
+        `<ul><li>作業名称: ${escapeHtml(data.projectName)}</li><li>実施日: ${escapeHtml(data.workDate)}</li>` +
+        `<li>実施場所: ${escapeHtml(data.location)}</li><li>監督者: ${escapeHtml(data.supervisorName)}</li></ul>` +
         `<p>添付のPDFファイルをご確認ください。</p>`,
     };
   }
@@ -327,12 +379,28 @@ function buildEmailContent(
       `報告書ID: ${data.reportId}\n\n添付のPDFファイルをご確認ください。`,
     html: `<p>管理者様</p>` +
       `<p><strong>新しい報告書が承認されました。</strong></p>` +
-      `<ul><li>会社名: ${data.companyName}</li><li>作業名称: ${data.projectName}</li>` +
-      `<li>実施日: ${data.workDate}</li><li>実施場所: ${data.location}</li>` +
-      `<li>監督者: ${data.supervisorName}</li><li>記入者: ${data.writerName}</li>` +
-      `<li>報告書ID: ${data.reportId}</li></ul>` +
+      `<ul><li>会社名: ${escapeHtml(data.companyName)}</li><li>作業名称: ${escapeHtml(data.projectName)}</li>` +
+      `<li>実施日: ${escapeHtml(data.workDate)}</li><li>実施場所: ${escapeHtml(data.location)}</li>` +
+      `<li>監督者: ${escapeHtml(data.supervisorName)}</li><li>記入者: ${escapeHtml(data.writerName)}</li>` +
+      `<li>報告書ID: ${escapeHtml(data.reportId)}</li></ul>` +
       `<p>添付のPDFファイルをご確認ください。</p>`,
   };
+}
+
+/**
+ * フィーチャーフラグ email_notification_enabled を評価する。
+ * 取得失敗時は安全側に倒してOFF（false）を返す。
+ */
+async function isEmailNotificationEnabled(): Promise<boolean> {
+  try {
+    const flagResult = await pool.query(
+      `SELECT value FROM system_settings WHERE key = 'email_notification_enabled'`
+    );
+    return flagResult.rows.length > 0 && flagResult.rows[0].value === 'true';
+  } catch (err) {
+    console.warn('[EMAIL-SENDER] Failed to check feature flag, defaulting to OFF:', err);
+    return false;
+  }
 }
 
 async function updateLogStatus(logId: string, status: string, errorMessage?: string): Promise<void> {

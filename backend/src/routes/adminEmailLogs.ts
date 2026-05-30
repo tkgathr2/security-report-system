@@ -10,8 +10,13 @@ import { requireAdmin } from '../middleware/auth';
 import { logAudit } from '../utils/auditLog';
 import { handleDbError } from '../utils/errorHandler';
 import { sendEmailWithLog } from '../services/emailSender';
+import { isValidEmail } from '../utils/validation';
 
 const router = Router();
+
+// 手動再送の簡易レート制限: 同一email_logへの再送は直近5分に1回まで
+const RESEND_COOLDOWN_MS = 5 * 60 * 1000;
+const VALID_RECIPIENT_TYPES = ['client', 'writer', 'admin'] as const;
 
 // GET /api/admin/email-logs
 router.get('/', requireAdmin, async (req: Request, res: Response) => {
@@ -118,6 +123,45 @@ router.post('/:id/resend', requireAdmin, async (req: Request, res: Response) => 
       return;
     }
 
+    // (a) 宛先メールアドレスの検証（不正なら送信せず400）
+    if (!isValidEmail(log.recipient_email)) {
+      res.status(400).json({ error: 'BAD_REQUEST', message: '宛先メールアドレスの形式が不正なため再送できません' });
+      return;
+    }
+
+    // (d) recipient_type ホワイトリスト検証
+    if (!VALID_RECIPIENT_TYPES.includes(log.recipient_type)) {
+      res.status(400).json({ error: 'BAD_REQUEST', message: '宛先種別が不正なため再送できません' });
+      return;
+    }
+
+    // (c) 簡易レート制限: 同一email_logへの「手動再送」は直近5分に1回まで。
+    // updated_at はシステム送信（成功/失敗/retry）でも更新されるため使わず、
+    // 手動再送専用の last_manual_resend_at で判定する。
+    // NULL = これまで手動再送なし → 即再送可。
+    if (log.last_manual_resend_at != null) {
+      const lastResend = log.last_manual_resend_at instanceof Date
+        ? log.last_manual_resend_at
+        : new Date(log.last_manual_resend_at);
+      if (!Number.isNaN(lastResend.getTime())) {
+        const elapsedMs = Date.now() - lastResend.getTime();
+        if (elapsedMs < RESEND_COOLDOWN_MS) {
+          const retryAfterSec = Math.ceil((RESEND_COOLDOWN_MS - elapsedMs) / 1000);
+          res.status(429).set('Retry-After', String(retryAfterSec)).json({
+            error: 'TOO_MANY_REQUESTS',
+            message: `この宛先への再送は連続して行えません。約${Math.ceil(retryAfterSec / 60)}分後に再度お試しください。`,
+          });
+          return;
+        }
+      }
+    }
+
+    // 手動再送の試行時点を記録（成功/失敗を問わず）。次回以降のレート制限判定に使用。
+    await pool.query(
+      `UPDATE email_logs SET last_manual_resend_at = NOW() WHERE id = $1`,
+      [id]
+    );
+
     const workDateStr = log.work_date instanceof Date
       ? log.work_date.toISOString().split('T')[0]
       : String(log.work_date).split('T')[0];
@@ -140,6 +184,7 @@ router.post('/:id/resend', requireAdmin, async (req: Request, res: Response) => 
       location: log.location || '',
       pdfBuffer,
       isResend: true,
+      enforceFeatureFlag: true, // (b) 再送でもフィーチャーフラグを評価し、OFFならskip
     });
 
     const adminUser = req.user as { email: string };

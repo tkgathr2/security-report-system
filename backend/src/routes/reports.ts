@@ -439,6 +439,23 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         console.warn('[ASYNC] Failed to check client_email_enabled setting, defaulting to OFF:', settingErr);
       }
 
+      // 新メール通知機能（company_emails経由）のフラグを確認。
+      // ONのときは新経路で取引先へ送るため、旧経路（clientEmails宛）の取引先送信は必ずskipして二重送信を防ぐ（相互排他）。
+      let newEmailNotificationEnabled = false;
+      try {
+        const newFlagSetting = await pool.query(
+          `SELECT value FROM system_settings WHERE key = 'email_notification_enabled'`
+        );
+        if (newFlagSetting.rows.length > 0 && newFlagSetting.rows[0].value === 'true') {
+          newEmailNotificationEnabled = true;
+        }
+      } catch (settingErr) {
+        console.warn('[ASYNC] Failed to check email_notification_enabled setting, defaulting to OFF:', settingErr);
+      }
+
+      // 新フラグONなら旧クライアント送信を無効化（writer/admin通知は旧経路のまま残す）
+      const skipLegacyClientEmail = newEmailNotificationEnabled || !clientEmailEnabled;
+
       // メール通知（独立したtry-catch）
       try {
         let clientEmails: string[] = Array.isArray(project.client_emails) ? project.client_emails : [];
@@ -448,8 +465,12 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         const castEmail = castUser.email;
         const displayWriterName = resolvedWriterName;
 
-        if (!clientEmailEnabled) {
-          console.log(`[ASYNC] Client email is DISABLED (system_settings). Skipping client email for report ${reportId}`);
+        if (skipLegacyClientEmail) {
+          if (newEmailNotificationEnabled) {
+            console.log(`[ASYNC] New email notification (company_emails) is ENABLED. Skipping legacy client email to avoid duplicate send for report ${reportId}`);
+          } else {
+            console.log(`[ASYNC] Client email is DISABLED (system_settings). Skipping client email for report ${reportId}`);
+          }
         }
 
         const notificationResult = await sendReportApprovalNotifications({
@@ -467,7 +488,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           location: project.location || '',
           pdfBytes: pdfBuffer,
           skipSlack: true,
-          skipClientEmail: !clientEmailEnabled
+          skipClientEmail: skipLegacyClientEmail
         });
 
         console.log(`[ASYNC] Email notifications sent for report ${reportId}:`, notificationResult);

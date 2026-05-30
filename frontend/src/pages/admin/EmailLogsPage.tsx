@@ -22,29 +22,41 @@ interface EmailLog {
   work_name: string | null
 }
 
+const PAGE_SIZE = 50
+
 export function EmailLogsPage() {
   const [logs, setLogs] = useState<EmailLog[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
   const [resendingId, setResendingId] = useState<string | null>(null)
+  const [offset, setOffset] = useState(0)
+  const [fetchError, setFetchError] = useState('')
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
+    setFetchError('')
     try {
-      const params = new URLSearchParams({ limit: '50' })
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
       if (statusFilter) params.set('status', statusFilter)
       const res = await fetch(`/api/admin/email-logs?${params}`, { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
         setLogs(data.logs || [])
         setTotal(data.total || 0)
+      } else {
+        setFetchError(`送信ログの取得に失敗しました（${res.status}）`)
       }
-    } catch (err) {
-      console.error('Failed to fetch email logs:', err)
+    } catch {
+      setFetchError('送信ログの取得に失敗しました。通信状態を確認してください。')
     } finally {
       setLoading(false)
     }
+  }, [statusFilter, offset])
+
+  // フィルター変更時は先頭ページに戻す
+  useEffect(() => {
+    setOffset(0)
   }, [statusFilter])
 
   useEffect(() => {
@@ -65,7 +77,7 @@ export function EmailLogsPage() {
         alert('再送信が完了しました')
         await fetchLogs()
       } else {
-        alert(`再送信に失敗しました: ${data.error || '不明なエラー'}`)
+        alert(`再送信に失敗しました: ${data.error || data.message || '不明なエラー'}`)
       }
     } catch (err) {
       alert('通信エラーが発生しました')
@@ -134,11 +146,26 @@ export function EmailLogsPage() {
           <option value="pending">処理中</option>
           <option value="skipped">スキップ</option>
         </select>
+        <button
+          type="button"
+          onClick={() => fetchLogs()}
+          disabled={loading}
+          style={{
+            ...styles.secondaryButton,
+            fontSize: '13px',
+            padding: '6px 12px',
+            opacity: loading ? 0.5 : 1,
+          }}
+        >
+          {loading ? '更新中...' : '更新'}
+        </button>
         <span style={{ fontSize: '13px', color: COLORS.darkGray }}>{total}件</span>
       </div>
 
       {loading ? (
         <p>読み込み中...</p>
+      ) : fetchError ? (
+        <p style={{ ...styles.emptyMessage, color: COLORS.danger }}>{fetchError}</p>
       ) : logs.length === 0 ? (
         <p style={styles.emptyMessage}>送信ログはありません</p>
       ) : (
@@ -175,6 +202,7 @@ export function EmailLogsPage() {
                   <td style={styles.td}>
                     {log.status === 'failed' && (
                       <button
+                        type="button"
                         onClick={() => handleResend(log.id)}
                         disabled={resendingId === log.id}
                         style={{
@@ -189,6 +217,8 @@ export function EmailLogsPage() {
                     )}
                     {log.error_message && (
                       <span
+                        role="img"
+                        aria-label="エラーあり"
                         title={log.error_message}
                         style={{ cursor: 'help', marginLeft: '4px', fontSize: '12px' }}
                       >
@@ -200,6 +230,53 @@ export function EmailLogsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ページャ（H-6）: total と現在の表示範囲を比較して前後ページへ移動 */}
+      {!loading && !fetchError && total > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: '12px',
+            marginTop: '16px',
+            fontSize: '13px',
+            color: COLORS.darkGray,
+          }}
+        >
+          <span>
+            {total === 0 ? 0 : offset + 1}–{Math.min(offset + logs.length, total)} / {total}件
+          </span>
+          <button
+            type="button"
+            onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+            disabled={offset === 0}
+            style={{
+              ...styles.secondaryButton,
+              fontSize: '13px',
+              padding: '4px 12px',
+              opacity: offset === 0 ? 0.4 : 1,
+              cursor: offset === 0 ? 'default' : 'pointer',
+            }}
+          >
+            前へ
+          </button>
+          <button
+            type="button"
+            onClick={() => setOffset((o) => o + PAGE_SIZE)}
+            disabled={offset + logs.length >= total}
+            style={{
+              ...styles.secondaryButton,
+              fontSize: '13px',
+              padding: '4px 12px',
+              opacity: offset + logs.length >= total ? 0.4 : 1,
+              cursor: offset + logs.length >= total ? 'default' : 'pointer',
+            }}
+          >
+            次へ
+          </button>
         </div>
       )}
     </div>
