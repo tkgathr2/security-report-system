@@ -17,6 +17,8 @@ interface ProjectsPageProps {
   handleSort: (column: keyof Project) => void
   getSortIndicator: (column: keyof Project) => string
   setCastsModalProject: (project: Project) => void
+  onRequestCancel: (project: Project) => void
+  onRestore: (project: Project) => void
   renderDateHeader: (dateStr: string, count: number) => React.ReactNode
   formatDate: (dateStr: string) => string
 }
@@ -35,9 +37,17 @@ export function ProjectsPage({
   handleSort,
   getSortIndicator,
   setCastsModalProject,
+  onRequestCancel,
+  onRestore,
   renderDateHeader,
   formatDate,
 }: ProjectsPageProps) {
+  const cancelledBadge = (
+    <span style={{
+      display: 'inline-block', padding: '2px 8px', borderRadius: '4px',
+      backgroundColor: '#fde8e8', color: '#c81e1e', fontSize: '12px', fontWeight: 'bold',
+    }}>中止</span>
+  )
   return (
                       <div>
                         <div style={styles.pageHeader}>
@@ -98,11 +108,14 @@ export function ProjectsPage({
                               <div key={date}>
                                 {renderDateHeader(date, projectsByDate[date].length)}
                                 {projectsByDate[date].map(project => (
-                              <div key={project.id} style={styles.mobileCard}>
+                              <div key={project.id} style={{...styles.mobileCard, ...(project.status === 'cancelled' ? { opacity: 0.6 } : {})}}>
                                 <div style={styles.mobileCardBody}>
                                   <div style={styles.mobileCardRow}>
                                     <span style={styles.mobileCardLabel}>会社名</span>
-                                    <span style={styles.mobileCardValue}>{project.client_name || project.client_name_raw}</span>
+                                    <span style={styles.mobileCardValue}>
+                                      {project.status === 'cancelled' && <>{cancelledBadge} </>}
+                                      {project.client_name || project.client_name_raw}
+                                    </span>
                                   </div>
                                   <div style={styles.mobileCardRow}>
                                     <span style={styles.mobileCardLabel}>作業名</span>
@@ -147,6 +160,21 @@ export function ProjectsPage({
                                   >
                                     報告画面
                                   </button>
+                                  {project.status === 'cancelled' ? (
+                                    <button
+                                      style={{...styles.mobileActionButton, color: COLORS.primary, borderColor: COLORS.primary}}
+                                      onClick={() => onRestore(project)}
+                                    >
+                                      復活
+                                    </button>
+                                  ) : (
+                                    <button
+                                      style={{...styles.mobileActionButton, color: '#c81e1e', borderColor: '#c81e1e'}}
+                                      onClick={() => onRequestCancel(project)}
+                                    >
+                                      現場中止
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                                 ))}
@@ -167,12 +195,13 @@ export function ProjectsPage({
                                           <th style={styles.sortableTh} onClick={() => handleSort('work_name')}>作業名{getSortIndicator('work_name')}</th>
                                           <th style={styles.sortableTh} onClick={() => handleSort('location')}>場所{getSortIndicator('location')}</th>
                                           <th style={styles.th}>キャスト</th>
+                                          <th style={styles.th}>状態</th>
                                           <th style={styles.th}>操作</th>
                                         </tr>
                                       </thead>
                                       <tbody>
                                         {projectsByDate[date].map(project => (
-                                          <tr key={project.id} style={styles.tr}>
+                                          <tr key={project.id} style={{...styles.tr, ...(project.status === 'cancelled' ? { opacity: 0.6 } : {})}}>
                                             <td style={styles.td}>{project.client_name || project.client_name_raw}</td>
                                             <td style={styles.td}>{project.work_name}</td>
                                             <td style={styles.td}>{project.location}</td>
@@ -189,6 +218,13 @@ export function ProjectsPage({
                                                   </span>
                                                 )
                                                 : '-'}
+                                            </td>
+                                            <td style={styles.td}>
+                                              {project.status === 'cancelled' ? (
+                                                <span title={project.cancel_reason || ''}>
+                                                  {cancelledBadge}
+                                                </span>
+                                              ) : '-'}
                                             </td>
                                             <td style={styles.td}>
                                               <div style={{ display: 'flex', gap: '8px' }}>
@@ -208,6 +244,21 @@ export function ProjectsPage({
                                                 >
                                                   報告画面
                                                 </button>
+                                                {project.status === 'cancelled' ? (
+                                                  <button
+                                                    style={{...styles.smallButton, color: COLORS.primary, borderColor: COLORS.primary}}
+                                                    onClick={() => onRestore(project)}
+                                                  >
+                                                    復活
+                                                  </button>
+                                                ) : (
+                                                  <button
+                                                    style={{...styles.smallButton, color: '#c81e1e', borderColor: '#c81e1e'}}
+                                                    onClick={() => onRequestCancel(project)}
+                                                  >
+                                                    現場中止
+                                                  </button>
+                                                )}
                                               </div>
                                             </td>
                                           </tr>

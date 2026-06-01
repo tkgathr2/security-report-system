@@ -167,6 +167,12 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
 
     const project = projectResult.rows[0];
 
+    // ③ 案件取消: 中止された案件には報告書を提出できない（承認時メールの誤発火も併せて防止）
+    if (project.status === 'cancelled') {
+      sendBadRequest(res, 'この案件は中止されています。報告書は提出できません。');
+      return;
+    }
+
     const now = new Date();
     const expiresAt = new Date(project.url_expires_at);
     if (expiresAt < now) {

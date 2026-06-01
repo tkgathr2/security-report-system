@@ -311,6 +311,245 @@ export async function sendCompanyNotificationEmails(params: {
   return { sent, failed, skipped, warnings };
 }
 
+// --- ③ 案件取消（現場の中止）連絡メール ---
+
+interface CancellationEmailData {
+  companyName: string;
+  contactName: string;
+  contactTitle: string;
+  workDate: string;
+  projectName: string;
+  location: string;
+}
+
+/**
+ * 中止連絡メールの本文を生成する。
+ * 報告書PDFは添付せず、個人情報を含めない最小限の内容に留める（神谷の方針）。
+ */
+export function buildCancellationEmailContent(
+  data: CancellationEmailData
+): { subject: string; text: string; html: string } {
+  const contactParts: string[] = [];
+  if (data.contactName) contactParts.push(data.contactName);
+  if (data.contactTitle) contactParts.push(data.contactTitle);
+  const contactLine = contactParts.join(' ');
+  const contactLineHtml = contactLine ? escapeHtml(contactLine) + ' ' : '';
+
+  const detail: string[] = [`実施予定日: ${data.workDate}`];
+  if (data.location) detail.push(`実施場所: ${data.location}`);
+  if (data.projectName) detail.push(`作業名称: ${data.projectName}`);
+
+  return {
+    subject: `【デジタル警備報告書システム ほうこちゃん】警備業務 中止のお知らせ ${data.projectName} (${data.workDate})`,
+    text: `${data.companyName}\n${contactLine ? contactLine + ' ' : ''}様\n\n` +
+      `いつもお世話になっております。\n` +
+      `下記の警備業務が中止となりましたのでお知らせいたします。\n\n` +
+      detail.join('\n') + `\n\n` +
+      `ご不明な点がございましたら弊社までお問い合わせください。`,
+    html: `<p>${escapeHtml(data.companyName)}<br>${contactLineHtml}様</p>` +
+      `<p>いつもお世話になっております。<br>下記の警備業務が中止となりましたのでお知らせいたします。</p>` +
+      `<ul>${detail.map(d => `<li>${escapeHtml(d)}</li>`).join('')}</ul>` +
+      `<p>ご不明な点がございましたら弊社までお問い合わせください。</p>`,
+  };
+}
+
+/**
+ * 案件中止時に、会社の通知先（company_emails）へ中止連絡メールを送る。
+ * - report が存在しない案件にも送れるよう、email_logs には project_id で記録（report_id=null）。
+ * - 冪等性キー `cancel:{projectId}:{email}` で二重送信を防止。
+ * - フィーチャーフラグ（email_notification_enabled）がOFFならスキップ。
+ * - 通知先未設定はエラーにせずスキップ＋警告。
+ */
+export async function sendProjectCancellationEmails(params: {
+  projectId: string;
+  companyId: string | null;
+  companyName: string;
+  contactName: string;
+  contactTitle: string;
+  workDate: string;
+  projectName: string;
+  location: string;
+}): Promise<{ sent: number; failed: number; skipped: number; warnings: string[] }> {
+  const warnings: string[] = [];
+  let sent = 0;
+  let failed = 0;
+
+  if (!(await isEmailNotificationEnabled())) {
+    console.log('[EMAIL-SENDER] email_notification_enabled is OFF. Skipping cancellation emails.');
+    return { sent: 0, failed: 0, skipped: 1, warnings: ['メール通知機能が無効です（フィーチャーフラグ: email_notification_enabled）'] };
+  }
+
+  if (!params.companyId) {
+    warnings.push('案件に会社が紐づいていないため中止連絡メールを送信できません');
+    return { sent: 0, failed: 0, skipped: 1, warnings };
+  }
+
+  let rows: { email: string }[];
+  try {
+    const r = await pool.query(
+      `SELECT email FROM company_emails
+       WHERE company_id = $1 AND is_active = true AND deleted_at IS NULL`,
+      [params.companyId]
+    );
+    rows = r.rows;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[EMAIL-SENDER] Error resolving company emails (cancel):', msg);
+    warnings.push(`会社メール解決エラー: ${msg}`);
+    return { sent: 0, failed: 1, skipped: 0, warnings };
+  }
+
+  if (rows.length === 0) {
+    console.log(`[EMAIL-SENDER] No notification emails configured for company ${params.companyId} (cancel)`);
+    warnings.push(`会社「${params.companyName}」にメール通知先が未設定です`);
+    return { sent: 0, failed: 0, skipped: 1, warnings };
+  }
+
+  const { subject, text, html } = buildCancellationEmailContent({
+    companyName: params.companyName,
+    contactName: params.contactName,
+    contactTitle: params.contactTitle,
+    workDate: params.workDate,
+    projectName: params.projectName,
+    location: params.location,
+  });
+
+  for (const row of rows) {
+    const result = await sendCancellationEmailWithLog({
+      projectId: params.projectId,
+      companyId: params.companyId,
+      recipientEmail: row.email,
+      subject,
+      text,
+      html,
+    });
+    if (result.success) {
+      sent++;
+    } else {
+      failed++;
+      warnings.push(`中止連絡メール送信失敗 (${maskEmail(row.email)}): ${result.error}`);
+    }
+  }
+
+  return { sent, failed, skipped: 0, warnings };
+}
+
+/**
+ * 中止連絡メールを1宛先に送信し、email_logs に記録する（冪等・リトライ付き・PDF添付なし）。
+ * ①の sendEmailWithLog（report中心）には手を入れず、案件中止専用に独立実装してリスクを隔離する。
+ */
+async function sendCancellationEmailWithLog(params: {
+  projectId: string;
+  companyId: string | null;
+  recipientEmail: string;
+  subject: string;
+  text: string;
+  html: string;
+}): Promise<SendResult> {
+  const { projectId, companyId, recipientEmail, subject, text, html } = params;
+
+  if (!isValidEmail(recipientEmail)) {
+    console.warn(`[EMAIL-SENDER] Invalid cancel recipient, refusing to send: ${maskEmail(recipientEmail)}`);
+    return { success: false, error: '宛先メールアドレスの形式が不正です' };
+  }
+
+  const idempotencyKey = `cancel:${projectId}:${recipientEmail}`;
+
+  let logId: string;
+  try {
+    const logResult = await pool.query(
+      `INSERT INTO email_logs (report_id, project_id, company_id, recipient_email, recipient_type, status, idempotency_key)
+       VALUES (NULL, $1, $2, $3, 'cancel', 'pending', $4)
+       ON CONFLICT (idempotency_key) DO UPDATE SET
+         status = 'pending',
+         retry_count = email_logs.retry_count + 1,
+         updated_at = NOW()
+       WHERE email_logs.status <> 'sent'
+       RETURNING id`,
+      [projectId, companyId, recipientEmail, idempotencyKey]
+    );
+
+    if (logResult.rows.length === 0) {
+      const existing = await pool.query(
+        `SELECT id FROM email_logs WHERE idempotency_key = $1`,
+        [idempotencyKey]
+      );
+      console.log('[EMAIL-SENDER] Cancel idempotency hit: already sent, skipping.');
+      return { success: true, logId: existing.rows[0]?.id };
+    }
+
+    logId = logResult.rows[0].id;
+  } catch (err) {
+    console.error('[EMAIL-SENDER] Failed to create cancel log record:', err);
+    return { success: false, error: 'ログレコード作成失敗' };
+  }
+
+  if (!resend) {
+    console.log('[EMAIL-SENDER] RESEND_API_KEY not configured, marking cancel as skipped');
+    await updateLogStatus(logId, 'skipped', 'Resend API not configured');
+    return { success: false, error: 'Resend API not configured', logId };
+  }
+
+  const maskedRecipient = maskEmail(recipientEmail);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) {
+        const delay = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+        console.log(`[EMAIL-SENDER] Cancel retry ${attempt}/${MAX_RETRIES} after ${delay}ms for ${maskedRecipient}`);
+        await sleep(delay);
+      }
+
+      console.log(`[EMAIL-SENDER] Sending cancellation to ${maskedRecipient} (attempt ${attempt + 1}/${MAX_RETRIES})`);
+
+      const { data, error } = await resend.emails.send({
+        from: EMAIL_FROM,
+        to: [recipientEmail],
+        subject,
+        text,
+        html,
+      });
+
+      if (error) {
+        console.error(`[EMAIL-SENDER] Resend API error (cancel attempt ${attempt + 1}) for ${maskedRecipient}:`, error);
+        await pool.query(
+          `UPDATE email_logs SET retry_count = $1, error_message = $2, updated_at = NOW() WHERE id = $3`,
+          [attempt + 1, GENERIC_SEND_ERROR, logId]
+        );
+        if (!isRetryableError(error)) {
+          await updateLogStatus(logId, 'failed', GENERIC_SEND_ERROR);
+          return { success: false, error: GENERIC_SEND_ERROR, logId };
+        }
+        continue;
+      }
+
+      const messageId = (data as { id?: string })?.id || null;
+      await pool.query(
+        `UPDATE email_logs SET status = 'sent', resend_message_id = $1, sent_at = NOW(), retry_count = $2, error_message = NULL, updated_at = NOW()
+         WHERE id = $3`,
+        [messageId, attempt + 1, logId]
+      );
+      console.log(`[EMAIL-SENDER] Cancellation sent to ${maskedRecipient}, messageId=${messageId}`);
+      return { success: true, logId };
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[EMAIL-SENDER] Exception (cancel attempt ${attempt + 1}) for ${maskedRecipient}:`, msg);
+      await pool.query(
+        `UPDATE email_logs SET retry_count = $1, error_message = $2, updated_at = NOW() WHERE id = $3`,
+        [attempt + 1, GENERIC_SEND_ERROR, logId]
+      ).catch(() => {});
+      if (!isRetryableError(err)) {
+        await updateLogStatus(logId, 'failed', GENERIC_SEND_ERROR);
+        return { success: false, error: GENERIC_SEND_ERROR, logId };
+      }
+    }
+  }
+
+  await updateLogStatus(logId, 'failed', GENERIC_SEND_ERROR);
+  console.error(`[EMAIL-SENDER] All ${MAX_RETRIES} cancel attempts failed for ${maskedRecipient}`);
+  return { success: false, error: GENERIC_SEND_ERROR, logId };
+}
+
 // --- ヘルパー関数 ---
 
 export function buildEmailContent(

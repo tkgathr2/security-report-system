@@ -20,6 +20,7 @@ import staffRouter from './routes/staff';
 import castAuthRouter from './routes/castAuth';
 import adminCompanyEmailsRouter from './routes/adminCompanyEmails';
 import adminEmailLogsRouter from './routes/adminEmailLogs';
+import adminProjectCancelRouter from './routes/adminProjectCancel';
 import pool from './db/pool';
 import { requestTimeout } from './middleware/requestTimeout';
 import { requireJsonContentType } from './middleware/contentType';
@@ -104,6 +105,8 @@ app.get('/version', (_req: Request, res: Response) => {
 
 app.use('/api', requireJsonContentType);
 app.use('/api/admin/auth', adminAuthRouter);
+// 案件取消（現場の中止）。より具体的なパスを adminRouter より先に登録する
+app.use('/api/admin/projects', adminProjectCancelRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/admin/reports', adminReportsRouter);
 app.use('/api/admin/recipients', adminRecipientsRouter);

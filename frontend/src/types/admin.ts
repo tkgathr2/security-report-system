@@ -42,6 +42,10 @@ export interface Project {
   created_at: string
   client_name: string | null
   casts?: ProjectCast[]
+  // ③ 案件取消（現場の中止）メタ
+  cancelled_at?: string | null
+  cancel_reason?: string | null
+  cancel_contacted_at?: string | null
 }
 
 export interface Report {
