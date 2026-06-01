@@ -60,6 +60,7 @@ async function getCastMembers(dateStr: string): Promise<CastWithProjects[]> {
      JOIN cast_users cu ON cu.staff_id = sm.id AND cu.deleted_at IS NULL
        AND cu.email_verified = true AND cu.pin_hash IS NOT NULL
      WHERE p.work_date = $1 AND p.deleted_at IS NULL
+       AND p.status IS DISTINCT FROM 'cancelled'
      ORDER BY sm.display_name_kanji, p.work_name`,
     [dateStr]
   );
