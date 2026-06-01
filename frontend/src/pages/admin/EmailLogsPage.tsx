@@ -116,6 +116,7 @@ export function EmailLogsPage() {
       case 'client': return '取引先'
       case 'writer': return '記入者'
       case 'admin': return '管理者'
+      case 'cancel': return '中止連絡'
       default: return type
     }
   }
