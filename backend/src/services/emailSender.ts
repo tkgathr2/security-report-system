@@ -567,30 +567,57 @@ export function buildEmailContent(
     reportId: string;
   }
 ): { subject: string; text: string; html: string } {
-  const detailItems: string[] = [
-    `実施日: ${data.workDate}`,
-  ];
-  if (data.location) detailItems.push(`実施場所: ${data.location}`);
-  if (data.clientAddress) detailItems.push(`住所: ${data.clientAddress}`);
-  detailItems.push(`作業名称: ${data.projectName}`);
-
   if (recipientType === 'client') {
+    // 宛名（担当者名＋肩書）。未設定時は「ご担当者様」にフォールバックする。
     const contactParts: string[] = [];
     if (data.contactName) contactParts.push(data.contactName);
     if (data.contactTitle) contactParts.push(data.contactTitle);
     const contactLine = contactParts.length > 0 ? contactParts.join(' ') : '';
-    const contactLineHtml = contactLine ? escapeHtml(contactLine) + ' ' : '';
+    const greetingName = contactLine ? `${contactLine} 様` : 'ご担当者様';
+
+    // 協力会社向けの明細。実施場所と住所は1項目に統合（住所があれば「実施場所（住所）」）。
+    const clientDetail: string[] = [`実施日：${data.workDate}`];
+    const place = data.location
+      ? (data.clientAddress ? `${data.location}（${data.clientAddress}）` : data.location)
+      : (data.clientAddress || '');
+    if (place) clientDetail.push(`実施場所：${place}`);
+    if (data.projectName) clientDetail.push(`作業名称：${data.projectName}`);
+
+    // 署名（送信元）。将来 system_settings 化する想定だが、現状は確定値を埋め込む。
+    const signatureText =
+      `──────────────\n` +
+      `株式会社日本交通誘導\n` +
+      `〒540-0031 大阪府大阪市中央区北浜東4番33号 北浜NEXU BUILD 17階\n` +
+      `TEL：06-4400-8747 ／ Email：info@kotsuyudo.com\n` +
+      `──────────────`;
+    const signatureHtml =
+      `<hr>` +
+      `<p>株式会社日本交通誘導<br>` +
+      `〒540-0031 大阪府大阪市中央区北浜東4番33号 北浜NEXU BUILD 17階<br>` +
+      `TEL：06-4400-8747 ／ Email：info@kotsuyudo.com</p><hr>`;
 
     return {
-      subject: `【デジタル警備報告書システム ほうこちゃん】警備報告書 ${data.projectName} (${data.workDate})`,
-      text: `${data.companyName}\n${contactLine ? contactLine + ' ' : ''}様\n\n` +
-        `デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。\n\n` +
-        detailItems.join('\n') + `\n\n` +
-        `添付のPDFファイルをご確認ください。`,
-      html: `<p>${escapeHtml(data.companyName)}<br>${contactLineHtml}様</p>` +
-        `<p>デジタル警備報告書システム【ほうこちゃん】より警備報告書をお送りいたします。</p>` +
-        `<ul>${detailItems.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` +
-        `<p>添付のPDFファイルをご確認ください。</p>`,
+      subject: `【日本交通誘導】警備業務報告書のご送付（${data.projectName}／${data.workDate}実施分）`,
+      text: `${data.companyName}\n${greetingName}\n\n` +
+        `平素より格別のお引き立てを賜り、厚く御礼申し上げます。\n` +
+        `株式会社日本交通誘導でございます。\n\n` +
+        `下記の警備業務につきまして、報告書を作成いたしましたのでご送付申し上げます。\n` +
+        `お手すきの際にご確認をお願いいたします。\n\n` +
+        clientDetail.join('\n') + `\n\n` +
+        `報告書の詳細は、添付のPDFファイルをご確認ください。\n` +
+        `ご不明な点・お気づきの点がございましたら、下記までお気軽にお問い合わせください。\n\n` +
+        `今後とも変わらぬお引き立てを賜りますよう、お願い申し上げます。\n\n` +
+        signatureText + `\n` +
+        `※本メールはデジタル警備報告書システム「ほうこちゃん」より自動送信されています。\n` +
+        `　ご返信は上記連絡先までお願いいたします。`,
+      html: `<p>${escapeHtml(data.companyName)}<br>${escapeHtml(greetingName)}</p>` +
+        `<p>平素より格別のお引き立てを賜り、厚く御礼申し上げます。<br>株式会社日本交通誘導でございます。</p>` +
+        `<p>下記の警備業務につきまして、報告書を作成いたしましたのでご送付申し上げます。お手すきの際にご確認をお願いいたします。</p>` +
+        `<ul>${clientDetail.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` +
+        `<p>報告書の詳細は、添付のPDFファイルをご確認ください。<br>ご不明な点・お気づきの点がございましたら、下記までお気軽にお問い合わせください。</p>` +
+        `<p>今後とも変わらぬお引き立てを賜りますよう、お願い申し上げます。</p>` +
+        signatureHtml +
+        `<p style="color:#888;font-size:12px">※本メールはデジタル警備報告書システム「ほうこちゃん」より自動送信されています。<br>　ご返信は上記連絡先までお願いいたします。</p>`,
     };
   }
 
