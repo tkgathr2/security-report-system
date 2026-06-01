@@ -28,6 +28,10 @@ exports.up = (pgm) => {
 exports.down = (pgm) => {
   pgm.dropIndex('email_logs', 'project_id', { name: 'idx_email_logs_project_id', ifExists: true });
   pgm.dropColumn('email_logs', 'project_id');
-  // 既存データに report_id が NULL の行が残っている場合 notNull 復帰は失敗し得るため ifExists 的に best-effort
+  // 案件中止メールのログ（report_id IS NULL）は project_id 削除で参照を失うため、
+  // report_id の NOT NULL 復帰前に削除しておく。
+  // これをしないと、中止メール送信後に down を流すと SET NOT NULL が
+  // 「column contains null values」で失敗し、切り戻しが途中停止する。
+  pgm.sql('DELETE FROM email_logs WHERE report_id IS NULL');
   pgm.alterColumn('email_logs', 'report_id', { notNull: true });
 };

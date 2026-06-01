@@ -129,6 +129,12 @@ export function ProjectsPage({
                                     <span style={styles.mobileCardLabel}>URL有効期限</span>
                                     <span style={styles.mobileCardValue}>{formatDate(project.url_expires_at)}</span>
                                   </div>
+                                  {project.status === 'cancelled' && project.cancel_reason && (
+                                    <div style={styles.mobileCardRow}>
+                                      <span style={styles.mobileCardLabel}>中止理由</span>
+                                      <span style={styles.mobileCardValue}>{project.cancel_reason}</span>
+                                    </div>
+                                  )}
                                   {project.casts && project.casts.length > 0 && (
                                     <div style={styles.mobileCardRow}>
                                       <span style={styles.mobileCardLabel}>キャスト</span>

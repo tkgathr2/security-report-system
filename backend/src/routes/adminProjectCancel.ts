@@ -40,7 +40,14 @@ router.post('/:projectId/cancel', requireAdmin, async (req: Request, res: Respon
   const contactedRaw = (req.body?.cancel_contacted_at ?? null) as unknown;
   let cancelContactedAt: string | null = null;
   if (typeof contactedRaw === 'string' && contactedRaw.trim()) {
-    const d = new Date(contactedRaw);
+    let s = contactedRaw.trim();
+    // フロントの <input type="datetime-local"> はタイムゾーンを持たない
+    // （例: "2026-06-01T14:30"）。サーバがUTC稼働だとローカル=UTC解釈となり
+    // JSTで入力した時刻が9時間ずれて保存されるため、TZ無しの形式は日本時間として扱う。
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s)) {
+      s = `${s}+09:00`;
+    }
+    const d = new Date(s);
     if (Number.isNaN(d.getTime())) {
       res.status(400).json({ error: 'INVALID_DATE', message: '中止連絡を受けた日時の形式が不正です' });
       return;
