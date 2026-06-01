@@ -139,6 +139,11 @@ export default function FieldReport() {
 
       if (response.ok) {
         const peek = await response.clone().json()
+        if (peek.cancelled) {
+          setErrorMessage('この案件は中止されました。報告書の提出はできません。')
+          setPageState('error')
+          return
+        }
         if (peek.already_submitted) {
           if (peek.details) {
             setSubmittedInfo({

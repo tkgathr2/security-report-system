@@ -37,14 +37,16 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     params.push(limit, offset);
 
     const result = await pool.query(
-      `SELECT el.id, el.report_id, el.company_id, el.recipient_email, el.recipient_type,
+      `SELECT el.id, el.report_id, el.project_id, el.company_id, el.recipient_email, el.recipient_type,
               el.status, el.error_message, el.retry_count, el.sent_at, el.created_at,
               c.name as company_name,
-              p.work_date, p.work_name
+              COALESCE(p.work_date, p2.work_date) as work_date,
+              COALESCE(p.work_name, p2.work_name) as work_name
        FROM email_logs el
        LEFT JOIN clients c ON el.company_id = c.id
        LEFT JOIN reports r ON el.report_id = r.id
        LEFT JOIN projects p ON r.project_id = p.id
+       LEFT JOIN projects p2 ON el.project_id = p2.id
        ${whereClause}
        ORDER BY el.created_at DESC
        LIMIT $${paramIdx++} OFFSET $${paramIdx}`,
@@ -102,8 +104,8 @@ router.post('/:id/resend', requireAdmin, async (req: Request, res: Response) => 
               sm.display_name_kanji as writer_name,
               COALESCE(NULLIF(r.supervisor_name, ''), p.supervisor_name, '') as supervisor_name
        FROM email_logs el
-       JOIN reports r ON el.report_id = r.id
-       JOIN projects p ON r.project_id = p.id
+       LEFT JOIN reports r ON el.report_id = r.id
+       LEFT JOIN projects p ON r.project_id = p.id
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN staff_master sm ON r.writer_staff_id = sm.id
        WHERE el.id = $1`,
@@ -116,6 +118,17 @@ router.post('/:id/resend', requireAdmin, async (req: Request, res: Response) => 
     }
 
     const log = logResult.rows[0];
+
+    // ③ 案件取消: 中止連絡メール(report_id=NULL / recipient_type='cancel')は、
+    // 報告書PDFを伴わない別経路のため、この報告書再送画面からは再送しない。
+    // 誤った404ではなく、明確な非対応メッセージを返す。
+    if (log.recipient_type === 'cancel' || !log.report_id) {
+      res.status(400).json({
+        error: 'RESEND_NOT_SUPPORTED',
+        message: '中止連絡メールはこの画面から再送できません。案件を再度操作してください。'
+      });
+      return;
+    }
     const pdfBuffer: Buffer = log.pdf_bytes;
 
     if (!pdfBuffer || pdfBuffer.length === 0 || log.pdf_generation_status !== 'success') {

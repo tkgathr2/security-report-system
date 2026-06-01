@@ -54,6 +54,18 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
 
     const project: Project = result.rows[0];
 
+    // ③ 案件取消: 中止された案件はフォームを開かせず、読込時点で中止を案内する
+    // （提出時ガード(reports.ts)だけだと、キャストが入力し終えてから弾かれ、
+    //   かつ中止現場に出向いてしまうリスクがあるため、開いた瞬間に止める）
+    if (project.status === 'cancelled') {
+      res.status(200).json({
+        error: 'CANCELLED',
+        cancelled: true,
+        message: 'この案件は中止されました'
+      });
+      return;
+    }
+
     // Check if report already exists for this project
     const existingReportResult = await pool.query(
             `SELECT r.id, sm.display_name_kanji as writer_name, r.approved_at
