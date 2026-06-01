@@ -340,29 +340,27 @@ export async function sendReportApprovalNotifications(params: {
   if (ADMIN_EMAILS.length > 0) {
     const adminResult = await sendEmail({
       to: ADMIN_EMAILS,
-      subject: `【デジタル警備報告書システム ほうこちゃん・管理者通知】報告書提出 ${params.projectName} (${params.workDate})`,
-      text: `管理者様\n\n` +
-        `新しい報告書が提出されました。\n\n` +
-        `会社名: ${params.companyName}\n` +
-        `作業名称: ${params.projectName}\n` +
-        `実施日: ${params.workDate}\n` +
-        `実施場所: ${params.location}\n` +
-        `監督者: ${params.supervisorName}\n` +
-        `記入者: ${params.writerName}\n` +
-        `報告書ID: ${params.reportId}\n\n` +
-        `添付のPDFファイルをご確認ください。`,
-      html: `<p>管理者様</p>` +
-        `<p><strong>新しい報告書が提出されました。</strong></p>` +
+      subject: `【ほうこちゃん・管理者通知】報告書承認 ${params.companyName}／${params.projectName}（${params.workDate}）`,
+      text: `新しい報告書が承認されました。\n\n` +
+        `■ 会社名：${params.companyName}\n` +
+        `■ 作業名称：${params.projectName}\n` +
+        `■ 実施日：${params.workDate}\n` +
+        `■ 実施場所：${params.location}\n` +
+        `■ 監督者：${params.supervisorName}\n` +
+        `■ 記入者：${params.writerName}\n` +
+        `■ 報告書ID：${params.reportId}\n\n` +
+        `詳細は添付のPDFファイルをご確認ください。`,
+      html: `<p><strong>新しい報告書が承認されました。</strong></p>` +
         `<ul>` +
-        `<li>会社名: ${escapeHtml(params.companyName)}</li>` +
-        `<li>作業名称: ${escapeHtml(params.projectName)}</li>` +
-        `<li>実施日: ${escapeHtml(params.workDate)}</li>` +
-        `<li>実施場所: ${escapeHtml(params.location)}</li>` +
-        `<li>監督者: ${escapeHtml(params.supervisorName)}</li>` +
-        `<li>記入者: ${escapeHtml(params.writerName)}</li>` +
-        `<li>報告書ID: ${escapeHtml(params.reportId)}</li>` +
+        `<li>会社名：${escapeHtml(params.companyName)}</li>` +
+        `<li>作業名称：${escapeHtml(params.projectName)}</li>` +
+        `<li>実施日：${escapeHtml(params.workDate)}</li>` +
+        `<li>実施場所：${escapeHtml(params.location)}</li>` +
+        `<li>監督者：${escapeHtml(params.supervisorName)}</li>` +
+        `<li>記入者：${escapeHtml(params.writerName)}</li>` +
+        `<li>報告書ID：${escapeHtml(params.reportId)}</li>` +
         `</ul>` +
-        `<p>添付のPDFファイルをご確認ください。</p>`,
+        `<p>詳細は添付のPDFファイルをご確認ください。</p>`,
       attachments
     });
     adminEmailSent = adminResult.success;
