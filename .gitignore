@@ -1,0 +1,7 @@
+# OMC / エージェント内部状態（リポジトリに含めない）
+.omc/
+
+# 依存・ビルド成果物
+node_modules/
+dist/
+backend/frontend-dist/
