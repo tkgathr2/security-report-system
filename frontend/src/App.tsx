@@ -301,11 +301,14 @@ function AdminApp() {
       const clientsData = clientsRes.ok ? await clientsRes.json() : { clients: [] }
       const todayProjectsData = todayProjectsRes.ok ? await todayProjectsRes.json() : { projects: [] }
       const todayReportsData = todayReportsRes.ok ? await todayReportsRes.json() : { reports: [] }
+      // ③ 案件取消: 中止案件は「今日の現場」リスト・未報告計算から一貫して除外する
+      // （カウントとリストで基準を揃え、未報告が負になる/中止案件がリストに残る不整合を防ぐ）
+      const activeTodayProjects = (todayProjectsData.projects || []).filter((p: Project) => p.status !== 'cancelled')
       setClients(clientsData.clients || [])
-      setTodayProjects(todayProjectsData.projects || [])
+      setTodayProjects(activeTodayProjects)
       setRecentReports((reportsData.reports || []).slice(0, 5))
 
-      const todayProjectIds = new Set((todayProjectsData.projects || []).map((p: Project) => p.id))
+      const todayProjectIds = new Set(activeTodayProjects.map((p: Project) => p.id))
       const todayReportedCount = (todayReportsData.reports || []).filter((r: Report) => todayProjectIds.has(r.project_id)).length
 
       setStats({
@@ -314,8 +317,7 @@ function AdminApp() {
         total_reports: reportsData.reports?.length || 0,
         pending_reports: reportsData.reports?.filter((r: Report) => r.pdf_generation_status === 'pending').length || 0,
         total_staff: staffData.staff?.length || 0,
-        // ③ 案件取消: 中止案件は「今日の現場」「未報告」に含めない（恒久的な未報告計上を防ぐ）
-        today_projects: (todayProjectsData.projects || []).filter((p: Project) => p.status !== 'cancelled').length,
+        today_projects: activeTodayProjects.length,
         today_reported: todayReportedCount
       })
     } catch (err) {

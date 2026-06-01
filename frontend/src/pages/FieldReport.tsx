@@ -139,7 +139,8 @@ export default function FieldReport() {
 
       if (response.ok) {
         const peek = await response.clone().json()
-        if (peek.cancelled) {
+        // 中止案件: キャストの新規入力はブロックするが、管理者の閲覧(view)は許可する
+        if (peek.cancelled && !isViewMode) {
           setErrorMessage('この案件は中止されました。報告書の提出はできません。')
           setPageState('error')
           return

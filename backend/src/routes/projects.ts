@@ -54,17 +54,10 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
 
     const project: Project = result.rows[0];
 
-    // ③ 案件取消: 中止された案件はフォームを開かせず、読込時点で中止を案内する
-    // （提出時ガード(reports.ts)だけだと、キャストが入力し終えてから弾かれ、
-    //   かつ中止現場に出向いてしまうリスクがあるため、開いた瞬間に止める）
-    if (project.status === 'cancelled') {
-      res.status(200).json({
-        error: 'CANCELLED',
-        cancelled: true,
-        message: 'この案件は中止されました'
-      });
-      return;
-    }
+    // ③ 案件取消: 中止フラグはレスポンスに含めて返す（早期returnしない）。
+    // キャストの新規入力はフロント側で中止案内を出してブロックするが、
+    // 管理者の閲覧（?mode=view）では引き続き内容を確認できるようにするため。
+    const isCancelled = project.status === 'cancelled';
 
     // Check if report already exists for this project
     const existingReportResult = await pool.query(
@@ -126,7 +119,8 @@ router.get('/:unique_url', async (req: Request, res: Response) => {
         supervisor_name: project.supervisor_name || null,
         has_qualifier: hasQualifier,
         casts: casts.map(c => ({ staff_no: c.staff_no, name: c.cast_name }))
-      }
+      },
+      cancelled: isCancelled
     });
   } catch (error) {
     handleDbError(res, error, 'Project fetch');

@@ -41,7 +41,7 @@ router.put('/:project_unique_url', authenticateCast, async (req: Request, res: R
     }
 
     const projectResult = await pool.query(
-      'SELECT id FROM projects WHERE unique_url = $1 AND deleted_at IS NULL',
+      'SELECT id, status FROM projects WHERE unique_url = $1 AND deleted_at IS NULL',
       [project_unique_url]
     );
 
@@ -49,6 +49,16 @@ router.put('/:project_unique_url', authenticateCast, async (req: Request, res: R
       res.status(404).json({
         error: 'NOT_FOUND',
         message: '案件が見つかりません',
+        details: {}
+      });
+      return;
+    }
+
+    // ③ 案件取消: 中止案件には下書きを保存させない（read/submit ガードと基準を揃え、書き込みの裏口を塞ぐ）
+    if (projectResult.rows[0].status === 'cancelled') {
+      res.status(409).json({
+        error: 'CANCELLED',
+        message: 'この案件は中止されたため、下書きを保存できません',
         details: {}
       });
       return;
