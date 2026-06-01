@@ -1,6 +1,7 @@
 import { COLORS } from '../../constants/admin'
 import { styles } from '../../styles/adminStyles'
 import type { Client } from '../../types/admin'
+import { CompanyEmailManager } from '../../components/CompanyEmailManager'
 
 function isNew(createdAt: string): boolean {
   const created = new Date(createdAt)
@@ -184,7 +185,7 @@ export function ClientsPage({
                                 />
                               </div>
                               <div style={styles.formGroup}>
-                                <label style={styles.label}>メールアドレス</label>
+                                <label style={styles.label}>担当者メールアドレス</label>
                                 <input
                                   type="email"
                                   style={styles.input}
@@ -203,6 +204,11 @@ export function ClientsPage({
                                   placeholder="例: 東京都新宿区西新宿1-1-1"
                                 />
                               </div>
+                              {/* 報告書承認時の通知先（company_emails）。担当者メールとは別管理。 */}
+                              <CompanyEmailManager
+                                companyId={editingClient.id}
+                                companyName={editingClient.name}
+                              />
                               <div style={styles.modalActions}>
                                 <button 
                                   style={styles.secondaryButton}
