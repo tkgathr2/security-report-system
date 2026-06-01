@@ -67,6 +67,11 @@ function AdminApp() {
   const [staffSearchQuery, setStaffSearchQuery] = useState('')
   const [clientSearchQuery, setClientSearchQuery] = useState('')
   const [castsModalProject, setCastsModalProject] = useState<Project | null>(null)
+  // ③ 案件取消（現場の中止）
+  const [cancelModalProject, setCancelModalProject] = useState<Project | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelContactedAt, setCancelContactedAt] = useState('')
+  const [cancelling, setCancelling] = useState(false)
   const [selectedReportDetail, setSelectedReportDetail] = useState<ReportDetail | null>(null)
   const [loadingReportDetail, setLoadingReportDetail] = useState(false)
   const [resending, setResending] = useState(false)
@@ -336,6 +341,64 @@ function AdminApp() {
       setError('案件一覧の取得に失敗しました')
     } finally {
       if (navCounterRef.current === myNav) setLoading(false)
+    }
+  }
+
+  // ③ 案件取消（現場の中止）: 中止を確定する
+  const handleCancelProject = async () => {
+    if (!cancelModalProject) return
+    setCancelling(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/admin/projects/${cancelModalProject.id}/cancel`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cancel_reason: cancelReason,
+          cancel_contacted_at: cancelContactedAt || null,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || '案件の中止に失敗しました')
+
+      const sent = data.email?.sent ?? 0
+      const warnings: string[] = data.email?.warnings || []
+      if (sent > 0) {
+        alert(`案件を中止しました。中止連絡メールを${sent}件送信しました。`)
+      } else if (warnings.length > 0) {
+        alert(`案件を中止しました。\n（メール: ${warnings.join(' / ')}）`)
+      } else {
+        alert('案件を中止しました。')
+      }
+
+      setCancelModalProject(null)
+      setCancelReason('')
+      setCancelContactedAt('')
+      fetchProjectsByDate(selectedDate)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '案件の中止に失敗しました')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
+  // ③ 案件取消（現場の中止）: 中止を取り消して復活する
+  const handleRestoreProject = async (project: Project) => {
+    if (!window.confirm(`「${project.work_name}」の中止を取り消して復活させますか？`)) return
+    setError(null)
+    try {
+      const response = await fetch(`/api/admin/projects/${project.id}/restore`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || '案件の復活に失敗しました')
+      fetchProjectsByDate(selectedDate)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '案件の復活に失敗しました')
     }
   }
 
@@ -1314,6 +1377,8 @@ function AdminApp() {
               handleSort={handleSort}
               getSortIndicator={getSortIndicator}
               setCastsModalProject={setCastsModalProject}
+              onRequestCancel={setCancelModalProject}
+              onRestore={handleRestoreProject}
               renderDateHeader={renderDateHeader}
               formatDate={formatDate}
             />
@@ -1471,6 +1536,64 @@ function AdminApp() {
                     onClick={() => setCastsModalProject(null)}
                   >
                     閉じる
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ③ 案件取消（現場の中止）確認モーダル */}
+          {cancelModalProject && (
+            <div style={styles.modalOverlay} onClick={() => !cancelling && setCancelModalProject(null)}>
+              <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+                <h3 style={styles.modalTitle}>現場中止の確認</h3>
+                <p style={{ marginBottom: '8px', color: COLORS.darkGray }}>
+                  {(cancelModalProject.client_name || cancelModalProject.client_name_raw)} / {cancelModalProject.work_name}<br />
+                  {formatDate(cancelModalProject.work_date)}
+                </p>
+                <p style={{ marginBottom: '16px', fontSize: '13px', color: '#c81e1e' }}>
+                  この案件を中止します。確定すると取引先へ中止連絡メールが自動送信されます（通知先が登録されている場合）。データは削除されず、後から復活できます。
+                </p>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 'bold' }}>中止理由</label>
+                  <textarea
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    placeholder="例：先方都合により中止 / 天候不良 など"
+                    rows={3}
+                    maxLength={500}
+                    style={{ width: '100%', padding: '8px', border: `1px solid ${COLORS.primary}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 'bold' }}>中止連絡を受けた日時</label>
+                  <input
+                    type="datetime-local"
+                    value={cancelContactedAt}
+                    onChange={(e) => setCancelContactedAt(e.target.value)}
+                    style={{ width: '100%', padding: '8px', border: `1px solid ${COLORS.primary}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+                  />
+                  <span style={{ fontSize: '12px', color: COLORS.darkGray }}>
+                    ※ 将来のキャンセル料判定に使う記録です（任意）
+                  </span>
+                </div>
+
+                <div style={styles.modalActions}>
+                  <button
+                    style={{ ...styles.secondaryButton, opacity: cancelling ? 0.6 : 1 }}
+                    onClick={() => setCancelModalProject(null)}
+                    disabled={cancelling}
+                  >
+                    やめる
+                  </button>
+                  <button
+                    style={{ padding: '10px 20px', backgroundColor: '#c81e1e', border: 'none', color: COLORS.white, borderRadius: '6px', cursor: cancelling ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 'bold', opacity: cancelling ? 0.6 : 1 }}
+                    onClick={handleCancelProject}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? '処理中...' : '現場中止を確定する'}
                   </button>
                 </div>
               </div>

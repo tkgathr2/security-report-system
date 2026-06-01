@@ -13,7 +13,7 @@ vi.mock('resend', () => ({
   },
 }));
 
-import { isRetryableError, extractStatusCode, buildEmailContent } from './emailSender';
+import { isRetryableError, extractStatusCode, buildEmailContent, buildCancellationEmailContent } from './emailSender';
 
 describe('extractStatusCode', () => {
   it('reads numeric statusCode', () => {
@@ -135,5 +135,43 @@ describe('buildEmailContent — HTML escaping (XSS regression guard)', () => {
     expect(subject.length).toBeGreaterThan(0);
     expect(text.length).toBeGreaterThan(0);
     expect(html).toContain('<p>'); // structural html present for legitimate content
+  });
+});
+
+describe('buildCancellationEmailContent — ③案件取消 中止連絡メール', () => {
+  const base = {
+    companyName: 'Acme',
+    contactName: 'Taro',
+    contactTitle: 'Manager',
+    workDate: '2026-06-01',
+    projectName: 'Patrol',
+    location: 'Gate',
+  };
+
+  it('produces a non-empty subject/text/html mentioning 中止', () => {
+    const { subject, text, html } = buildCancellationEmailContent(base);
+    expect(subject).toContain('中止');
+    expect(text.length).toBeGreaterThan(0);
+    expect(html).toContain('<p>');
+  });
+
+  it('escapes XSS payloads in companyName/contact/project/location', () => {
+    const { html } = buildCancellationEmailContent({
+      ...base,
+      companyName: '<script>alert(1)</script>',
+      contactName: '<img onerror=x>',
+      projectName: '<b>p</b>',
+      location: '<script>l</script>',
+    });
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('<b>p</b>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('does NOT attach or reference a PDF (cancellation is notice-only)', () => {
+    const { text, html } = buildCancellationEmailContent(base);
+    expect(text).not.toMatch(/PDF|添付/);
+    expect(html).not.toMatch(/PDF|添付/);
   });
 });

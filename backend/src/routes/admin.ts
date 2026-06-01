@@ -84,7 +84,8 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
     ) as casts`;
 
     const groupBy = `p.id, p.project_key, p.work_date, p.work_name,
-      p.location, p.status, p.unique_url, p.url_expires_at, p.created_at, c.name`;
+      p.location, p.status, p.unique_url, p.url_expires_at, p.created_at,
+      p.cancelled_at, p.cancel_reason, p.cancel_contacted_at, c.name`;
 
     let query: string;
     let params: string[];
@@ -93,6 +94,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
       // Date range query for infinite scroll
       query = `SELECT p.id, p.project_key, p.work_date, p.work_name,
               p.location, p.status, p.unique_url, p.url_expires_at, p.created_at,
+              p.cancelled_at, p.cancel_reason, p.cancel_contacted_at,
               c.name as client_name,
               ${castsAgg}
        FROM projects p
@@ -106,6 +108,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
     } else if (date && typeof date === 'string') {
       query = `SELECT p.id, p.project_key, p.work_date, p.work_name,
               p.location, p.status, p.unique_url, p.url_expires_at, p.created_at,
+              p.cancelled_at, p.cancel_reason, p.cancel_contacted_at,
               c.name as client_name,
               ${castsAgg}
        FROM projects p
@@ -119,6 +122,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
     } else {
       query = `SELECT p.id, p.project_key, p.work_date, p.work_name,
               p.location, p.status, p.unique_url, p.url_expires_at, p.created_at,
+              p.cancelled_at, p.cancel_reason, p.cancel_contacted_at,
               c.name as client_name,
               ${castsAgg}
        FROM projects p
