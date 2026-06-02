@@ -1,6 +1,112 @@
+import { useState, useEffect, useCallback } from 'react'
 import { COLORS } from '../../constants/admin'
 import { styles } from '../../styles/adminStyles'
 import type { Client, DashboardStats, Project, Report, Screen } from '../../types/admin'
+
+function EmailNotificationToggle() {
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const fetchSetting = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError('')
+      const res = await fetch('/api/admin/settings/email-notification', {
+        credentials: 'include',
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setEnabled(!!data.enabled)
+      } else {
+        setError(`設定の取得に失敗しました（${res.status}）`)
+      }
+    } catch {
+      setError('設定の取得に失敗しました。通信状態を確認してください。')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchSetting()
+  }, [fetchSetting])
+
+  const handleToggle = async () => {
+    if (saving || enabled === null) return
+    const next = !enabled
+    // OFF→ON のときだけ安全確認を出す
+    if (next && !window.confirm('取引先へのメール自動送信をONにします。承認された報告書が取引先（通知先メール登録済みの会社）へ自動送信されます。よろしいですか？')) {
+      return
+    }
+    setError('')
+    setSaving(true)
+    try {
+      const res = await fetch('/api/admin/settings/email-notification', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ enabled: next }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setEnabled(!!data.enabled)
+      } else {
+        setError('設定の保存に失敗しました。時間をおいて再度お試しください。')
+      }
+    } catch {
+      setError('通信エラーが発生しました')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ background: COLORS.white, borderRadius: '12px', padding: '20px', marginBottom: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+      <h3 style={{ margin: '0 0 12px', fontSize: '16px', color: COLORS.text }}>取引先へのメール自動送信</h3>
+      {loading ? (
+        <p style={{ fontSize: '14px', color: COLORS.darkGray, margin: 0 }}>読み込み中...</p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: '14px', color: COLORS.text }}>
+              現在の状態：{' '}
+              <span style={{ fontWeight: 'bold', color: enabled ? COLORS.success : COLORS.danger }}>
+                {enabled ? 'ON（取引先へ自動送信されます）' : 'OFF（自動送信されません）'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggle}
+              disabled={saving || enabled === null}
+              style={{
+                backgroundColor: enabled ? COLORS.danger : COLORS.primary,
+                color: COLORS.white,
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                cursor: saving ? 'default' : 'pointer',
+                fontSize: '14px',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                opacity: saving ? 0.5 : 1,
+              }}
+            >
+              {saving ? '保存中...' : enabled ? 'OFFにする' : 'ONにする'}
+            </button>
+          </div>
+          <p style={{ fontSize: '12px', color: COLORS.darkGray, margin: '12px 0 0 0' }}>
+            ONにすると、報告書が承認されたときに通知先メールが登録された取引先へPDF付きで自動送信されます。
+          </p>
+        </>
+      )}
+      {error && (
+        <p style={{ color: COLORS.danger, fontSize: '12px', marginTop: '8px', marginBottom: 0 }}>{error}</p>
+      )}
+    </div>
+  )
+}
 
 interface DashboardPageProps {
   stats: DashboardStats | null
@@ -174,6 +280,8 @@ export function DashboardPage({
               </div>
 
               {/* PDFデザイン設定は非表示 */}
+
+              <EmailNotificationToggle />
 
               <div style={{display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '20px'}}>
                 <div style={{background: COLORS.white, borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)'}}>
