@@ -19,6 +19,10 @@ const PDF_STATUS = {
 const VALID_LAYOUTS: PdfLayout[] = ['classic', 'handwritten'];
 const VALID_DESIGNS: PdfDesign[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
+// 報告書単位の手動再送のクールダウン（連打による取引先への重複送信を防止）。
+// 個別ログ再送（adminEmailLogs.ts）と同じ5分に揃える。
+const REPORT_RESEND_COOLDOWN_MS = 5 * 60 * 1000;
+
 /** system_settings のブール値フラグを評価する。取得失敗時は安全側でOFF。 */
 async function isSettingEnabled(key: string): Promise<boolean> {
   try {
@@ -275,6 +279,38 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
     }
 
     const report = reportResult.rows[0];
+
+    // クールダウン（アトミック・送信前に slot を確保）:
+    // 同一報告書の手動再送は直近5分に1回まで。判定と記録を単一の条件付きUPDATEで行うことで、
+    // check-then-act の競合（送信中の連打・同時2リクエスト）による取引先への重複送信を防ぐ。
+    // isResend は冪等性キーをバイパスするため、このクールダウンが唯一の重複送信防御線。
+    // 個別ログ再送（adminEmailLogs.ts）と同じ5分に揃える。
+    const cooldownClaim = await pool.query(
+      `UPDATE reports SET last_resend_at = NOW()
+       WHERE id = $1
+         AND (last_resend_at IS NULL OR last_resend_at < NOW() - ($2::bigint * INTERVAL '1 millisecond'))
+       RETURNING id`,
+      [reportId, REPORT_RESEND_COOLDOWN_MS]
+    );
+    if (cooldownClaim.rowCount === 0) {
+      // 直近に再送済み。残り時間は読み込み済みの last_resend_at から概算（無ければ満了分を返す）。
+      let retryAfterSec = Math.ceil(REPORT_RESEND_COOLDOWN_MS / 1000);
+      if (report.last_resend_at != null) {
+        const lastResend = report.last_resend_at instanceof Date
+          ? report.last_resend_at
+          : new Date(report.last_resend_at);
+        if (!Number.isNaN(lastResend.getTime())) {
+          const remainSec = Math.ceil((REPORT_RESEND_COOLDOWN_MS - (Date.now() - lastResend.getTime())) / 1000);
+          if (remainSec > 0) retryAfterSec = remainSec;
+        }
+      }
+      res.status(429).set('Retry-After', String(retryAfterSec)).json({
+        error: 'TOO_MANY_REQUESTS',
+        message: `この報告書の再送は連続して行えません。約${Math.ceil(retryAfterSec / 60)}分後に再度お試しください。`,
+      });
+      return;
+    }
+
     const workDateStr = report.work_date instanceof Date
       ? report.work_date.toISOString().split('T')[0]
       : String(report.work_date).split('T')[0];
