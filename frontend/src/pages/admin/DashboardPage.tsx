@@ -39,7 +39,7 @@ export function DashboardPage({
             <div>
               <h2 style={styles.pageTitle}>ダッシュボード</h2>
               
-              {clients.filter(c => !c.contact_email && c.is_active).length > 0 && (
+              {clients.filter(c => c.is_active && (!c.notification_emails || c.notification_emails.length === 0)).length > 0 && (
                 <div style={styles.alertBox}>
                   <span style={styles.alertIcon}>&#9888;</span>
                   <div style={styles.alertContent}>
@@ -48,7 +48,7 @@ export function DashboardPage({
                       以下の会社にメールアドレスが登録されていないため、報告書を送信できません：
                     </p>
                     <ul style={styles.alertList}>
-                      {clients.filter(c => !c.contact_email && c.is_active).map(c => (
+                      {clients.filter(c => c.is_active && (!c.notification_emails || c.notification_emails.length === 0)).map(c => (
                         <li key={c.id}>
                           <span 
                             style={styles.alertClientLink}
