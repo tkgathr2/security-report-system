@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
 import { sendReportApprovalNotifications, uploadPdfToSlack, sendSlackNotification } from '../services/notifications';
+import { sendCompanyNotificationEmails } from '../services/emailSender';
 import { logAudit } from '../utils/auditLog';
 import { generateReportPdf } from '../services/pdfGenerator';
 import type { PdfLayout, PdfDesign } from '../services/pdfGenerator';
@@ -17,6 +18,17 @@ const PDF_STATUS = {
 
 const VALID_LAYOUTS: PdfLayout[] = ['classic', 'handwritten'];
 const VALID_DESIGNS: PdfDesign[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+
+/** system_settings のブール値フラグを評価する。取得失敗時は安全側でOFF。 */
+async function isSettingEnabled(key: string): Promise<boolean> {
+  try {
+    const r = await pool.query(`SELECT value FROM system_settings WHERE key = $1`, [key]);
+    return r.rows.length > 0 && r.rows[0].value === 'true';
+  } catch (err) {
+    console.warn(`[RESEND] Failed to check ${key}, defaulting to OFF:`, err);
+    return false;
+  }
+}
 
 // POST /api/admin/reports/:reportId/pdf/generate
 router.post('/:reportId/pdf/generate', requireAdmin, async (req: Request, res: Response) => {
@@ -246,7 +258,7 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
 
   try {
     const reportResult = await pool.query(
-      `SELECT r.*, c.name as client_name_raw, p.work_date, p.work_name, p.work_title_raw, p.location, c.emails as client_emails,
+      `SELECT r.*, c.id as client_id, c.name as client_name_raw, p.work_date, p.work_name, p.work_title_raw, p.location, c.emails as client_emails,
               c.contact_name as client_contact_name, c.contact_title as client_contact_title, c.address as client_address,
               sm.display_name_kanji as writer_name
        FROM reports r 
@@ -311,7 +323,14 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
     }
 
     let emailResult = { emailSent: false, castEmailSent: false, adminEmailSent: false, warnings: [] as string[] };
+    let companyEmailWarnings: string[] = [];
     if (pdfOk) {
+      // 承認時と同じフラグ分岐に揃える（再送がフラグを無視して旧経路へ流れる不整合を解消）
+      const clientEmailEnabled = await isSettingEnabled('client_email_enabled');
+      const newEmailNotificationEnabled = await isSettingEnabled('email_notification_enabled');
+      // 新フラグONなら旧クライアント送信を無効化（writer/admin通知は旧経路のまま残す・二重送信防止）
+      const skipLegacyClientEmail = newEmailNotificationEnabled || !clientEmailEnabled;
+
       emailResult = await sendReportApprovalNotifications({
         reportId,
         companyName: report.client_name_raw,
@@ -326,8 +345,34 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
         supervisorName: report.supervisor_name || '',
         location: report.location || '',
         pdfBytes: pdfBuffer,
-        skipSlack: true
+        skipSlack: true,
+        skipClientEmail: skipLegacyClientEmail
       });
+
+      // 新経路ONなら取引先へは company_emails 経由で再送（冪等性キーに resend サフィックス付き）
+      if (newEmailNotificationEnabled && report.client_id) {
+        try {
+          const companyResult = await sendCompanyNotificationEmails({
+            reportId,
+            companyId: report.client_id,
+            companyName: report.client_name_raw || '',
+            contactName: report.client_contact_name || '',
+            contactTitle: report.client_contact_title || '',
+            clientAddress: report.client_address || '',
+            workDate: workDateStr,
+            projectName,
+            writerName: report.writer_name || '',
+            supervisorName: report.supervisor_name || '',
+            location: report.location || '',
+            pdfBuffer,
+            isResend: true
+          });
+          companyEmailWarnings = companyResult.warnings;
+        } catch (companyErr) {
+          console.error('[RESEND] Company notification resend failed:', companyErr);
+          companyEmailWarnings = ['取引先への再送に失敗しました'];
+        }
+      }
     }
 
     const adminUser = req.user as { email: string };
@@ -339,7 +384,7 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
       emailSent: emailResult.emailSent,
       castEmailSent: emailResult.castEmailSent,
       adminEmailSent: emailResult.adminEmailSent,
-      warnings: emailResult.warnings
+      warnings: [...emailResult.warnings, ...companyEmailWarnings]
     });
   } catch (error) {
     console.error('[RESEND] Error:', error);
