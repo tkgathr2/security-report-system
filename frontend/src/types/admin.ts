@@ -151,6 +151,7 @@ export interface Client {
   contact_title: string | null
   contact_email: string | null
   address: string | null
+  notification_emails: { id: string; email: string; label: string | null }[]
   created_at: string
   updated_at: string
 }

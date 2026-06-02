@@ -84,8 +84,8 @@ export function ClientsPage({
                                     <span style={styles.mobileCardValue}>{client.contact_title || '-'}</span>
                                   </div>
                                   <div style={styles.mobileCardRow}>
-                                    <span style={styles.mobileCardLabel}>メールアドレス</span>
-                                    <span style={styles.mobileCardValue}>{client.contact_email || '-'}</span>
+                                    <span style={styles.mobileCardLabel}>通知先メール</span>
+                                    <span style={styles.mobileCardValue}>{client.notification_emails && client.notification_emails.length > 0 ? client.notification_emails.map(e => e.email).join(', ') : '-'}</span>
                                   </div>
                                   <div style={styles.mobileCardRow}>
                                     <span style={styles.mobileCardLabel}>住所</span>
@@ -117,7 +117,7 @@ export function ClientsPage({
                                   <th style={styles.th}>会社名</th>
                                   <th style={styles.th}>担当者名</th>
                                   <th style={styles.th}>役職</th>
-                                  <th style={styles.th}>メールアドレス</th>
+                                  <th style={styles.th}>通知先メール</th>
                                   <th style={styles.th}>住所</th>
                                   <th style={styles.th}>操作</th>
                                 </tr>
@@ -128,7 +128,7 @@ export function ClientsPage({
                                     <td style={styles.td}>{client.name}<NewBadge createdAt={client.created_at} /></td>
                                     <td style={styles.td}>{client.contact_name || '-'}</td>
                                     <td style={styles.td}>{client.contact_title || '-'}</td>
-                                    <td style={styles.td}>{client.contact_email || '-'}</td>
+                                    <td style={styles.td}>{client.notification_emails && client.notification_emails.length > 0 ? client.notification_emails.map(e => e.email).join(', ') : '-'}</td>
                                     <td style={styles.td}>{client.address || '-'}</td>
                                     <td style={styles.td}>
                                       <button 
@@ -182,16 +182,6 @@ export function ClientsPage({
                                   value={editingClient.contact_title || ''}
                                   onChange={(e) => setEditingClient({...editingClient, contact_title: e.target.value || null})}
                                   placeholder="例: 部長"
-                                />
-                              </div>
-                              <div style={styles.formGroup}>
-                                <label style={styles.label}>担当者メールアドレス</label>
-                                <input
-                                  type="email"
-                                  style={styles.input}
-                                  value={editingClient.contact_email || ''}
-                                  onChange={(e) => setEditingClient({...editingClient, contact_email: e.target.value || null})}
-                                  placeholder="例: yamada@example.com"
                                 />
                               </div>
                               <div style={styles.formGroup}>

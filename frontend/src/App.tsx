@@ -1035,7 +1035,7 @@ function AdminApp() {
     return (
       client.name.toLowerCase().includes(query) ||
       (client.contact_name && client.contact_name.toLowerCase().includes(query)) ||
-      (client.contact_email && client.contact_email.toLowerCase().includes(query)) ||
+      (client.notification_emails && client.notification_emails.some(e => e.email.toLowerCase().includes(query))) ||
       (client.contact_title && client.contact_title.toLowerCase().includes(query))
     )
   })

@@ -728,12 +728,17 @@ router.get('/clients', requireAdmin, async (req: Request, res: Response) => {
     // normalization: auto-insert from projects removed (projects no longer store client_name_raw)
 
     const result = await pool.query(
-      `SELECT id, name, name_normalized, emails, is_active, 
-              contact_name, contact_title, contact_email, address,
-              created_at, updated_at
-       FROM clients
-       WHERE deleted_at IS NULL
-       ORDER BY name
+      `SELECT c.id, c.name, c.name_normalized, c.emails, c.is_active,
+              c.contact_name, c.contact_title, c.contact_email, c.address,
+              c.created_at, c.updated_at,
+              COALESCE((
+                SELECT json_agg(json_build_object('id', ce.id, 'email', ce.email, 'label', ce.label) ORDER BY ce.created_at)
+                FROM company_emails ce
+                WHERE ce.company_id = c.id AND ce.is_active = true AND ce.deleted_at IS NULL
+              ), '[]'::json) AS notification_emails
+       FROM clients c
+       WHERE c.deleted_at IS NULL
+       ORDER BY c.name
        LIMIT 500`
     );
 
