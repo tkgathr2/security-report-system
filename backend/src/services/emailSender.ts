@@ -245,6 +245,8 @@ export async function sendCompanyNotificationEmails(params: {
   supervisorName: string;
   location: string;
   pdfBuffer: Buffer;
+  /** 手動再送時はtrue。冪等性キーに resend サフィックスを付け、送信済みでも再送する。 */
+  isResend?: boolean;
 }): Promise<{ sent: number; failed: number; skipped: number; warnings: string[] }> {
   const warnings: string[] = [];
   let sent = 0;
@@ -292,6 +294,7 @@ export async function sendCompanyNotificationEmails(params: {
         supervisorName: params.supervisorName,
         location: params.location,
         pdfBuffer: params.pdfBuffer,
+        isResend: params.isResend,
       });
 
       if (result.success) {
