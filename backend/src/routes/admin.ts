@@ -1508,6 +1508,40 @@ router.put('/settings/pdf-layout', requireAdmin, async (req: Request, res: Respo
   }
 });
 
+router.get('/settings/email-notification', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    await ensureSettingsTable();
+    const result = await pool.query(
+      `SELECT value FROM system_settings WHERE key = 'email_notification_enabled'`
+    );
+    const enabled = result.rows.length > 0 ? result.rows[0].value === 'true' : false;
+    res.json({ enabled });
+  } catch (error) {
+    handleDbError(res, error, 'Get email notification setting');
+  }
+});
+
+router.put('/settings/email-notification', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      sendBadRequest(res, 'enabled は true または false を指定してください');
+      return;
+    }
+    await ensureSettingsTable();
+    await pool.query(
+      `INSERT INTO system_settings (key, value, updated_at) VALUES ('email_notification_enabled', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+      [enabled ? 'true' : 'false']
+    );
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'UPDATE_EMAIL_NOTIFICATION_SETTING', targetType: 'system_settings', targetId: 'email_notification_enabled', payload: { enabled } });
+    res.json({ ok: true, enabled });
+  } catch (error) {
+    handleDbError(res, error, 'Update email notification setting');
+  }
+});
+
 router.post('/send-login-url', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { email, staff_id } = req.body;
