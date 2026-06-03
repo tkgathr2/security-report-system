@@ -333,8 +333,8 @@ export function buildCancellationEmailContent(
   data: CancellationEmailData
 ): { subject: string; text: string; html: string } {
   const contactParts: string[] = [];
-  if (data.contactName) contactParts.push(data.contactName);
   if (data.contactTitle) contactParts.push(data.contactTitle);
+  if (data.contactName) contactParts.push(data.contactName);
   const contactLine = contactParts.join(' ');
   const contactLineHtml = contactLine ? escapeHtml(contactLine) + ' ' : '';
 
@@ -571,10 +571,10 @@ export function buildEmailContent(
   }
 ): { subject: string; text: string; html: string } {
   if (recipientType === 'client') {
-    // 宛名（担当者名＋肩書）。未設定時は「ご担当者様」にフォールバックする。
+    // 宛名（肩書＋担当者名）。日本のビジネス慣習に合わせ役職を氏名の前に置く。未設定時は「ご担当者様」にフォールバックする。
     const contactParts: string[] = [];
-    if (data.contactName) contactParts.push(data.contactName);
     if (data.contactTitle) contactParts.push(data.contactTitle);
+    if (data.contactName) contactParts.push(data.contactName);
     const contactLine = contactParts.length > 0 ? contactParts.join(' ') : '';
     const greetingName = contactLine ? `${contactLine} 様` : 'ご担当者様';
 
