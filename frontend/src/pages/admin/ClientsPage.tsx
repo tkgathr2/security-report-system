@@ -27,6 +27,10 @@ interface ClientsPageProps {
   savingClient: boolean
   handleUpdateClient: () => void
   handleDeleteClient: (id: string, name: string) => void
+  newClient: { name: string; contact_name: string; contact_title: string; address: string } | null
+  setNewClient: (client: { name: string; contact_name: string; contact_title: string; address: string } | null) => void
+  creatingClient: boolean
+  handleCreateClient: () => void
 }
 
 export function ClientsPage({
@@ -41,6 +45,10 @@ export function ClientsPage({
   savingClient,
   handleUpdateClient,
   handleDeleteClient,
+  newClient,
+  setNewClient,
+  creatingClient,
+  handleCreateClient,
 }: ClientsPageProps) {
   return (
                       <div>
@@ -48,6 +56,14 @@ export function ClientsPage({
                         <p style={styles.description}>
                           登録済みの会社一覧です。担当者情報を編集できます。
                         </p>
+                        <div style={{ marginBottom: '16px' }}>
+                          <button
+                            style={styles.primaryButton}
+                            onClick={() => setNewClient({ name: '', contact_name: '', contact_title: '', address: '' })}
+                          >
+                            ＋ 新規登録
+                          </button>
+                        </div>
                         <div style={{ marginBottom: '16px' }}>
                           <input
                             type="text"
@@ -213,6 +229,74 @@ export function ClientsPage({
                                   disabled={savingClient}
                                 >
                                   {savingClient ? '保存中...' : '保存'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {newClient && (
+                          <div style={styles.modalOverlay}>
+                            <div style={styles.modal}>
+                              <h3 style={styles.modalTitle}>会社の新規登録</h3>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>会社名 <span style={{ color: COLORS.danger }}>*</span></label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={newClient.name}
+                                  onChange={(e) => setNewClient({...newClient, name: e.target.value})}
+                                  placeholder="例: 株式会社サンプル"
+                                  autoFocus
+                                />
+                              </div>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>担当者名</label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={newClient.contact_name}
+                                  onChange={(e) => setNewClient({...newClient, contact_name: e.target.value})}
+                                  placeholder="例: 山田太郎"
+                                />
+                              </div>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>役職</label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={newClient.contact_title}
+                                  onChange={(e) => setNewClient({...newClient, contact_title: e.target.value})}
+                                  placeholder="例: 部長"
+                                />
+                              </div>
+                              <div style={styles.formGroup}>
+                                <label style={styles.label}>住所</label>
+                                <input
+                                  type="text"
+                                  style={styles.input}
+                                  value={newClient.address}
+                                  onChange={(e) => setNewClient({...newClient, address: e.target.value})}
+                                  placeholder="例: 東京都新宿区西新宿1-1-1"
+                                />
+                              </div>
+                              <p style={{ fontSize: '13px', color: COLORS.darkGray, margin: '4px 0 0' }}>
+                                ※ 報告書の通知先メールは、登録後に一覧の「編集」から追加できます。
+                              </p>
+                              <div style={styles.modalActions}>
+                                <button
+                                  style={styles.secondaryButton}
+                                  onClick={() => setNewClient(null)}
+                                  disabled={creatingClient}
+                                >
+                                  キャンセル
+                                </button>
+                                <button
+                                  style={styles.primaryButton}
+                                  onClick={handleCreateClient}
+                                  disabled={creatingClient || !newClient.name.trim()}
+                                >
+                                  {creatingClient ? '登録中...' : '登録'}
                                 </button>
                               </div>
                             </div>

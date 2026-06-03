@@ -968,8 +968,18 @@ router.post('/maintenance/cleanup-invalid-clients', requireAdmin, async (req: Re
 // POST /api/admin/clients - クライアント登録
 router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { name: rawName, emails } = req.body;
+    const {
+      name: rawName,
+      contact_name: rawContactName,
+      contact_title: rawContactTitle,
+      contact_email,
+      address: rawAddress,
+      emails,
+    } = req.body;
     const name = typeof rawName === 'string' ? stripHtmlTags(rawName).trim() : rawName;
+    const contact_name = typeof rawContactName === 'string' ? stripHtmlTags(rawContactName) : rawContactName;
+    const contact_title = typeof rawContactTitle === 'string' ? stripHtmlTags(rawContactTitle) : rawContactTitle;
+    const address = typeof rawAddress === 'string' ? stripHtmlTags(rawAddress) : rawAddress;
 
     if (isEmptyClientName(name)) {
       sendBadRequest(res, '会社名は必須です');
@@ -977,6 +987,17 @@ router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
     }
     const createClientNameErr = validateStringField(name, '会社名', MAX_LENGTHS.COMPANY_NAME);
     if (createClientNameErr) { sendBadRequest(res, createClientNameErr); return; }
+    const createContactNameErr = validateStringField(contact_name, '担当者名', MAX_LENGTHS.PERSON_NAME);
+    if (createContactNameErr) { sendBadRequest(res, createContactNameErr); return; }
+    const createTitleErr = validateStringField(contact_title, '役職', MAX_LENGTHS.CONTACT_TITLE);
+    if (createTitleErr) { sendBadRequest(res, createTitleErr); return; }
+    const createAddrErr = validateStringField(address, '住所', MAX_LENGTHS.ADDRESS);
+    if (createAddrErr) { sendBadRequest(res, createAddrErr); return; }
+
+    if (contact_email && !isValidEmail(contact_email)) {
+      sendBadRequest(res, '正しいメールアドレスを入力してください');
+      return;
+    }
 
     const emailList: string[] = Array.isArray(emails) ? emails.filter((e: string) => e && typeof e === 'string' && e.trim()) : [];
     const invalidClientEmails = emailList.filter((e: string) => !isValidEmail(String(e)));
@@ -985,18 +1006,24 @@ router.post('/clients', requireAdmin, async (req: Request, res: Response) => {
       return;
     }
     const normalizedClientEmails = emailList.map((e: string) => String(e).trim().toLowerCase());
+    if (contact_email) {
+      const normalizedContactEmail = contact_email.trim().toLowerCase();
+      if (!normalizedClientEmails.includes(normalizedContactEmail)) {
+        normalizedClientEmails.push(normalizedContactEmail);
+      }
+    }
 
     const nameNormalized = normalizeClientName(name);
 
     const result = await pool.query(
-      `INSERT INTO clients (name, name_normalized, emails, is_active)
-       VALUES ($1, $2, $3, true)
-       RETURNING id, name, name_normalized, emails, is_active, created_at`,
-      [name.trim(), nameNormalized, normalizedClientEmails]
+      `INSERT INTO clients (name, name_normalized, contact_name, contact_title, contact_email, emails, address, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+       RETURNING id, name, name_normalized, contact_name, contact_title, contact_email, emails, address, is_active, created_at`,
+      [name.trim(), nameNormalized, contact_name || null, contact_title || null, contact_email || null, normalizedClientEmails, address || null]
     );
 
     const adminUser = req.user as { email: string };
-    logAudit({ req, actorEmail: adminUser.email, action: 'CREATE_CLIENT', targetType: 'client', targetId: result.rows[0].id, payload: { name: name.trim() } });
+    logAudit({ req, actorEmail: adminUser.email, action: 'CREATE_CLIENT', targetType: 'client', targetId: result.rows[0].id, payload: { name: name.trim(), contact_name, contact_email } });
 
     res.status(201).json({
       client: result.rows[0]
