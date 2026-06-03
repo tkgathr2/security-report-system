@@ -24,6 +24,7 @@ import adminProjectCancelRouter from './routes/adminProjectCancel';
 import pool from './db/pool';
 import { requestTimeout } from './middleware/requestTimeout';
 import { requireJsonContentType } from './middleware/contentType';
+import { csrfOriginCheck } from './middleware/csrfOrigin';
 import { sanitizeInput } from './utils/validation';
 import { startDataUploadMonitor, stopDataUploadMonitor } from './services/dataUploadMonitor';
 import { startDailyReminderService, stopDailyReminderService } from './services/dailyReminderService';
@@ -104,6 +105,9 @@ app.get('/version', (_req: Request, res: Response) => {
 });
 
 app.use('/api', requireJsonContentType);
+// CSRF多層防御：状態変更リクエストの Origin/Referer を検証（SameSite=Lax の上乗せ）。
+// ヘッダ認証（Bearer / x-api-key）は除外されるため、キャストアプリ・サーバー間連携は不変。
+app.use('/api', csrfOriginCheck);
 app.use('/api/admin/auth', adminAuthRouter);
 // 案件取消（現場の中止）。より具体的なパスを adminRouter より先に登録する
 app.use('/api/admin/projects', adminProjectCancelRouter);
