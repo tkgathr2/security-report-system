@@ -26,38 +26,39 @@ import { Request, Response, NextFunction } from 'express';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-/** URL 文字列から `protocol//host`（ポート含む）だけを取り出す。失敗時は null。 */
-function originOf(url: string | undefined): string | null {
-  if (!url) return null;
+/**
+ * URL / オリジン文字列から host（ポート含む・小文字）だけを取り出す。失敗時は null。
+ *
+ * scheme（http/https）ではなく host で同一オリジン判定する。理由:
+ *   リバースプロキシ（Railway等）配下では req.protocol が常に正しく https を返すとは限らず、
+ *   scheme まで厳密照合すると同一オリジンの正規リクエストまで誤遮断する。
+ *   アプリは HSTS で https 固定・固有ホスト名のため、host 一致＝同一サイトと判断して安全。
+ */
+function hostOf(value: string | undefined): string | null {
+  if (!value) return null;
   try {
-    const u = new URL(url);
-    return `${u.protocol}//${u.host}`.toLowerCase();
+    // scheme 無しでも URL() が解釈できるよう補う
+    const withScheme = /^[a-z]+:\/\//i.test(value) ? value : `https://${value}`;
+    return new URL(withScheme).host.toLowerCase();
   } catch {
     return null;
   }
 }
 
-/** 末尾スラッシュ除去＋小文字化でオリジン文字列を正規化する。 */
-function normalizeOrigin(value: string): string {
-  return value.trim().replace(/\/+$/, '').toLowerCase();
-}
-
-/** このリクエストにとって正当なオリジンの集合を組み立てる（自オリジン＋env許可分）。 */
-function buildAllowedOrigins(req: Request): Set<string> {
+/** このリクエストにとって正当な host の集合を組み立てる（自ホスト＋env許可分）。 */
+function buildAllowedHosts(req: Request): Set<string> {
   const allowed = new Set<string>();
 
-  // 自オリジン（リバースプロキシ配下では trust proxy により protocol/host が正しく解決される）
+  // 自ホスト（Host ヘッダ。プロキシ配下でも素直に取得できる）
   const host = req.get('host');
-  if (host) {
-    allowed.add(`${req.protocol}://${host}`.toLowerCase());
-  }
+  if (host) allowed.add(host.toLowerCase());
 
-  // 明示的に許可する追加オリジン（カスタムドメイン等）
+  // 明示的に許可する追加オリジン（カスタムドメイン等）。host 部分だけ採用
   const extra = process.env.CSRF_ALLOWED_ORIGINS;
   if (extra) {
     for (const o of extra.split(',')) {
-      const n = normalizeOrigin(o);
-      if (n) allowed.add(n);
+      const h = hostOf(o.trim());
+      if (h) allowed.add(h);
     }
   }
   return allowed;
@@ -87,11 +88,11 @@ export function csrfOriginGuard(req: Request, res: Response, next: NextFunction)
     return;
   }
 
-  const allowed = buildAllowedOrigins(req);
-  const source = originOf(req.headers.origin) || originOf(req.headers.referer);
+  const allowed = buildAllowedHosts(req);
+  const sourceHost = hostOf(req.headers.origin) || hostOf(req.headers.referer);
 
   // 状態変更リクエストなのに Origin / Referer が無い＝ブラウザ由来として不自然 → 拒否
-  if (!source) {
+  if (!sourceHost) {
     res.status(403).json({
       error: 'CSRF_ORIGIN_MISSING',
       message: 'リクエスト元（Origin）が確認できませんでした',
@@ -100,7 +101,7 @@ export function csrfOriginGuard(req: Request, res: Response, next: NextFunction)
     return;
   }
 
-  if (!allowed.has(source)) {
+  if (!allowed.has(sourceHost)) {
     res.status(403).json({
       error: 'CSRF_ORIGIN_MISMATCH',
       message: 'リクエスト元が許可されていません',
