@@ -60,6 +60,8 @@ function AdminApp() {
   const [clients, setClients] = useState<Client[]>([])
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [savingClient, setSavingClient] = useState(false)
+  const [newClient, setNewClient] = useState<{ name: string; contact_name: string; contact_title: string; address: string } | null>(null)
+  const [creatingClient, setCreatingClient] = useState(false)
   const [todayProjects, setTodayProjects] = useState<Project[]>([])
   const [recentReports, setRecentReports] = useState<Report[]>([])
   const [editingStaff, setEditingStaff] = useState<(StaffMember & { email: string | null }) | null>(null)
@@ -555,6 +557,39 @@ function AdminApp() {
       setError(err instanceof Error ? err.message : '更新に失敗しました')
     } finally {
       setSavingClient(false)
+    }
+  }
+
+  const handleCreateClient = async () => {
+    if (!newClient) return
+    if (!newClient.name.trim()) {
+      setError('会社名を入力してください')
+      return
+    }
+    setCreatingClient(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/admin/clients', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newClient.name,
+          contact_name: newClient.contact_name || null,
+          contact_title: newClient.contact_title || null,
+          address: newClient.address || null,
+        })
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || '登録に失敗しました')
+      }
+      setNewClient(null)
+      fetchClients()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '登録に失敗しました')
+    } finally {
+      setCreatingClient(false)
     }
   }
 
@@ -1476,6 +1511,10 @@ function AdminApp() {
               savingClient={savingClient}
               handleUpdateClient={handleUpdateClient}
               handleDeleteClient={handleDeleteClient}
+              newClient={newClient}
+              setNewClient={setNewClient}
+              creatingClient={creatingClient}
+              handleCreateClient={handleCreateClient}
             />
           )}
 
