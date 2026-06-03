@@ -136,6 +136,27 @@ describe('buildEmailContent — HTML escaping (XSS regression guard)', () => {
     expect(text.length).toBeGreaterThan(0);
     expect(html).toContain('<p>'); // structural html present for legitimate content
   });
+
+  it('renders the greeting as 役職→氏名 order (title before name)', () => {
+    const { text, html } = buildEmailContent('client', {
+      ...base,
+      contactName: '西村克人',
+      contactTitle: '管制',
+    });
+    // 正：「管制 西村克人 様」／ 誤：「西村克人 管制 様」
+    expect(text).toContain('管制 西村克人 様');
+    expect(text).not.toContain('西村克人 管制 様');
+    expect(html).toContain('管制 西村克人 様');
+  });
+
+  it('falls back to ご担当者様 when no contact name/title', () => {
+    const { text } = buildEmailContent('client', {
+      ...base,
+      contactName: '',
+      contactTitle: '',
+    });
+    expect(text).toContain('ご担当者様');
+  });
 });
 
 describe('buildCancellationEmailContent — ③案件取消 中止連絡メール', () => {
@@ -153,6 +174,16 @@ describe('buildCancellationEmailContent — ③案件取消 中止連絡メー�
     expect(subject).toContain('中止');
     expect(text.length).toBeGreaterThan(0);
     expect(html).toContain('<p>');
+  });
+
+  it('renders the greeting as 役職→氏名 order (title before name)', () => {
+    const { text } = buildCancellationEmailContent({
+      ...base,
+      contactName: '西村克人',
+      contactTitle: '管制',
+    });
+    expect(text).toContain('管制 西村克人 様');
+    expect(text).not.toContain('西村克人 管制 様');
   });
 
   it('escapes XSS payloads in companyName/contact/project/location', () => {
