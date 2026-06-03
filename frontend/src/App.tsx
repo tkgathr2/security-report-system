@@ -407,6 +407,27 @@ function AdminApp() {
     }
   }
 
+  // ③ 案件取消: 中止連絡メールを取引先へ再送する（中止済み案件のみ）
+  const handleResendCancelEmail = async (project: Project) => {
+    if (!window.confirm(`「${project.work_name}」の中止連絡メールを取引先へ再送しますか？`)) return
+    setError(null)
+    try {
+      const response = await fetch(`/api/admin/projects/${project.id}/cancel/resend`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || '中止連絡メールの再送に失敗しました')
+      const r = data.email || {}
+      const warn = Array.isArray(r.warnings) && r.warnings.length > 0 ? `\n${r.warnings.join('\n')}` : ''
+      alert(`中止連絡メールを再送しました（送信 ${r.sent ?? 0} 件 / 失敗 ${r.failed ?? 0} 件 / スキップ ${r.skipped ?? 0} 件）${warn}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '中止連絡メールの再送に失敗しました')
+    }
+  }
+
   const fetchReports = async (dateStr?: string, signal?: AbortSignal) => {
     const myNav = ++navCounterRef.current
     setLoading(true)
@@ -1417,6 +1438,7 @@ function AdminApp() {
               setCastsModalProject={setCastsModalProject}
               onRequestCancel={setCancelModalProject}
               onRestore={handleRestoreProject}
+              onResendCancelEmail={handleResendCancelEmail}
               renderDateHeader={renderDateHeader}
               formatDate={formatDate}
             />

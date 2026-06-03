@@ -19,6 +19,7 @@ interface ProjectsPageProps {
   setCastsModalProject: (project: Project) => void
   onRequestCancel: (project: Project) => void
   onRestore: (project: Project) => void
+  onResendCancelEmail: (project: Project) => void
   renderDateHeader: (dateStr: string, count: number) => React.ReactNode
   formatDate: (dateStr: string) => string
 }
@@ -39,6 +40,7 @@ export function ProjectsPage({
   setCastsModalProject,
   onRequestCancel,
   onRestore,
+  onResendCancelEmail,
   renderDateHeader,
   formatDate,
 }: ProjectsPageProps) {
@@ -167,12 +169,20 @@ export function ProjectsPage({
                                     報告画面
                                   </button>
                                   {project.status === 'cancelled' ? (
-                                    <button
-                                      style={{...styles.mobileActionButton, color: COLORS.primary, borderColor: COLORS.primary}}
-                                      onClick={() => onRestore(project)}
-                                    >
-                                      復活
-                                    </button>
+                                    <>
+                                      <button
+                                        style={{...styles.mobileActionButton, color: COLORS.primary, borderColor: COLORS.primary}}
+                                        onClick={() => onRestore(project)}
+                                      >
+                                        復活
+                                      </button>
+                                      <button
+                                        style={styles.mobileActionButton}
+                                        onClick={() => onResendCancelEmail(project)}
+                                      >
+                                        中止メール再送
+                                      </button>
+                                    </>
                                   ) : (
                                     <button
                                       style={{...styles.mobileActionButton, color: '#c81e1e', borderColor: '#c81e1e'}}
@@ -251,12 +261,20 @@ export function ProjectsPage({
                                                   報告画面
                                                 </button>
                                                 {project.status === 'cancelled' ? (
-                                                  <button
-                                                    style={{...styles.smallButton, color: COLORS.primary, borderColor: COLORS.primary}}
-                                                    onClick={() => onRestore(project)}
-                                                  >
-                                                    復活
-                                                  </button>
+                                                  <>
+                                                    <button
+                                                      style={{...styles.smallButton, color: COLORS.primary, borderColor: COLORS.primary}}
+                                                      onClick={() => onRestore(project)}
+                                                    >
+                                                      復活
+                                                    </button>
+                                                    <button
+                                                      style={styles.smallButton}
+                                                      onClick={() => onResendCancelEmail(project)}
+                                                    >
+                                                      中止メール再送
+                                                    </button>
+                                                  </>
                                                 ) : (
                                                   <button
                                                     style={{...styles.smallButton, color: '#c81e1e', borderColor: '#c81e1e'}}

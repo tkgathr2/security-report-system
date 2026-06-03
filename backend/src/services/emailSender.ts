@@ -372,6 +372,8 @@ export async function sendProjectCancellationEmails(params: {
   workDate: string;
   projectName: string;
   location: string;
+  /** 手動再送時はtrue。冪等性キーに resend サフィックスを付け、送信済みでも再送する。 */
+  isResend?: boolean;
 }): Promise<{ sent: number; failed: number; skipped: number; warnings: string[] }> {
   const warnings: string[] = [];
   let sent = 0;
@@ -425,6 +427,7 @@ export async function sendProjectCancellationEmails(params: {
       subject,
       text,
       html,
+      isResend: params.isResend,
     });
     if (result.success) {
       sent++;
@@ -448,15 +451,18 @@ async function sendCancellationEmailWithLog(params: {
   subject: string;
   text: string;
   html: string;
+  /** 手動再送時はtrue。冪等性キーに resend サフィックスを付け、送信済みでも再送する。 */
+  isResend?: boolean;
 }): Promise<SendResult> {
-  const { projectId, companyId, recipientEmail, subject, text, html } = params;
+  const { projectId, companyId, recipientEmail, subject, text, html, isResend } = params;
 
   if (!isValidEmail(recipientEmail)) {
     console.warn(`[EMAIL-SENDER] Invalid cancel recipient, refusing to send: ${maskEmail(recipientEmail)}`);
     return { success: false, error: '宛先メールアドレスの形式が不正です' };
   }
 
-  const idempotencyKey = `cancel:${projectId}:${recipientEmail}`;
+  const baseCancelKey = `cancel:${projectId}:${recipientEmail}`;
+  const idempotencyKey = isResend ? `${baseCancelKey}:resend:${Date.now()}` : baseCancelKey;
 
   let logId: string;
   try {

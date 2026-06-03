@@ -19,6 +19,10 @@ const router = Router();
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// 中止連絡メールの手動再送のクールダウン（連打による取引先への重複送信を防止）。
+// 報告書再送（reports.last_resend_at）・個別ログ再送と同じ5分。
+const CANCEL_RESEND_COOLDOWN_MS = 5 * 60 * 1000;
+
 function toDateString(value: unknown): string {
   if (value instanceof Date) return value.toISOString().split('T')[0];
   if (value == null) return '';
@@ -133,6 +137,104 @@ router.post('/:projectId/cancel', requireAdmin, async (req: Request, res: Respon
     });
   } catch (error) {
     handleDbError(res, error, 'Cancel project');
+  }
+});
+
+// POST /api/admin/projects/:projectId/cancel/resend
+// 中止済み案件の「中止連絡メール」を取引先（company_emails）へ手動で再送する。
+// メールログ画面では中止メールを再送できない（報告書PDF前提のため）ので、案件側に専用の再送口を用意する。
+router.post('/:projectId/cancel/resend', requireAdmin, async (req: Request, res: Response) => {
+  const projectId = req.params.projectId as string;
+
+  if (!projectId || !UUID_REGEX.test(projectId)) {
+    res.status(400).json({ error: 'INVALID_ID', message: '案件IDの形式が不正です' });
+    return;
+  }
+
+  try {
+    const projectResult = await pool.query(
+      `SELECT p.id, p.status, p.work_date, p.work_name, p.work_title_raw, p.location,
+              p.last_cancel_resend_at,
+              c.id as client_id, c.name as client_name_raw,
+              c.contact_name as client_contact_name, c.contact_title as client_contact_title
+       FROM projects p
+       LEFT JOIN clients c ON p.client_id = c.id
+       WHERE p.id = $1 AND p.deleted_at IS NULL`,
+      [projectId]
+    );
+
+    if (projectResult.rows.length === 0) {
+      res.status(404).json({ error: 'NOT_FOUND', message: '案件が見つかりません' });
+      return;
+    }
+
+    const project = projectResult.rows[0];
+
+    if (project.status !== 'cancelled') {
+      res.status(409).json({ error: 'NOT_CANCELLED', message: 'この案件は中止されていません。中止連絡メールは中止済みの案件のみ再送できます。' });
+      return;
+    }
+
+    // クールダウン（アトミック・送信前に slot を確保）。
+    // isResend は冪等性キーをバイパスするため、このクールダウンが唯一の重複送信防御線。
+    const cooldownClaim = await pool.query(
+      `UPDATE projects SET last_cancel_resend_at = NOW()
+       WHERE id = $1 AND status = 'cancelled'
+         AND (last_cancel_resend_at IS NULL OR last_cancel_resend_at < NOW() - ($2::bigint * INTERVAL '1 millisecond'))
+       RETURNING id`,
+      [projectId, CANCEL_RESEND_COOLDOWN_MS]
+    );
+
+    if (cooldownClaim.rowCount === 0) {
+      let retryAfterSec = Math.ceil(CANCEL_RESEND_COOLDOWN_MS / 1000);
+      if (project.last_cancel_resend_at != null) {
+        const lastResend = project.last_cancel_resend_at instanceof Date
+          ? project.last_cancel_resend_at
+          : new Date(project.last_cancel_resend_at);
+        if (!Number.isNaN(lastResend.getTime())) {
+          const remainSec = Math.ceil((CANCEL_RESEND_COOLDOWN_MS - (Date.now() - lastResend.getTime())) / 1000);
+          if (remainSec > 0) retryAfterSec = remainSec;
+        }
+      }
+      res.status(429).set('Retry-After', String(retryAfterSec)).json({
+        error: 'TOO_MANY_REQUESTS',
+        message: `中止連絡メールの再送は連続して行えません。約${Math.ceil(retryAfterSec / 60)}分後に再度お試しください。`,
+      });
+      return;
+    }
+
+    const adminUser = req.user as { email: string };
+
+    let emailResult = { sent: 0, failed: 0, skipped: 0, warnings: [] as string[] };
+    try {
+      emailResult = await sendProjectCancellationEmails({
+        projectId,
+        companyId: project.client_id || null,
+        companyName: project.client_name_raw || '',
+        contactName: project.client_contact_name || '',
+        contactTitle: project.client_contact_title || '',
+        workDate: toDateString(project.work_date),
+        projectName: project.work_title_raw || project.work_name || '',
+        location: project.location || '',
+        isResend: true,
+      });
+    } catch (mailErr) {
+      console.error('[CANCEL-RESEND] cancellation email error:', mailErr);
+      emailResult.warnings.push('中止連絡メールの再送中にエラーが発生しました');
+    }
+
+    logAudit({
+      req,
+      actorEmail: adminUser.email,
+      action: 'RESEND_CANCELLATION_EMAIL',
+      targetType: 'project',
+      targetId: projectId,
+      payload: { sent: emailResult.sent, failed: emailResult.failed, skipped: emailResult.skipped },
+    });
+
+    res.json({ ok: true, email: emailResult });
+  } catch (error) {
+    handleDbError(res, error, 'Resend cancellation email');
   }
 });
 
