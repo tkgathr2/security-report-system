@@ -152,6 +152,8 @@ function AdminApp() {
       if (response.ok) {
         const data = await response.json()
         setAdmin(data.admin)
+        // カイゼンくんウィジェットへログイン名を引き継ぐ（窓口側の「お名前」入力を不要にする）
+        ;(window as unknown as { kaizenUser?: string }).kaizenUser = data.admin?.email || ''
         fetchDashboardStats()
       }
     } catch {

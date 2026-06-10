@@ -91,6 +91,11 @@ export default function FieldReport() {
   
   const [writerName, setWriterName] = useState('')
   const [writerEmail, setWriterEmail] = useState('')
+
+  // カイゼンくんウィジェットへ記入者名を引き継ぐ（窓口側の「お名前」入力を不要にする）
+  useEffect(() => {
+    if (writerName) (window as unknown as { kaizenUser?: string }).kaizenUser = writerName
+  }, [writerName])
   const [weather, setWeather] = useState('sunny')
   const [guardContents, setGuardContents] = useState<string[]>([])
   const [guardContentsOther, setGuardContentsOther] = useState('')
