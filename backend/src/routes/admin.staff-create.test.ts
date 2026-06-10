@@ -58,11 +58,23 @@ describe('POST /api/admin/staff', () => {
     return { status: res.status, body: (await res.json()) as { error?: string; message?: string } };
   }
 
-  it('カナ名の重複(unique violation 23505)は409と案内メッセージを返す', async () => {
+  it('同じカナ名が既に登録済みなら409と案内メッセージを返す（アプリ側チェック）', async () => {
+    queryMock.mockResolvedValueOnce({ rows: [{ id: 'existing-staff-id' }] });
+
+    const { status, body } = await postStaff({
+      display_name_kanji: '山田 太郎',
+      display_name_kana: 'ヤマダ タロウ',
+    });
+
+    expect(status).toBe(409);
+    expect(body.error).toBe('DUPLICATE');
+    expect(body.message).toContain('同じカタカナ名のキャストが既に登録されています');
+  });
+
+  it('unique violation(23505)が起きた場合も409と案内メッセージを返す（防御的フォールバック）', async () => {
+    queryMock.mockResolvedValueOnce({ rows: [] }); // kana重複チェック: ヒットなし
     queryMock.mockRejectedValueOnce(
-      Object.assign(new Error('duplicate key value violates unique constraint "idx_staff_master_display_name_kana_not_deleted"'), {
-        code: '23505',
-      })
+      Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' })
     );
 
     const { status, body } = await postStaff({
@@ -76,6 +88,7 @@ describe('POST /api/admin/staff', () => {
   });
 
   it('23505以外のDBエラーは従来どおり500を返す', async () => {
+    queryMock.mockResolvedValueOnce({ rows: [] }); // kana重複チェック: ヒットなし
     queryMock.mockRejectedValueOnce(new Error('connection refused'));
 
     const { status, body } = await postStaff({

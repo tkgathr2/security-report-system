@@ -1081,7 +1081,8 @@ function AdminApp() {
       member.display_name_kanji.toLowerCase().includes(queryLower) ||
       member.display_name_kana.toLowerCase().includes(queryLower) ||
       (member.email && member.email.toLowerCase().includes(queryLower)) ||
-      (member.registered_email && member.registered_email.toLowerCase().includes(queryLower))
+      (member.registered_email && member.registered_email.toLowerCase().includes(queryLower)) ||
+      (member.procast_staff_no && member.procast_staff_no.toLowerCase().includes(queryLower))
     )
   })
 

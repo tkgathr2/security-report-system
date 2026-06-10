@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import pool from '../db/pool';
 import { logAudit } from '../utils/auditLog';
 import { requireApiKey } from '../middleware/apiKeyAuth';
+import { resolveStaffForImport } from '../services/staffResolver';
 
 // APIキーまたは管理者JWTで認証する複合ミドルウェア（機械間通信対応）
 function requireAdminOrApiKey(req: Request, res: Response, next: NextFunction): void {
@@ -740,67 +741,23 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                         [castName, workDate, projectInfo.projectId]
                       );
                     }
-                    let staffIdRow = await dbClient.query(
-                      `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
-                      [castName]
-                    );
+                    // \u30b9\u30bf\u30c3\u30d5No\u512a\u5148\u3067\u7167\u5408\uff08\u540c\u59d3\u540c\u540d\u306e\u5225\u4eba\u3092\u540d\u524d\u3067\u5438\u53ce\u3057\u306a\u3044\uff09\u3002\u8a73\u7d30\u306f services/staffResolver.ts
                     const staffKana = castNameKana || castName;
-                    if (!staffIdRow.rows[0]) {
-                      staffIdRow = await dbClient.query(
-                        `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NULL LIMIT 1`,
-                        [staffKana]
-                      );
-                    }
-                    if (!staffIdRow.rows[0]) {
-                      const softDeleted = await dbClient.query(
-                        `SELECT id FROM staff_master WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND deleted_at IS NOT NULL LIMIT 1`,
-                        [staffKana]
-                      );
-                      if (softDeleted.rows[0]) {
-                        await dbClient.query(`UPDATE staff_master SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [softDeleted.rows[0].id]);
-                        staffIdRow = softDeleted;
-                      } else {
-                        const normalizedKana = staffKana.replace(/\s+/g, ' ').replace(/\u3000/g, ' ').trim();
-                        // Use INSERT ... ON CONFLICT DO NOTHING + SELECT fallback
-                        // to handle potential unique constraint on display_name_kana
-                        const newStaff = await dbClient.query(
-                          `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
-                           VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
-                           ON CONFLICT DO NOTHING
-                           RETURNING id`,
-                          [castName, normalizedKana, adminUser.email]
-                        );
-                        if (newStaff.rows[0]) {
-                          staffIdRow = newStaff;
-                          staffAutoAddedCount++;
-                        } else {
-                          // INSERT was skipped due to conflict - fetch existing record
-                          const fallback = await dbClient.query(
-                            `SELECT id FROM staff_master WHERE display_name_kana = $1 LIMIT 1`,
-                            [normalizedKana]
-                          );
-                          if (fallback.rows[0]) {
-                            staffIdRow = fallback;
-                          } else {
-                            // No constraint conflict, record truly missing - try insert without ON CONFLICT
-                            const retryStaff = await dbClient.query(
-                              `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
-                               VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3)
-                               RETURNING id`,
-                              [castName, normalizedKana, adminUser.email]
-                            );
-                            staffIdRow = retryStaff;
-                            staffAutoAddedCount++;
-                          }
-                        }
-                      }
+                    const resolved = await resolveStaffForImport(dbClient, {
+                      staffNo: staffNo ?? null,
+                      castName,
+                      castNameKana: castNameKana || null,
+                      adminEmail: adminUser.email,
+                    });
+                    if (resolved.autoAdded) {
+                      staffAutoAddedCount++;
                     }
                     processedStaffKana.add(staffKana);
                     await dbClient.query(
                       `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
                        VALUES ($1, $2, $3, $4, $5)
                        ON CONFLICT (project_id, staff_no) DO UPDATE SET staff_id = EXCLUDED.staff_id, cast_name = EXCLUDED.cast_name, deleted_at = NULL`,
-                      [projectInfo.projectId, castIdentifier, staffIdRow.rows[0].id, i, castName]
+                      [projectInfo.projectId, castIdentifier, resolved.staffId, i, castName]
                     );
                     projectInfo.casts.add(castIdentifier);
                   }

@@ -239,11 +239,8 @@ async function seedStaffData() {
         const constraintExists = await pool.query(
           `SELECT 1 FROM pg_constraint WHERE conname = 'staff_master_display_name_kana_unique' LIMIT 1`
         );
-        const partialIndexExists = await pool.query(
-          `SELECT 1 FROM pg_indexes WHERE tablename = 'staff_master' AND indexname = 'idx_staff_master_display_name_kana_not_deleted' LIMIT 1`
-        );
 
-        seedDetail += ` kanaUniqueConstraint:${constraintExists.rowCount ?? 0} kanaPartialIndex:${partialIndexExists.rowCount ?? 0}`;
+        seedDetail += ` kanaUniqueConstraint:${constraintExists.rowCount ?? 0}`;
 
         if ((constraintExists.rowCount ?? 0) > 0) {
           await pool.query(
@@ -252,12 +249,16 @@ async function seedStaffData() {
           seedDetail += ' kanaUniqueConstraintDropped:1';
         }
 
-        if ((partialIndexExists.rowCount ?? 0) === 0) {
-          await pool.query(
-            `CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_master_display_name_kana_not_deleted ON staff_master (display_name_kana) WHERE deleted_at IS NULL;`
-          );
-          seedDetail += ' kanaPartialIndexCreated:1';
-        }
+        // スタッフNoキー化(2026-06): 同姓同名の別人を許すため kana の一意indexは廃止。
+        // 識別はprocast_staff_noで行う（migration 1781100000000 と同内容の冪等ガード）。
+        await pool.query(`DROP INDEX IF EXISTS idx_staff_master_display_name_kana_not_deleted;`);
+        await pool.query(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS procast_staff_no TEXT;`);
+        await pool.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_master_procast_staff_no_not_deleted
+           ON staff_master (procast_staff_no)
+           WHERE deleted_at IS NULL AND procast_staff_no IS NOT NULL;`
+        );
+        seedDetail += ' staffNoKeyEnsured:1';
       } catch (schemaErr: unknown) {
         const msg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
         seedDetail += ` kanaSchemaFixErr:${msg}`;
