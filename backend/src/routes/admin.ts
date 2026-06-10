@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
-import { sendUnauthorized, sendNotFound, sendBadRequest, handleDbError } from '../utils/errorHandler';
+import { sendUnauthorized, sendNotFound, sendBadRequest, sendConflict, handleDbError } from '../utils/errorHandler';
 import { isValidEmail, validateStringField, validateArrayItems, MAX_LENGTHS, stripHtmlTags } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
 import { sendLoginUrlEmail } from '../utils/email';
@@ -288,6 +288,11 @@ router.post('/staff', requireAdmin, async (req: Request, res: Response) => {
       staff: result.rows[0]
     });
   } catch (error) {
+    const pgError = error as { code?: string };
+    if (pgError.code === '23505') {
+      sendConflict(res, '同じカタカナ名のキャストが既に登録されています（プロキャストからの取込済みの可能性があります）。キャスト一覧でカナ名を検索して確認してください。');
+      return;
+    }
     handleDbError(res, error, 'Staff create');
   }
 });
