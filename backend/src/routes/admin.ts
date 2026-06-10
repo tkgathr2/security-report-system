@@ -232,6 +232,7 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT sm.id, sm.display_name_kanji, sm.display_name_kana, sm.email, sm.created_at, sm.updated_at,
+              sm.procast_staff_no,
               CASE WHEN sm.email IS NOT NULL AND sm.email != '' THEN sm.email WHEN sm.email = '' THEN NULL ELSE cu.email END as registered_email, cu.id as cast_user_id,
               CASE WHEN cu.pin_hash IS NOT NULL THEN true ELSE false END as has_pin
        FROM staff_master sm
@@ -243,6 +244,7 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
        WHERE sm.deleted_at IS NULL
        UNION ALL
        SELECT cu2.id, cu2.email as display_name_kanji, cu2.email as display_name_kana, cu2.email, cu2.created_at, cu2.updated_at,
+              NULL as procast_staff_no,
               cu2.email as registered_email, cu2.id as cast_user_id,
               true as has_pin
        FROM cast_users cu2
@@ -273,6 +275,18 @@ router.post('/staff', requireAdmin, async (req: Request, res: Response) => {
     if (kanjiErr) { sendBadRequest(res, kanjiErr); return; }
     const kanaErr = validateStringField(display_name_kana, 'カタカナ名', MAX_LENGTHS.PERSON_NAME);
     if (kanaErr) { sendBadRequest(res, kanaErr); return; }
+
+    // kanaの一意indexはスタッフNoキー化(2026-06)で廃止したため、手動登録の重複ガードはここで行う
+    const kanaDup = await pool.query(
+      `SELECT id FROM staff_master
+       WHERE REPLACE(REPLACE(display_name_kana, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
+         AND deleted_at IS NULL LIMIT 1`,
+      [display_name_kana]
+    );
+    if (kanaDup.rows.length > 0) {
+      sendConflict(res, '同じカタカナ名のキャストが既に登録されています（プロキャストからの取込済みの可能性があります）。キャスト一覧でカナ名を検索して確認してください。');
+      return;
+    }
 
     const result = await pool.query(
       `INSERT INTO staff_master (display_name_kanji, display_name_kana)

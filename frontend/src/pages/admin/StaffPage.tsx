@@ -184,6 +184,10 @@ export function StaffPage({
                                                                     <span style={styles.mobileCardValue}>{member.display_name_kana}</span>
                                                                   </div>
                                                                   <div style={styles.mobileCardRow}>
+                                                                    <span style={styles.mobileCardLabel}>スタッフNo</span>
+                                                                    <span style={styles.mobileCardValue}>{member.procast_staff_no || '-'}</span>
+                                                                  </div>
+                                                                  <div style={styles.mobileCardRow}>
                                                                     <span style={styles.mobileCardLabel}>メールアドレス</span>
                                                                     <span style={styles.mobileCardValue}>{member.registered_email || member.email || '-'}</span>
                                                                   </div>
@@ -215,6 +219,7 @@ export function StaffPage({
                                                                   <tr>
                                                                     <th style={styles.th}>氏名（漢字）</th>
                                                                     <th style={styles.th}>氏名（カナ）</th>
+                                                                    <th style={styles.th}>スタッフNo</th>
                                                                     <th style={styles.th}>メールアドレス</th>
                                                                     <th style={{...styles.th, cursor: 'pointer', userSelect: 'none'}} onClick={cyclePinSort}>{pinSortLabel}</th>
                                                                     <th style={styles.th}>登録日</th>
@@ -226,6 +231,7 @@ export function StaffPage({
                                                                     <tr key={member.id} style={styles.tr}>
                                                                       <td style={styles.td}>{member.display_name_kanji}<NewBadge createdAt={member.created_at} /></td>
                                                                       <td style={styles.td}>{member.display_name_kana}</td>
+                                                                      <td style={styles.td}>{member.procast_staff_no || '-'}</td>
                                                                       <td style={styles.td}>{member.registered_email || member.email || '-'}</td>
                                                                       <td style={styles.td}><PinBadge hasPin={member.has_pin} /></td>
                                                                       <td style={styles.td}>{formatDate(member.created_at)}</td>

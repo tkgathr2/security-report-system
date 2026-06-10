@@ -93,6 +93,7 @@ export interface StaffMember {
   id: string
   display_name_kanji: string
   display_name_kana: string
+  procast_staff_no: string | null
   email: string | null
   registered_email: string | null
   cast_user_id: string | null
