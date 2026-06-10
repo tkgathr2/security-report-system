@@ -63,7 +63,9 @@ app.use((req: Request, res: Response, next: () => void) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://storage.googleapis.com; font-src 'self'; connect-src 'self'; frame-ancestors 'none'");
+    // カイゼンくん埋め込みウィジェット（https://kaizen.takagi.bz）のみ追加許可：
+    // script-src=widget.js本体 / img-src=マスコット画像 / frame-src=窓口チャットのiframe。
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://kaizen.takagi.bz; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://storage.googleapis.com https://kaizen.takagi.bz; font-src 'self'; connect-src 'self'; frame-src 'self' https://kaizen.takagi.bz; frame-ancestors 'none'");
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
 });
