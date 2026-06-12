@@ -251,9 +251,10 @@ async function seedStaffData() {
           seedDetail += ' kanaUniqueConstraintDropped:1';
         }
 
-        // スタッフNoキー化(2026-06): 同姓同名の別人を許すため kana の一意indexは廃止。
-        // 識別はprocast_staff_noで行う（migration 1781100000000 と同内容の冪等ガード）。
+        // スタッフNoキー化(2026-06): 同姓同名の別人を許すため名前系の一意indexはすべて廃止。
+        // 識別はprocast_staff_noで行う（migration 1781100000000 / 1781300000000 と同内容の冪等ガード）。
         await pool.query(`DROP INDEX IF EXISTS idx_staff_master_display_name_kana_not_deleted;`);
+        await pool.query(`DROP INDEX IF EXISTS idx_staff_master_name_unique;`);
         await pool.query(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS procast_staff_no TEXT;`);
         await pool.query(
           `CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_master_procast_staff_no_not_deleted
