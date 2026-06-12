@@ -94,6 +94,18 @@ describe('resolveStaffForImport', () => {
     expect(revive).toBeDefined();
   });
 
+  it('新規作成が残存ユニーク制約で弾かれ続けた場合は同名既存レコードへ縮退して取込を止めない', async () => {
+    // 全照合ミス → INSERT2回ともON CONFLICTで空 → 最終フォールバックの名前照合で吸収
+    // 最終フォールバックだけ「Noガードなし + deleted_at IS NULL LIMIT 1 が隣接」で一意に識別できる
+    const { db } = makeDb([
+      { match: /REPLACE\(REPLACE\(display_name_kana[\s\S]*deleted_at IS NULL LIMIT 1/, rows: [{ id: 'staff-fallback' }] },
+    ]);
+
+    const result = await resolveStaffForImport(db, { ...base, staffNo: 'S007' });
+
+    expect(result).toEqual({ staffId: 'staff-fallback', autoAdded: false });
+  });
+
   it('INSERTが一意制約で弾かれた場合は既存レコードを引いて返す（取込レース対応）', async () => {
     let insertCount = 0;
     const calls: Array<{ text: string; params: unknown[] }> = [];

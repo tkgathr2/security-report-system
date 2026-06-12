@@ -140,11 +140,31 @@ export async function resolveStaffForImport(
     }
   }
 
+  // リトライもON CONFLICT DO NOTHINGにする。素のINSERTで23505を出すと
+  // 取込トランザクション全体がabortし、CSV取込が丸ごと失敗するため（2026-06-12障害の教訓）。
   const retried = await db.query(
     `INSERT INTO staff_master (display_name_kanji, display_name_kana, procast_staff_no, created_at, updated_at, created_by)
      VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $4)
+     ON CONFLICT DO NOTHING
      RETURNING id`,
     [castName, normalizedKana, no, adminEmail]
   );
-  return { staffId: (retried.rows[0] as { id: string }).id, autoAdded: true };
+  if (retried.rows[0]) {
+    return { staffId: (retried.rows[0] as { id: string }).id, autoAdded: true };
+  }
+
+  // 最終フォールバック: 想定外のユニーク制約（残存index等）で新規作成が弾かれた場合は、
+  // 取込を止めるより既存の同名レコードへ紐付ける（従来の名前照合と同じ挙動に縮退）。
+  const lastResort = await db.query(
+    `SELECT id FROM staff_master
+     WHERE ${NRM('display_name_kana')} = ${NRM('$1')} AND deleted_at IS NULL LIMIT 1`,
+    [staffKana]
+  );
+  if (lastResort.rows[0]) {
+    return { staffId: (lastResort.rows[0] as { id: string }).id, autoAdded: false };
+  }
+
+  throw new Error(
+    `staffResolver: キャスト「${castName}」(No=${no ?? 'なし'}) を作成も照合もできませんでした。staff_masterの制約を確認してください。`
+  );
 }
