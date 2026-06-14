@@ -256,7 +256,10 @@ function parseDate(dateStr: string): Date | null {
     if (month < 1 || month > 12) return null;
     if (day < 1 || day > 31) return null;
 
-    return new Date(year, month - 1, day);
+    // TZ非依存化: ローカルTZ依存の new Date(year, month-1, day) は
+    // サーバTZが UTC やそれ以外のとき「日付がずれる」事象を起こす。
+    // CSVの日付はカレンダー上の日付（時刻無し）として UTC 0時で固定する。
+    return new Date(Date.UTC(year, month - 1, day));
   }
   return null;
 }
@@ -658,9 +661,11 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
               }
 
               const uniqueUrl = generateUniqueUrl();
-              const urlExpiresAt = new Date(workDate);
-              urlExpiresAt.setDate(urlExpiresAt.getDate() + 3);
-              urlExpiresAt.setHours(23, 59, 59, 999);
+              // workDate は parseDate により UTC 0時の Date。
+              // URL有効期限も UTC 基準で「workDate + 3日 の終わり (UTC 23:59:59.999)」とする。
+              const urlExpiresAt = new Date(workDate.getTime());
+              urlExpiresAt.setUTCDate(urlExpiresAt.getUTCDate() + 3);
+              urlExpiresAt.setUTCHours(23, 59, 59, 999);
 
               const insertResult = await dbClient.query(
                 `INSERT INTO projects (
