@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../db/pool';
 import { CastJwtPayload, AuthenticatedCastRequest } from '../types';
+import { magicLinkHash } from '../utils/magicLinkHash';
+
+export { magicLinkHash };
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
 if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
@@ -73,7 +76,7 @@ export async function authenticateCast(req: Request, res: Response, next: NextFu
     const decoded = jwt.verify(token, AUTH_SECRET, { algorithms: ['HS256'] }) as CastJwtPayload;
 
     const userCheck = await pool.query(
-      'SELECT id FROM cast_users WHERE id = $1 AND magic_link_token IS NOT NULL AND deleted_at IS NULL',
+      'SELECT id, magic_link_token FROM cast_users WHERE id = $1 AND magic_link_token IS NOT NULL AND deleted_at IS NULL',
       [decoded.userId]
     );
     if (userCheck.rows.length === 0) {
@@ -83,6 +86,20 @@ export async function authenticateCast(req: Request, res: Response, next: NextFu
         details: {}
       });
       return;
+    }
+
+    // mlh が JWT に乗っている場合は cast_users.magic_link_token のハッシュと一致確認。
+    // ローテーション後の古いJWTはここで弾く。旧来 mlh 無しJWTは段階移行のため許容する。
+    if (decoded.mlh) {
+      const currentHash = magicLinkHash(userCheck.rows[0].magic_link_token);
+      if (decoded.mlh !== currentHash) {
+        res.status(401).json({
+          error: 'UNAUTHORIZED',
+          message: 'セッションが無効化されています。再度ログインしてください',
+          details: {}
+        });
+        return;
+      }
     }
 
     (req as AuthenticatedCastRequest).castUser = decoded;

@@ -9,6 +9,7 @@ import { isValidEmail, validateStringField, MAX_LENGTHS } from '../utils/validat
 import { logAudit } from '../utils/auditLog';
 import { checkRateLimitDb, recordFailedAttemptDb, resetAttemptsDb } from '../utils/rateLimit';
 import { todayJST, escapeLikePattern } from '../utils/dateUtil';
+import { magicLinkHash } from '../middleware/auth';
 
 const inquiryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -847,7 +848,7 @@ router.post('/field-login', async (req: Request, res: Response) => {
     );
 
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, mlh: magicLinkHash(sessionToken) },
       AUTH_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
@@ -954,7 +955,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
         sendWelcomeEmail(email, staffName || email, baseUrl).catch(err => console.error('[EMAIL] field-register welcome email error:', err));
 
         const token = jwt.sign(
-          { userId: existing.id, email },
+          { userId: existing.id, email, mlh: magicLinkHash(sessionToken) },
           AUTH_SECRET,
           { expiresIn: JWT_EXPIRES_IN }
         );
@@ -1017,7 +1018,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
     sendWelcomeEmail(email, staffName || email, baseUrl).catch(err => console.error('[EMAIL] field-register welcome email error:', err));
 
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, mlh: magicLinkHash(sessionToken) },
       AUTH_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
@@ -1071,8 +1072,17 @@ router.post('/exchange-cast-token', async (req: Request, res: Response) => {
       }
     }
 
+    // exchange 後に magic_link_token をローテーションし、交換に使われたトークンを無効化する。
+    // 同一 cast_token での再交換および古いトークンに紐づくJWTを失効させる（mlh 不一致で弾かれる）。
+    const rotatedSessionToken = crypto.randomBytes(32).toString('hex');
+    const rotatedExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      'UPDATE cast_users SET magic_link_token = $1, magic_link_expires = $2, updated_at = NOW() WHERE id = $3',
+      [rotatedSessionToken, rotatedExpires, user.id]
+    );
+
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, mlh: magicLinkHash(rotatedSessionToken) },
       AUTH_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
