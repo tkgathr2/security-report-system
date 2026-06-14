@@ -155,10 +155,14 @@ export async function resolveStaffForImport(
 
   // 最終フォールバック: 想定外のユニーク制約（残存index等）で新規作成が弾かれた場合は、
   // 取込を止めるより既存の同名レコードへ紐付ける（従来の名前照合と同じ挙動に縮退）。
+  // ただしNo指定がある行で、別Noが付いた同姓同名へ silent混入させない。
+  // → No指定時は (procast_staff_no IS NULL OR procast_staff_no = $no) のレコードのみ許容。
+  const lastResortParams = no ? [staffKana, no] : [staffKana];
+  const lastResortNoGuard = no ? `AND (procast_staff_no IS NULL OR procast_staff_no = $2)` : '';
   const lastResort = await db.query(
     `SELECT id FROM staff_master
-     WHERE ${NRM('display_name_kana')} = ${NRM('$1')} AND deleted_at IS NULL LIMIT 1`,
-    [staffKana]
+     WHERE ${NRM('display_name_kana')} = ${NRM('$1')} AND deleted_at IS NULL ${lastResortNoGuard} LIMIT 1`,
+    lastResortParams
   );
   if (lastResort.rows[0]) {
     return { staffId: (lastResort.rows[0] as { id: string }).id, autoAdded: false };

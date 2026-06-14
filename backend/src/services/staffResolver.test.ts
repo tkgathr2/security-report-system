@@ -94,16 +94,28 @@ describe('resolveStaffForImport', () => {
     expect(revive).toBeDefined();
   });
 
-  it('新規作成が残存ユニーク制約で弾かれ続けた場合は同名既存レコードへ縮退して取込を止めない', async () => {
-    // 全照合ミス → INSERT2回ともON CONFLICTで空 → 最終フォールバックの名前照合で吸収
-    // 最終フォールバックだけ「Noガードなし + deleted_at IS NULL LIMIT 1 が隣接」で一意に識別できる
+  it('新規作成が残存ユニーク制約で弾かれ続け、Noなし行なら同名既存へ縮退して取込を止めない', async () => {
+    // 全照合ミス → INSERT2回ともON CONFLICTで空 → 最終フォールバックの名前照合で吸収。
+    // Noなし行のときだけ name-only で縮退する（Noあり行の lastResort は別人吸収防止のためthrowに変更）。
     const { db } = makeDb([
-      { match: /REPLACE\(REPLACE\(display_name_kana[\s\S]*deleted_at IS NULL LIMIT 1/, rows: [{ id: 'staff-fallback' }] },
+      { match: /REPLACE\(REPLACE\(display_name_kana[\s\S]*deleted_at IS NULL[\s\S]*LIMIT 1/, rows: [{ id: 'staff-fallback' }] },
     ]);
 
-    const result = await resolveStaffForImport(db, { ...base, staffNo: 'S007' });
+    const result = await resolveStaffForImport(db, { ...base, staffNo: null });
 
     expect(result).toEqual({ staffId: 'staff-fallback', autoAdded: false });
+  });
+
+  it('No指定行で全照合ミス時、lastResortは別Noの同名を吸収せずthrowする（同姓同名別人のsilent混入防止）', async () => {
+    // No指定があり、全照合ミス → INSERTも失敗 → lastResortは (procast_staff_no IS NULL OR = $no) ガード付き。
+    // 別Noの同名しか存在しなければマッチせず throw（取込はその行で止まるが、別人を吸収するよりずっとマシ）。
+    const { db } = makeDb([
+      // 別Noが付いた同名は lastResort のガードにより返らない（responderが反応しない）
+    ]);
+
+    await expect(
+      resolveStaffForImport(db, { ...base, staffNo: 'S007' })
+    ).rejects.toThrow(/作成も照合もできませんでした/);
   });
 
   it('INSERTが一意制約で弾かれた場合は既存レコードを引いて返す（取込レース対応）', async () => {
