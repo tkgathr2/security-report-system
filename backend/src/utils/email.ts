@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { escapeHtml } from './validation';
+import { sanitizeEmailSubject } from './emailHeader';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
@@ -18,7 +19,7 @@ export async function sendVerificationEmail(email: string, name: string | null, 
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      subject: `【${APP_NAME}】メールアドレスの確認`,
+      subject: sanitizeEmailSubject(`【${APP_NAME}】メールアドレスの確認`),
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #E67E22;">【${APP_NAME}】メールアドレスの確認</h2>
@@ -63,7 +64,7 @@ export async function sendMagicLinkEmail(email: string, name: string, token: str
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      subject: `【${APP_NAME}】今日の現場を確認`,
+      subject: sanitizeEmailSubject(`【${APP_NAME}】今日の現場を確認`),
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #E67E22;">【${APP_NAME}】今日の現場</h2>
@@ -107,7 +108,7 @@ export async function sendPinResetEmail(email: string, name: string, token: stri
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      subject: `【${APP_NAME}】暗証番号の再設定`,
+      subject: sanitizeEmailSubject(`【${APP_NAME}】暗証番号の再設定`),
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #E67E22;">【${APP_NAME}】暗証番号の再設定</h2>
@@ -151,7 +152,7 @@ export async function sendLoginUrlEmail(email: string, name: string, loginUrl: s
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      subject: `【${APP_NAME}】報告画面のご案内`,
+      subject: sanitizeEmailSubject(`【${APP_NAME}】報告画面のご案内`),
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #E67E22;">【${APP_NAME}】報告画面のご案内</h2>
@@ -211,7 +212,7 @@ export async function sendInquiryNotificationEmail(params: {
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: params.adminEmails,
-      subject: `【${APP_NAME}・問合せ】${categoryLabel} - ${params.senderName}`,
+      subject: sanitizeEmailSubject(`【${APP_NAME}・問合せ】${categoryLabel} - ${params.senderName}`),
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #E67E22;">【${APP_NAME}】ユーザーからの問合せ</h2>
@@ -261,9 +262,11 @@ export async function sendDailyReminderEmail(params: {
   const dateDisplay = `${y}年${parseInt(m)}月${parseInt(d)}日`;
 
   const isEvening = timing === 'evening';
-  const subject = isEvening
-    ? `【ほうこちゃん】明日の現場のご案内📋`
-    : `【ほうこちゃん】本日の現場レポートはこちらから📋`;
+  const subject = sanitizeEmailSubject(
+    isEvening
+      ? `【ほうこちゃん】明日の現場のご案内📋`
+      : `【ほうこちゃん】本日の現場レポートはこちらから📋`
+  );
   const greeting = isEvening
     ? `こんばんは！<br>明日（${dateDisplay}）の現場情報をお届けします🌙`
     : `おはようございます！<br>本日（${dateDisplay}）の現場情報をお届けします🌅`;
@@ -336,7 +339,7 @@ export async function sendWelcomeEmail(email: string, name: string, baseUrl: str
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      subject: `【${APP_NAME}】登録完了のお知らせ`,
+      subject: sanitizeEmailSubject(`【${APP_NAME}】登録完了のお知らせ`),
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #E67E22;">【${APP_NAME}】登録完了</h2>

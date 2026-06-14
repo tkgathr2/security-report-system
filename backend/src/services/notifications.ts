@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { escapeHtml, maskEmail } from '../utils/validation';
+import { sanitizeEmailSubject } from '../utils/emailHeader';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const EMAIL_FROM = process.env.SMTP_FROM || 'noreply@takagi.bz';
@@ -50,7 +51,7 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
     const { data, error } = await resend.emails.send({
       from: EMAIL_FROM,
       to: options.to,
-      subject: options.subject,
+      subject: sanitizeEmailSubject(options.subject),
       text: options.text,
       html: options.html || undefined,
       attachments: options.attachments?.map(att => ({
@@ -338,34 +339,47 @@ export async function sendReportApprovalNotifications(params: {
 
   let adminEmailSent = false;
   if (ADMIN_EMAILS.length > 0) {
-    const adminResult = await sendEmail({
-      to: ADMIN_EMAILS,
-      subject: `【ほうこちゃん・管理者通知】報告書承認 ${params.companyName}／${params.projectName}（${params.workDate}）`,
-      text: `新しい報告書が承認されました。\n\n` +
-        `■ 会社名：${params.companyName}\n` +
-        `■ 作業名称：${params.projectName}\n` +
-        `■ 実施日：${params.workDate}\n` +
-        `■ 実施場所：${params.location}\n` +
-        `■ 監督者：${params.supervisorName}\n` +
-        `■ 記入者：${params.writerName}\n` +
-        `■ 報告書ID：${params.reportId}\n\n` +
-        `詳細は添付のPDFファイルをご確認ください。`,
-      html: `<p><strong>新しい報告書が承認されました。</strong></p>` +
-        `<ul>` +
-        `<li>会社名：${escapeHtml(params.companyName)}</li>` +
-        `<li>作業名称：${escapeHtml(params.projectName)}</li>` +
-        `<li>実施日：${escapeHtml(params.workDate)}</li>` +
-        `<li>実施場所：${escapeHtml(params.location)}</li>` +
-        `<li>監督者：${escapeHtml(params.supervisorName)}</li>` +
-        `<li>記入者：${escapeHtml(params.writerName)}</li>` +
-        `<li>報告書ID：${escapeHtml(params.reportId)}</li>` +
-        `</ul>` +
-        `<p>詳細は添付のPDFファイルをご確認ください。</p>`,
-      attachments
-    });
-    adminEmailSent = adminResult.success;
-    if (!adminResult.success) {
-      warnings.push(`管理者メール送信失敗: ${adminResult.error}`);
+    // 1宛先ずつ並列送信（1件の bounce で他者を巻き込まない）。
+    // 各宛先の成否を個別に評価し、1件でも成功すれば adminEmailSent=true とする。
+    const adminSubject = `【ほうこちゃん・管理者通知】報告書承認 ${params.companyName}／${params.projectName}（${params.workDate}）`;
+    const adminText = `新しい報告書が承認されました。\n\n` +
+      `■ 会社名：${params.companyName}\n` +
+      `■ 作業名称：${params.projectName}\n` +
+      `■ 実施日：${params.workDate}\n` +
+      `■ 実施場所：${params.location}\n` +
+      `■ 監督者：${params.supervisorName}\n` +
+      `■ 記入者：${params.writerName}\n` +
+      `■ 報告書ID：${params.reportId}\n\n` +
+      `詳細は添付のPDFファイルをご確認ください。`;
+    const adminHtml = `<p><strong>新しい報告書が承認されました。</strong></p>` +
+      `<ul>` +
+      `<li>会社名：${escapeHtml(params.companyName)}</li>` +
+      `<li>作業名称：${escapeHtml(params.projectName)}</li>` +
+      `<li>実施日：${escapeHtml(params.workDate)}</li>` +
+      `<li>実施場所：${escapeHtml(params.location)}</li>` +
+      `<li>監督者：${escapeHtml(params.supervisorName)}</li>` +
+      `<li>記入者：${escapeHtml(params.writerName)}</li>` +
+      `<li>報告書ID：${escapeHtml(params.reportId)}</li>` +
+      `</ul>` +
+      `<p>詳細は添付のPDFファイルをご確認ください。</p>`;
+
+    const adminResults = await Promise.all(
+      ADMIN_EMAILS.map(addr =>
+        sendEmail({
+          to: [addr],
+          subject: adminSubject,
+          text: adminText,
+          html: adminHtml,
+          attachments
+        }).then(r => ({ addr, ...r }))
+      )
+    );
+    const successCount = adminResults.filter(r => r.success).length;
+    adminEmailSent = successCount > 0;
+    for (const r of adminResults) {
+      if (!r.success) {
+        warnings.push(`管理者メール送信失敗(${maskEmail(r.addr)}): ${r.error}`);
+      }
     }
   }
 

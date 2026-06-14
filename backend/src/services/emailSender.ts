@@ -12,6 +12,7 @@
 import { Resend } from 'resend';
 import pool from '../db/pool';
 import { escapeHtml, isValidEmail, maskEmail } from '../utils/validation';
+import { sanitizeEmailSubject } from '../utils/emailHeader';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const EMAIL_FROM = process.env.SMTP_FROM || 'noreply@takagi.bz';
@@ -174,7 +175,7 @@ export async function sendEmailWithLog(params: SendEmailWithLogParams): Promise<
       const { data, error } = await resend.emails.send({
         from: EMAIL_FROM,
         to: [recipientEmail],
-        subject,
+        subject: sanitizeEmailSubject(subject),
         text,
         html,
         attachments,
@@ -513,7 +514,7 @@ async function sendCancellationEmailWithLog(params: {
       const { data, error } = await resend.emails.send({
         from: EMAIL_FROM,
         to: [recipientEmail],
-        subject,
+        subject: sanitizeEmailSubject(subject),
         text,
         html,
       });
