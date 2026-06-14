@@ -705,9 +705,14 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                 skippedRowsCount++;
                 continue;
               }
-              const castIdentifier = staffNo || castName;
+              // staff_no が空欄の場合、project_casts.staff_no を castName 単独にすると
+              // 同プロジェクト内の同姓同名2行（別人かもしれない）が ON CONFLICT で一方を
+              // 黙って上書きする。row_index で衝突回避し、両行を保持する。
+              const castIdentifier = staffNo || `${castName}::r${i}`;
 
-              const castDateKey = `${castName}::${dateKey}`;
+              // ダブルブッキング検出キーはスタッフNo優先（同姓同名別人を誤検知しない）。
+              // No未付与のときのみ氏名でキー化する（従来挙動を縮退維持）。
+              const castDateKey = `${staffNo || castName}::${dateKey}`;
               if (castDateAssignments.has(castDateKey)) {
                 const existingWork = castDateAssignments.get(castDateKey)!;
                 errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingWork}」に割り当て済みです（1日1現場まで）` });
@@ -717,16 +722,26 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
               }
 
               if (!castDateAssignments.has(castDateKey) || castDateAssignments.get(castDateKey) === workName) {
+                  // DB側の既存割当チェックも procast_staff_no を優先照合する。
+                  // No指定があればNo一致だけを既存扱い、No空欄行はNo未付与の同名のみを対象にする。
+                  // これにより「同姓同名別人」の row を誤って既存とみなさない。
                   const existingAssignment = await dbClient.query(
                     `SELECT p.work_name FROM project_casts pc
                      JOIN projects p ON pc.project_id = p.id
                      LEFT JOIN staff_master sm ON pc.staff_id = sm.id AND sm.deleted_at IS NULL
-                     WHERE REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
+                     WHERE (
+                       ($4::text IS NOT NULL AND sm.procast_staff_no = $4)
+                       OR (
+                         $4::text IS NULL
+                         AND sm.procast_staff_no IS NULL
+                         AND REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
+                       )
+                     )
                        AND p.work_date = $2
                        AND p.id != $3
                        AND pc.deleted_at IS NULL
                        AND p.deleted_at IS NULL`,
-                    [castName, workDate, projectInfo.projectId]
+                    [castName, workDate, projectInfo.projectId, staffNo || null]
                   );
                   if (existingAssignment.rows.length > 0 && !forceImport) {
                     errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingAssignment.rows[0].work_name}」に割り当て済みです（1日1現場まで）` });
@@ -735,10 +750,21 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                     if (existingAssignment.rows.length > 0) {
                       await dbClient.query(
                         `UPDATE project_casts SET deleted_at = NOW()
-                         WHERE staff_id IN (SELECT sm.id FROM staff_master sm WHERE REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '') AND sm.deleted_at IS NULL)
+                         WHERE staff_id IN (
+                           SELECT sm.id FROM staff_master sm
+                           WHERE (
+                             ($4::text IS NOT NULL AND sm.procast_staff_no = $4)
+                             OR (
+                               $4::text IS NULL
+                               AND sm.procast_staff_no IS NULL
+                               AND REPLACE(REPLACE(sm.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($1, ' ', ''), E'\\u3000', '')
+                             )
+                           )
+                             AND sm.deleted_at IS NULL
+                         )
                            AND project_id IN (SELECT p.id FROM projects p WHERE p.work_date = $2 AND p.id != $3 AND p.deleted_at IS NULL)
                            AND deleted_at IS NULL`,
-                        [castName, workDate, projectInfo.projectId]
+                        [castName, workDate, projectInfo.projectId, staffNo || null]
                       );
                     }
                     // \u30b9\u30bf\u30c3\u30d5No\u512a\u5148\u3067\u7167\u5408\uff08\u540c\u59d3\u540c\u540d\u306e\u5225\u4eba\u3092\u540d\u524d\u3067\u5438\u53ce\u3057\u306a\u3044\uff09\u3002\u8a73\u7d30\u306f services/staffResolver.ts
