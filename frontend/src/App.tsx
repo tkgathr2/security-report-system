@@ -26,6 +26,7 @@ import { ClientsPage } from './pages/admin/ClientsPage'
 import { AccountsPage } from './pages/admin/AccountsPage'
 import { SendLoginUrlPage } from './pages/admin/SendLoginUrlPage'
 import { InquiriesPage } from './pages/admin/InquiriesPage'
+import { ControlBoardPage } from './pages/admin/ControlBoardPage'
 
 
 function AdminApp() {
@@ -1017,6 +1018,7 @@ function AdminApp() {
     if (newScreen === 'import_history') fetchImportHistory(signal)
     if (newScreen === 'clients') fetchClients(signal)
     if (newScreen === 'accounts') { setLoadingAccounts(true); Promise.all([fetchAccessRequests(signal), fetchAdminAccounts(signal)]).finally(() => setLoadingAccounts(false)) }
+    // control_board はページ内部で fetch するため、ここでは何もしない
   }
 
   const formatDate = (dateStr: string) => {
@@ -1379,6 +1381,13 @@ function AdminApp() {
               </button>
             )}
             <button
+              style={screen === 'control_board' ? styles.sidebarItemActive : styles.sidebarItem}
+              onClick={() => navigateTo('control_board')}
+            >
+              <span style={styles.sidebarIcon}>&#128202;</span>
+              <span style={styles.sidebarText}>管制ダッシュボード</span>
+            </button>
+            <button
               style={screen === 'inquiries' ? styles.sidebarItemActive : styles.sidebarItem}
               onClick={() => navigateTo('inquiries')}
             >
@@ -1552,6 +1561,10 @@ function AdminApp() {
 
           {screen === 'inquiries' && (
             <InquiriesPage isMobile={isMobile} />
+          )}
+
+          {screen === 'control_board' && (
+            <ControlBoardPage />
           )}
 
           {screen === 'accounts' && admin?.role === 'super_admin' && (

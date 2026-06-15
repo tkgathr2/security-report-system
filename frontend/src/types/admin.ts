@@ -1,4 +1,62 @@
-export type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients' | 'cast_users' | 'accounts' | 'send_url' | 'inquiries'
+export type Screen = 'dashboard' | 'csv' | 'projects' | 'reports' | 'staff' | 'import_history' | 'clients' | 'cast_users' | 'accounts' | 'send_url' | 'inquiries' | 'control_board'
+
+// ===== 管制ダッシュボード =====
+export interface ControlBoardSite {
+  key: string
+  label: string
+  meta: string
+}
+
+export interface ControlBoardCast {
+  staff_id: string
+  name: string
+  over: boolean
+  handoff: boolean
+}
+
+export interface ControlBoardCell {
+  project_id: string
+  site_key: string
+  shift: 'morning' | 'mid' | 'evening'
+  casts: ControlBoardCast[]
+}
+
+export interface ControlBoardPoolEntry {
+  staff_id: string
+  name: string
+}
+
+export interface ControlBoardWarning {
+  staff_id: string
+  name: string
+  prev: string
+  curr: string
+  site: string
+}
+
+export interface ControlBoardHandover {
+  shift_from: string
+  date: string
+  names: string[]
+  note: string
+}
+
+export interface ControlBoardKpi {
+  sites: number
+  assigned: number
+  pool: number
+  warnings: number
+}
+
+export interface ControlBoardData {
+  date: string
+  sites: ControlBoardSite[]
+  cells: ControlBoardCell[]
+  pool: ControlBoardPoolEntry[]
+  warnings: ControlBoardWarning[]
+  handover: ControlBoardHandover[]
+  kpi: ControlBoardKpi
+}
 
 export interface AdminUser {
   id: string
