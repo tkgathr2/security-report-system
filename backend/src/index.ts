@@ -852,6 +852,16 @@ pool.query(`CREATE TABLE IF NOT EXISTS jwt_token_blacklist (
   .then(() => console.log('[Startup] jwt_token_blacklist table ensured'))
   .catch((err: unknown) => console.error('[Startup] jwt_token_blacklist table creation error:', err));
 
+pool.query(`CREATE TABLE IF NOT EXISTS data_monitor_notifications (
+  target_date DATE NOT NULL,
+  notification_kind TEXT NOT NULL CHECK (notification_kind IN ('pre_day', 'same_day')),
+  notified_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  notified_hour INTEGER NOT NULL,
+  PRIMARY KEY (target_date, notification_kind)
+)`)
+  .then(() => console.log('[Startup] data_monitor_notifications table ensured'))
+  .catch((err: unknown) => console.error('[Startup] data_monitor_notifications table creation error:', err));
+
 seedStaffData()
   .then(() => fixProjectCasts())
   .then(() => cleanupData())
