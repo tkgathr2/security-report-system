@@ -1,0 +1,314 @@
+import { Router, Request, Response } from 'express';
+import pool from '../db/pool';
+import { requireAdmin } from '../middleware/auth';
+import { handleDbError, sendBadRequest } from '../utils/errorHandler';
+
+const router = Router();
+
+export type Shift = 'morning' | 'mid' | 'evening';
+
+// ----- pure functions (テスト対象) -----
+
+/**
+ * start_time('HH:MM' text) からシフト区分を導出する。
+ *  <= '09:00' → morning(朝番)
+ *  <  '17:00' → mid(中番)
+ *  それ以外    → evening(夜番)
+ *  null/空     → mid(中番)
+ * 'HH:MM' は固定長文字列のため辞書順比較が時刻順と一致する。
+ */
+export function deriveShift(startTime: string | null | undefined): Shift {
+  if (startTime == null) return 'mid';
+  const t = String(startTime).trim();
+  if (t === '') return 'mid';
+  if (t <= '09:00') return 'morning';
+  if (t < '17:00') return 'mid';
+  return 'evening';
+}
+
+/**
+ * 現場のキーを生成する。client_name_raw を優先し、無ければ location を使う。
+ * 重複排除・cell との突き合わせに使う安定キー。
+ */
+export function deriveSiteKey(clientNameRaw: string | null | undefined, location: string | null | undefined): string {
+  const raw = (clientNameRaw ?? '').trim();
+  if (raw !== '') return raw;
+  const loc = (location ?? '').trim();
+  return loc;
+}
+
+export interface StaffPlacement {
+  staffId: string | null;
+  name: string;
+  siteKey: string;
+  siteLabel: string;
+  shift: Shift;
+}
+
+export interface WarningEntry {
+  staff_id: string;
+  name: string;
+  prev: string;
+  curr: string;
+  site: string;
+}
+
+/**
+ * 連続勤務警告を導出する pure 関数。
+ * 当日(curr)の朝番に居るキャストが、前日(prev)の夜番にも配置されていれば警告。
+ * staff_id が null のキャストは突き合わせできないため対象外。
+ *
+ * @param currMorning 当日の朝番配置（site 単位で重複しうる）
+ * @param prevEvening 前日の夜番配置
+ * @param currLabel   当日の表示ラベル（例 '6/16朝'）
+ * @param prevLabel   前日の表示ラベル（例 '6/15夜'）
+ * @returns warning エントリと、警告対象の staffId 集合（cell の over フラグ用）
+ */
+export function computeWarnings(
+  currMorning: StaffPlacement[],
+  prevEvening: StaffPlacement[],
+  currLabel: string,
+  prevLabel: string
+): { warnings: WarningEntry[]; warnStaffIds: Set<string> } {
+  const prevEveningIds = new Set(
+    prevEvening.filter((p) => p.staffId != null).map((p) => p.staffId as string)
+  );
+
+  const warnings: WarningEntry[] = [];
+  const warnStaffIds = new Set<string>();
+  const seen = new Set<string>();
+
+  for (const m of currMorning) {
+    if (m.staffId == null) continue;
+    if (!prevEveningIds.has(m.staffId)) continue;
+    if (seen.has(m.staffId)) continue;
+    seen.add(m.staffId);
+    warnStaffIds.add(m.staffId);
+    warnings.push({
+      staff_id: m.staffId,
+      name: m.name,
+      prev: prevLabel,
+      curr: currLabel,
+      site: m.siteLabel,
+    });
+  }
+
+  return { warnings, warnStaffIds };
+}
+
+// ----- ヘルパ -----
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** YYYY-MM-DD の前日を返す（TZ非依存・UTC基準）。 */
+function prevDateStr(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** 'M/D' 形式の短い日付ラベル（warning/handover 用）。 */
+function shortDate(dateStr: string): string {
+  const [, m, d] = dateStr.split('-');
+  return `${parseInt(m, 10)}/${parseInt(d, 10)}`;
+}
+
+interface ProjectRow {
+  project_id: string;
+  client_name_raw: string | null;
+  work_name: string | null;
+  location: string | null;
+  start_time: string | null;
+}
+
+interface CastRow {
+  project_id: string;
+  staff_id: string | null;
+  display_name_kanji: string | null;
+  cast_name: string | null;
+  staff_no: string | null;
+}
+
+function displayName(c: CastRow): string {
+  if (c.display_name_kanji && c.display_name_kanji.trim() !== '') return c.display_name_kanji;
+  if (c.cast_name && c.cast_name.trim() !== '') return c.cast_name;
+  return `No.${c.staff_no ?? ''}`;
+}
+
+// その日の projects と project_casts を取得する。
+const PROJECTS_SQL = `
+  SELECT p.id AS project_id,
+         p.client_name_raw,
+         p.work_name,
+         p.location,
+         p.start_time
+  FROM projects p
+  WHERE p.work_date = $1
+    AND p.deleted_at IS NULL
+    AND p.status IS DISTINCT FROM 'cancelled'
+    AND p.cancelled_at IS NULL
+  ORDER BY p.start_time NULLS LAST, p.created_at ASC`;
+
+const CASTS_SQL = `
+  SELECT pc.project_id,
+         pc.staff_id,
+         pc.staff_no,
+         pc.cast_name,
+         sm.display_name_kanji
+  FROM project_casts pc
+  INNER JOIN projects p ON p.id = pc.project_id
+  LEFT JOIN staff_master sm ON pc.staff_id = sm.id
+  WHERE p.work_date = $1
+    AND p.deleted_at IS NULL
+    AND p.status IS DISTINCT FROM 'cancelled'
+    AND p.cancelled_at IS NULL
+    AND pc.deleted_at IS NULL
+  ORDER BY pc.row_index ASC`;
+
+/** ある日の配置を StaffPlacement[] に展開する（warning 計算用の素材）。 */
+function buildPlacements(projects: ProjectRow[], casts: CastRow[]): StaffPlacement[] {
+  const projById = new Map(projects.map((p) => [p.project_id, p]));
+  const out: StaffPlacement[] = [];
+  for (const c of casts) {
+    const proj = projById.get(c.project_id);
+    if (!proj) continue;
+    const siteKey = deriveSiteKey(proj.client_name_raw, proj.location);
+    const siteLabel = (proj.work_name && proj.work_name.trim() !== '')
+      ? proj.work_name
+      : (proj.client_name_raw && proj.client_name_raw.trim() !== '' ? proj.client_name_raw : siteKey);
+    out.push({
+      staffId: c.staff_id,
+      name: displayName(c),
+      siteKey,
+      siteLabel,
+      shift: deriveShift(proj.start_time),
+    });
+  }
+  return out;
+}
+
+router.get('/', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const date = req.query.date;
+    if (typeof date !== 'string' || !DATE_RE.test(date)) {
+      sendBadRequest(res, 'date は YYYY-MM-DD 形式で指定してください');
+      return;
+    }
+    const prevDate = prevDateStr(date);
+
+    const [projRes, castRes, prevProjRes, prevCastRes, staffRes] = await Promise.all([
+      pool.query(PROJECTS_SQL, [date]),
+      pool.query(CASTS_SQL, [date]),
+      pool.query(PROJECTS_SQL, [prevDate]),
+      pool.query(CASTS_SQL, [prevDate]),
+      pool.query(
+        `SELECT id, display_name_kanji FROM staff_master WHERE deleted_at IS NULL ORDER BY display_name_kana ASC NULLS LAST`
+      ),
+    ]);
+
+    const projects = projRes.rows as ProjectRow[];
+    const casts = castRes.rows as CastRow[];
+    const prevProjects = prevProjRes.rows as ProjectRow[];
+    const prevCasts = prevCastRes.rows as CastRow[];
+
+    // sites: その日の現場(列)。重複排除。
+    const siteMap = new Map<string, { key: string; label: string; meta: string }>();
+    for (const p of projects) {
+      const key = deriveSiteKey(p.client_name_raw, p.location);
+      if (key === '') continue;
+      if (siteMap.has(key)) continue;
+      const label = (p.work_name && p.work_name.trim() !== '')
+        ? p.work_name
+        : (p.client_name_raw && p.client_name_raw.trim() !== '' ? p.client_name_raw : key);
+      siteMap.set(key, { key, label, meta: (p.location ?? '') });
+    }
+    const sites = Array.from(siteMap.values()).map((s) => ({ key: s.key, label: s.label, meta: s.meta }));
+
+    // placements（当日・前日）
+    const currPlacements = buildPlacements(projects, casts);
+    const prevPlacements = buildPlacements(prevProjects, prevCasts);
+
+    const currLabel = `${shortDate(date)}朝`;
+    const prevLabel = `${shortDate(prevDate)}夜`;
+    const currMorning = currPlacements.filter((p) => p.shift === 'morning');
+    const prevEvening = prevPlacements.filter((p) => p.shift === 'evening');
+
+    const { warnings, warnStaffIds } = computeWarnings(currMorning, prevEvening, currLabel, prevLabel);
+
+    // cells: project 単位 × shift で casts をまとめる。
+    const castsByProject = new Map<string, CastRow[]>();
+    for (const c of casts) {
+      const arr = castsByProject.get(c.project_id);
+      if (arr) arr.push(c);
+      else castsByProject.set(c.project_id, [c]);
+    }
+
+    const cells = projects.map((p) => {
+      const siteKey = deriveSiteKey(p.client_name_raw, p.location);
+      const shift = deriveShift(p.start_time);
+      const rows = castsByProject.get(p.project_id) ?? [];
+      const seenForHandoff = new Set<string>();
+      const castsOut = rows.map((c) => {
+        const over = c.staff_id != null && warnStaffIds.has(c.staff_id);
+        // handoff: 夜番セルで、前日夜番にも居る…は別概念。ここでは shift=evening のキャストに handoff を立てる
+        // （翌朝へ引き継ぐ可能性のある夜番在席者）。
+        const handoff = shift === 'evening' && c.staff_id != null && !seenForHandoff.has(c.staff_id);
+        if (handoff && c.staff_id != null) seenForHandoff.add(c.staff_id);
+        return {
+          staff_id: c.staff_id,
+          name: displayName(c),
+          over,
+          handoff,
+        };
+      });
+      return {
+        project_id: p.project_id,
+        site_key: siteKey,
+        shift,
+        casts: castsOut,
+      };
+    });
+
+    // pool: その日どの案件にも配置されていない staff_master（deleted_at IS NULL）
+    const assignedStaffIds = new Set(
+      casts.filter((c) => c.staff_id != null).map((c) => c.staff_id as string)
+    );
+    const poolOut = (staffRes.rows as Array<{ id: string; display_name_kanji: string | null }>)
+      .filter((s) => !assignedStaffIds.has(s.id))
+      .map((s) => ({ staff_id: s.id, name: s.display_name_kanji ?? '' }));
+
+    // handover: 前日夜番の配置者を names に列挙
+    const handoverNames: string[] = [];
+    const seenHandover = new Set<string>();
+    for (const p of prevEvening) {
+      if (p.name === '') continue;
+      if (seenHandover.has(p.name)) continue;
+      seenHandover.add(p.name);
+      handoverNames.push(p.name);
+    }
+    const handover = handoverNames.length > 0
+      ? [{ shift_from: 'evening', date: prevDate, names: handoverNames, note: '翌朝と連続注意' }]
+      : [];
+
+    const assignedCount = assignedStaffIds.size;
+
+    res.json({
+      date,
+      sites,
+      cells,
+      pool: poolOut,
+      warnings,
+      handover,
+      kpi: {
+        sites: sites.length,
+        assigned: assignedCount,
+        pool: poolOut.length,
+        warnings: warnings.length,
+      },
+    });
+  } catch (error) {
+    handleDbError(res, error, 'Control board');
+  }
+});
+
+export default router;
