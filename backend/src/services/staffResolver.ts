@@ -28,8 +28,71 @@ export interface ResolveStaffResult {
   autoAdded: boolean;
 }
 
-// SQL側のスペース正規化（既存取込と同じ規則: 半角/全角スペース除去で比較）
-const NRM = (col: string) => `REPLACE(REPLACE(${col}, ' ', ''), E'\\u3000', '')`;
+// 表記揺れ吸収のための正規化（バグチェックラボ田所High#7対応 2026-06-16）。
+// 半角/全角スペース除去だけだと、ひらがな/カタカナ違い、NFC vs NFD（"ガ" vs "カ+゛"）、
+// 長音「ー/－/‐/−」のゆれ、半角カナを取り逃して別レコードを量産する。
+// Node側のこの実装と、PostgreSQL側の normalize_kana(text) 関数（migration
+// 1781500000000）は完全に同じ出力を返さなければならない（テストで検証）。
+const HIRA_TO_KATA_OFFSET = 0x60; // ぁ(U+3041) → ァ(U+30A1)
+const HIRA_RANGE_START = 0x3041;
+const HIRA_RANGE_END = 0x3096;
+
+// 半角カナ→全角カナ。濁点/半濁点は合成済み（NFC）を返す。
+const HANKAKU_KANA_MAP: Record<string, string> = {
+  'ｦ': 'ヲ', 'ｧ': 'ァ', 'ｨ': 'ィ', 'ｩ': 'ゥ', 'ｪ': 'ェ', 'ｫ': 'ォ',
+  'ｬ': 'ャ', 'ｭ': 'ュ', 'ｮ': 'ョ', 'ｯ': 'ッ',
+  'ｰ': 'ー',
+  'ｱ': 'ア', 'ｲ': 'イ', 'ｳ': 'ウ', 'ｴ': 'エ', 'ｵ': 'オ',
+  'ｶ': 'カ', 'ｷ': 'キ', 'ｸ': 'ク', 'ｹ': 'ケ', 'ｺ': 'コ',
+  'ｻ': 'サ', 'ｼ': 'シ', 'ｽ': 'ス', 'ｾ': 'セ', 'ｿ': 'ソ',
+  'ﾀ': 'タ', 'ﾁ': 'チ', 'ﾂ': 'ツ', 'ﾃ': 'テ', 'ﾄ': 'ト',
+  'ﾅ': 'ナ', 'ﾆ': 'ニ', 'ﾇ': 'ヌ', 'ﾈ': 'ネ', 'ﾉ': 'ノ',
+  'ﾊ': 'ハ', 'ﾋ': 'ヒ', 'ﾌ': 'フ', 'ﾍ': 'ヘ', 'ﾎ': 'ホ',
+  'ﾏ': 'マ', 'ﾐ': 'ミ', 'ﾑ': 'ム', 'ﾒ': 'メ', 'ﾓ': 'モ',
+  'ﾔ': 'ヤ', 'ﾕ': 'ユ', 'ﾖ': 'ヨ',
+  'ﾗ': 'ラ', 'ﾘ': 'リ', 'ﾙ': 'ル', 'ﾚ': 'レ', 'ﾛ': 'ロ',
+  'ﾜ': 'ワ', 'ﾝ': 'ン',
+};
+
+export function normalizeForLookup(input: string | null | undefined): string {
+  if (input == null) return '';
+  // 1) Unicode NFC（"カ"+"゛" → "ガ"、合成形に統一）
+  let s = input.normalize('NFC');
+  // 2) 半角カナ→全角カナ（先に行う。残った濁点/半濁点は次のNFCで合成）
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    const next = s[i + 1];
+    if (HANKAKU_KANA_MAP[ch]) {
+      let mapped = HANKAKU_KANA_MAP[ch];
+      // 濁点(ﾞ U+FF9E)/半濁点(ﾟ U+FF9F)の合成
+      if (next === 'ﾞ') { mapped = mapped + '゙'; i++; }
+      else if (next === 'ﾟ') { mapped = mapped + '゚'; i++; }
+      out += mapped;
+    } else {
+      out += ch;
+    }
+  }
+  s = out.normalize('NFC');
+  // 3) ひらがな→カタカナ
+  let res = '';
+  for (const ch of s) {
+    const cp = ch.codePointAt(0)!;
+    if (cp >= HIRA_RANGE_START && cp <= HIRA_RANGE_END) {
+      res += String.fromCodePoint(cp + HIRA_TO_KATA_OFFSET);
+    } else {
+      res += ch;
+    }
+  }
+  // 4) 長音類の統一（全角ハイフン/半角ハイフン/マイナス → 長音「ー」）
+  res = res.replace(/[‐−－ー-]/g, 'ー');
+  // 5) 半角/全角スペース除去
+  res = res.replace(/[\s　]+/g, '');
+  return res;
+}
+
+// SQL側は normalize_kana() 関数で同じ正規化を行う（migration 1781500000000）。
+const NRM = (col: string) => `normalize_kana(${col})`;
 
 export async function resolveStaffForImport(
   db: DbClient,

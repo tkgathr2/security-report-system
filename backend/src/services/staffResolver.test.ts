@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveStaffForImport, DbClient } from './staffResolver';
+import { resolveStaffForImport, normalizeForLookup, DbClient } from './staffResolver';
 
 // SQLパターンに応じて応答を返すスクリプト式のフェイクDB。
 // 実行されたクエリを記録し、照合順序と更新内容を検証する。
@@ -44,7 +44,7 @@ describe('resolveStaffForImport', () => {
 
   it('Noで見つからない場合はNo未付与の同名キャストに紐付け、Noをバックフィルする', async () => {
     const { db, calls } = makeDb([
-      { match: /REPLACE\(REPLACE\(display_name_kanji/, rows: [{ id: 'staff-2', procast_staff_no: null }] },
+      { match: /normalize_kana\(display_name_kanji/, rows: [{ id: 'staff-2', procast_staff_no: null }] },
     ]);
 
     const result = await resolveStaffForImport(db, { ...base, staffNo: 'S002' });
@@ -98,7 +98,7 @@ describe('resolveStaffForImport', () => {
     // 全照合ミス → INSERT2回ともON CONFLICTで空 → 最終フォールバックの名前照合で吸収。
     // Noなし行のときだけ name-only で縮退する（Noあり行の lastResort は別人吸収防止のためthrowに変更）。
     const { db } = makeDb([
-      { match: /REPLACE\(REPLACE\(display_name_kana[\s\S]*deleted_at IS NULL[\s\S]*LIMIT 1/, rows: [{ id: 'staff-fallback' }] },
+      { match: /normalize_kana\(display_name_kana[\s\S]*deleted_at IS NULL[\s\S]*LIMIT 1/, rows: [{ id: 'staff-fallback' }] },
     ]);
 
     const result = await resolveStaffForImport(db, { ...base, staffNo: null });
@@ -116,6 +116,45 @@ describe('resolveStaffForImport', () => {
     await expect(
       resolveStaffForImport(db, { ...base, staffNo: 'S007' })
     ).rejects.toThrow(/作成も照合もできませんでした/);
+  });
+
+  // バグチェックラボ田所High#7: キャストカナ正規化の表記揺れ吸収（2026-06-16）
+  describe('normalizeForLookup（表記揺れ吸収）', () => {
+    it('ひらがな⇄カタカナを同一視する', () => {
+      expect(normalizeForLookup('やまだ たろう')).toBe(normalizeForLookup('ヤマダ タロウ'));
+    });
+
+    it('NFC合成形と分離形（"ガ" vs "カ+゛"）を同一視する', () => {
+      const composed = 'ガ'; // U+30AC
+      const decomposed = 'ガ'; // U+30AB + U+3099
+      expect(normalizeForLookup(composed)).toBe(normalizeForLookup(decomposed));
+    });
+
+    it('長音「ー/－/‐/−」のゆれを同一視する', () => {
+      expect(normalizeForLookup('ヤマダ ターロウ')).toBe(normalizeForLookup('ヤマダ タ－ロウ'));
+      expect(normalizeForLookup('ターロウ')).toBe(normalizeForLookup('タ‐ロウ'));
+      expect(normalizeForLookup('ターロウ')).toBe(normalizeForLookup('タ−ロウ'));
+    });
+
+    it('半角カナ→全角カナを同一視する（濁点合成含む）', () => {
+      expect(normalizeForLookup('ﾔﾏﾀﾞ ﾀﾛｳ')).toBe(normalizeForLookup('ヤマダ タロウ'));
+      expect(normalizeForLookup('ﾊﾟﾝ')).toBe(normalizeForLookup('パン'));
+    });
+
+    it('半角/全角スペースのゆれを吸収する', () => {
+      expect(normalizeForLookup('ヤマダ タロウ')).toBe(normalizeForLookup('ヤマダ　タロウ'));
+      expect(normalizeForLookup('ヤマダ タロウ')).toBe(normalizeForLookup('ヤマダタロウ'));
+    });
+
+    it('複合パターン（ひらがな+全角空白+半角ハイフン長音）も吸収する', () => {
+      expect(normalizeForLookup('やまだ　た－ろう')).toBe(normalizeForLookup('ヤマダターロウ'));
+    });
+
+    it('空入力・null/undefinedは空文字を返す', () => {
+      expect(normalizeForLookup('')).toBe('');
+      expect(normalizeForLookup(null)).toBe('');
+      expect(normalizeForLookup(undefined)).toBe('');
+    });
   });
 
   it('INSERTが一意制約で弾かれた場合は既存レコードを引いて返す（取込レース対応）', async () => {
