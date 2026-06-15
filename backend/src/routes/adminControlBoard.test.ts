@@ -9,6 +9,8 @@ vi.mock('../db/pool', () => ({
 import {
   deriveShift,
   deriveSiteKey,
+  deriveSiteLabel,
+  UNSET_SITE_KEY,
   computeWarnings,
   StaffPlacement,
 } from './adminControlBoard';
@@ -76,19 +78,43 @@ describe('deriveShift', () => {
   });
 });
 
-describe('deriveSiteKey', () => {
-  it('client_name_raw を優先する', () => {
-    expect(deriveSiteKey('ABC商事', '東京都港区')).toBe('ABC商事');
+describe('deriveSiteKey（現場を一意に識別する複合キー）', () => {
+  it('取引先・所在地・作業名の複合キーになる', () => {
+    expect(deriveSiteKey('ABC商事', '東京都港区', '警備業務')).toBe('ABC商事|東京都港区|警備業務');
   });
 
-  it('client_name_raw が空なら location を使う', () => {
-    expect(deriveSiteKey('', '東京都港区')).toBe('東京都港区');
-    expect(deriveSiteKey(null, '東京都港区')).toBe('東京都港区');
-    expect(deriveSiteKey('   ', '東京都港区')).toBe('東京都港区');
+  // H1a回帰防止：同一取引先でも所在地が違えば別キー（別列）になる＝片方が盤面から消えない
+  it('同一取引先・別所在地は別キー（衝突しない）', () => {
+    const a = deriveSiteKey('大豊工業', '渋谷現場', '警備業務');
+    const b = deriveSiteKey('大豊工業', '新宿現場', '警備業務');
+    expect(a).not.toBe(b);
   });
 
-  it('どちらも空なら空文字', () => {
-    expect(deriveSiteKey(null, null)).toBe('');
+  // H1c回帰防止：表記揺れ(全角半角/空白/㈱)を正規化で同一キーに寄せる＝同一現場が別列に割れない
+  it('表記揺れは正規化で同一キーに寄る', () => {
+    const a = deriveSiteKey('ＡＢＣ商事', '東京都港区', '警備'); // 全角
+    const b = deriveSiteKey('ABC 商事', ' 東京都港区 ', '警備'); // 半角＋空白
+    expect(a).toBe(b);
+  });
+
+  it('所在地のみでもキーになる（取引先空）', () => {
+    expect(deriveSiteKey('', '東京都港区', '')).toBe('|東京都港区|');
+    expect(deriveSiteKey(null, '東京都港区', null)).toBe('|東京都港区|');
+  });
+
+  // H1b回帰防止：すべて空でも番兵キーを返す＝そのキャストが盤面から落ちない
+  it('すべて空なら番兵キー(UNSET_SITE_KEY)', () => {
+    expect(deriveSiteKey(null, null, null)).toBe(UNSET_SITE_KEY);
+    expect(deriveSiteKey('  ', '', '　')).toBe(UNSET_SITE_KEY);
+  });
+});
+
+describe('deriveSiteLabel（列の表示名）', () => {
+  it('作業名→取引先名→所在地→(現場未設定) の順で選ぶ', () => {
+    expect(deriveSiteLabel('ABC商事', '港区', '警備業務')).toBe('警備業務');
+    expect(deriveSiteLabel('ABC商事', '港区', '')).toBe('ABC商事');
+    expect(deriveSiteLabel('', '港区', null)).toBe('港区');
+    expect(deriveSiteLabel(null, null, null)).toBe('(現場未設定)');
   });
 });
 

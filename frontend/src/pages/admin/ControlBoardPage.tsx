@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type {
   ControlBoardData,
   ControlBoardCast,
@@ -46,9 +46,10 @@ const SHIFT_LABEL: Record<string, string> = {
 }
 
 // ===== API から取得 =====
-async function fetchControlBoard(date: string): Promise<ControlBoardData> {
-  const res = await fetch(`/api/admin/control-board?date=${date}`, {
+async function fetchControlBoard(date: string, signal?: AbortSignal): Promise<ControlBoardData> {
+  const res = await fetch(`/api/admin/control-board?date=${encodeURIComponent(date)}`, {
     credentials: 'include',
+    signal,
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
@@ -97,22 +98,30 @@ export function ControlBoardPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async (targetDate: string) => {
+  // 日付連打のレース対策：最新リクエストのみ反映する（古いレスポンスが新しい表示を上書きしない）
+  const reqIdRef = useRef(0)
+
+  const load = useCallback(async (targetDate: string, signal?: AbortSignal) => {
+    const myId = ++reqIdRef.current
     setLoading(true)
     setError(null)
     try {
-      const d = await fetchControlBoard(targetDate)
+      const d = await fetchControlBoard(targetDate, signal)
+      if (reqIdRef.current !== myId) return // 古いレスポンスは破棄
       setData(d)
     } catch (e) {
+      if (signal?.aborted || reqIdRef.current !== myId) return
       setError(e instanceof Error ? e.message : '取得に失敗しました')
       setData(null)
     } finally {
-      setLoading(false)
+      if (reqIdRef.current === myId) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    load(date)
+    const controller = new AbortController()
+    load(date, controller.signal)
+    return () => controller.abort()
   }, [date, load])
 
   // 日付移動
@@ -157,9 +166,17 @@ export function ControlBoardPage() {
     const { sites, cells } = data
 
     // セル引き当て: (site_key, shift) → cell
+    // 同一 (site_key × shift) の cell が複数来ても上書きせずキャストをマージする
+    // （後勝ち上書きだと片方の現場の配置キャストが盤面から消えるため）。
     const cellMap = new Map<string, (typeof cells)[number]>()
     for (const cell of cells) {
-      cellMap.set(`${cell.site_key}::${cell.shift}`, cell)
+      const k = `${cell.site_key}::${cell.shift}`
+      const existing = cellMap.get(k)
+      if (existing) {
+        existing.casts = [...existing.casts, ...cell.casts]
+      } else {
+        cellMap.set(k, { ...cell, casts: [...cell.casts] })
+      }
     }
 
     const shifts: Array<'morning' | 'mid' | 'evening'> = ['morning', 'mid', 'evening']
@@ -263,8 +280,8 @@ export function ControlBoardPage() {
                           borderRight: `1px solid ${C.line}`,
                         }}
                       >
-                        {casts.map((c) => (
-                          <CastTag key={c.staff_id} cast={c} />
+                        {casts.map((c, ci) => (
+                          <CastTag key={`${c.staff_id ?? 'x'}-${ci}`} cast={c} />
                         ))}
                       </div>
                     </td>
