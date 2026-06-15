@@ -27,11 +27,12 @@ export function deriveShift(startTime: string | null | undefined): Shift {
 }
 
 /**
- * 現場のキーを生成する。client_name_raw を優先し、無ければ location を使う。
+ * 現場のキーを生成する。取引先名(clients.name)を優先し、無ければ location を使う。
  * 重複排除・cell との突き合わせに使う安定キー。
+ * ※ projects.client_name_raw は migration 1771200000000 で削除済みのため clients.name を使う。
  */
-export function deriveSiteKey(clientNameRaw: string | null | undefined, location: string | null | undefined): string {
-  const raw = (clientNameRaw ?? '').trim();
+export function deriveSiteKey(clientName: string | null | undefined, location: string | null | undefined): string {
+  const raw = (clientName ?? '').trim();
   if (raw !== '') return raw;
   const loc = (location ?? '').trim();
   return loc;
@@ -115,7 +116,7 @@ function shortDate(dateStr: string): string {
 
 interface ProjectRow {
   project_id: string;
-  client_name_raw: string | null;
+  client_name: string | null;
   work_name: string | null;
   location: string | null;
   start_time: string | null;
@@ -125,24 +126,25 @@ interface CastRow {
   project_id: string;
   staff_id: string | null;
   display_name_kanji: string | null;
-  cast_name: string | null;
   staff_no: string | null;
 }
 
 function displayName(c: CastRow): string {
   if (c.display_name_kanji && c.display_name_kanji.trim() !== '') return c.display_name_kanji;
-  if (c.cast_name && c.cast_name.trim() !== '') return c.cast_name;
   return `No.${c.staff_no ?? ''}`;
 }
 
 // その日の projects と project_casts を取得する。
+// ※ projects.client_name_raw / project_casts.cast_name は migration 1771200000000 で削除済み。
+//   現場名は clients.name（client_id JOIN）、キャスト表示名は staff_master.display_name_kanji を使う。
 const PROJECTS_SQL = `
   SELECT p.id AS project_id,
-         p.client_name_raw,
+         c.name AS client_name,
          p.work_name,
          p.location,
          p.start_time
   FROM projects p
+  LEFT JOIN clients c ON p.client_id = c.id
   WHERE p.work_date = $1
     AND p.deleted_at IS NULL
     AND p.status IS DISTINCT FROM 'cancelled'
@@ -153,7 +155,6 @@ const CASTS_SQL = `
   SELECT pc.project_id,
          pc.staff_id,
          pc.staff_no,
-         pc.cast_name,
          sm.display_name_kanji
   FROM project_casts pc
   INNER JOIN projects p ON p.id = pc.project_id
@@ -172,10 +173,10 @@ function buildPlacements(projects: ProjectRow[], casts: CastRow[]): StaffPlaceme
   for (const c of casts) {
     const proj = projById.get(c.project_id);
     if (!proj) continue;
-    const siteKey = deriveSiteKey(proj.client_name_raw, proj.location);
+    const siteKey = deriveSiteKey(proj.client_name, proj.location);
     const siteLabel = (proj.work_name && proj.work_name.trim() !== '')
       ? proj.work_name
-      : (proj.client_name_raw && proj.client_name_raw.trim() !== '' ? proj.client_name_raw : siteKey);
+      : (proj.client_name && proj.client_name.trim() !== '' ? proj.client_name : siteKey);
     out.push({
       staffId: c.staff_id,
       name: displayName(c),
@@ -214,12 +215,12 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     // sites: その日の現場(列)。重複排除。
     const siteMap = new Map<string, { key: string; label: string; meta: string }>();
     for (const p of projects) {
-      const key = deriveSiteKey(p.client_name_raw, p.location);
+      const key = deriveSiteKey(p.client_name, p.location);
       if (key === '') continue;
       if (siteMap.has(key)) continue;
       const label = (p.work_name && p.work_name.trim() !== '')
         ? p.work_name
-        : (p.client_name_raw && p.client_name_raw.trim() !== '' ? p.client_name_raw : key);
+        : (p.client_name && p.client_name.trim() !== '' ? p.client_name : key);
       siteMap.set(key, { key, label, meta: (p.location ?? '') });
     }
     const sites = Array.from(siteMap.values()).map((s) => ({ key: s.key, label: s.label, meta: s.meta }));
@@ -244,14 +245,13 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     }
 
     const cells = projects.map((p) => {
-      const siteKey = deriveSiteKey(p.client_name_raw, p.location);
+      const siteKey = deriveSiteKey(p.client_name, p.location);
       const shift = deriveShift(p.start_time);
       const rows = castsByProject.get(p.project_id) ?? [];
       const seenForHandoff = new Set<string>();
       const castsOut = rows.map((c) => {
         const over = c.staff_id != null && warnStaffIds.has(c.staff_id);
-        // handoff: 夜番セルで、前日夜番にも居る…は別概念。ここでは shift=evening のキャストに handoff を立てる
-        // （翌朝へ引き継ぐ可能性のある夜番在席者）。
+        // handoff: 夜番セルの在席キャスト（翌朝へ引き継ぐ可能性）に立てる。
         const handoff = shift === 'evening' && c.staff_id != null && !seenForHandoff.has(c.staff_id);
         if (handoff && c.staff_id != null) seenForHandoff.add(c.staff_id);
         return {
