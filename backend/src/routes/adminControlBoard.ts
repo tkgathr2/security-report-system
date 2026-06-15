@@ -10,19 +10,23 @@ export type Shift = 'morning' | 'mid' | 'evening';
 // ----- pure functions (テスト対象) -----
 
 /**
- * start_time('HH:MM' text) からシフト区分を導出する。
- *  <= '09:00' → morning(朝番)
- *  <  '17:00' → mid(中番)
- *  それ以外    → evening(夜番)
- *  null/空     → mid(中番)
- * 'HH:MM' は固定長文字列のため辞書順比較が時刻順と一致する。
+ * start_time('H:MM' / 'HH:MM' text) からシフト区分を導出する。
+ *  <= 09:00 → morning(朝番)
+ *  <  17:00 → mid(中番)
+ *  それ以外  → evening(夜番)
+ *  null/空/不正 → mid(中番)
+ *
+ * ※ start_time は text 型でゼロ埋め保証が無い（CSV取込が生値をtrimするのみ）。
+ *   '9:00' のような1桁時刻でも正しく判定するため、辞書順比較ではなく
+ *   分換算の数値比較を行う（'9:00' を辞書順で見ると evening に誤判定するため）。
  */
 export function deriveShift(startTime: string | null | undefined): Shift {
   if (startTime == null) return 'mid';
-  const t = String(startTime).trim();
-  if (t === '') return 'mid';
-  if (t <= '09:00') return 'morning';
-  if (t < '17:00') return 'mid';
+  const m = String(startTime).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return 'mid';
+  const minutes = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  if (minutes <= 9 * 60) return 'morning'; // <= 09:00
+  if (minutes < 17 * 60) return 'mid'; // < 17:00
   return 'evening';
 }
 
