@@ -1,7 +1,7 @@
-import { sendCompanyNotificationEmails } from '../services/emailSender';
+import { sendCompanyNotificationEmails, sendWriterAndAdminNotifications } from '../services/emailSender';
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
-import { sendReportApprovalNotifications, sendSlackNotification, uploadPdfToSlack } from '../services/notifications';
+import { sendSlackNotification, uploadPdfToSlack } from '../services/notifications';
 import { generateReportPdf } from '../services/pdfGenerator';
 import { authenticateCast, requireAdmin } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
@@ -462,15 +462,9 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       // 新フラグONなら旧クライアント送信を無効化（writer/admin通知は旧経路のまま残す）
       const skipLegacyClientEmail = newEmailNotificationEnabled || !clientEmailEnabled;
 
-      // メール通知（独立したtry-catch）
+      // メール通知（writer/admin）— emailSender 経由で1宛先ずつ email_logs に個別記録（田所Critical#3対策）。
+      // 取引先（client）通知は下記の sendCompanyNotificationEmails が処理する（相互排他は維持）。
       try {
-        let clientEmails: string[] = Array.isArray(project.client_emails) ? project.client_emails : [];
-        if (clientEmails.length === 0 && project.contact_email) {
-          clientEmails = [project.contact_email];
-        }
-        const castEmail = castUser.email;
-        const displayWriterName = resolvedWriterName;
-
         if (skipLegacyClientEmail) {
           if (newEmailNotificationEnabled) {
             console.log(`[ASYNC] New email notification (company_emails) is ENABLED. Skipping legacy client email to avoid duplicate send for report ${reportId}`);
@@ -479,27 +473,25 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           }
         }
 
-        const notificationResult = await sendReportApprovalNotifications({
+        const notificationResult = await sendWriterAndAdminNotifications({
           reportId,
+          companyId: project.client_id || null,
           companyName: project.client_name_raw,
           contactName: project.client_contact_name || '',
           contactTitle: project.client_contact_title || '',
           clientAddress: project.client_address || '',
           workDate: workDateStr,
           projectName: project.work_title_raw || project.work_name || '',
-          clientEmails,
-          writerEmail: castEmail,
-          writerName: displayWriterName,
+          writerEmail: castUser.email,
+          writerName: resolvedWriterName,
           supervisorName: supervisor_name || '',
           location: project.location || '',
-          pdfBytes: pdfBuffer,
-          skipSlack: true,
-          skipClientEmail: skipLegacyClientEmail
+          pdfBuffer,
         });
 
-        console.log(`[ASYNC] Email notifications sent for report ${reportId}:`, notificationResult);
+        console.log(`[ASYNC] Writer/Admin email notifications for report ${reportId}:`, notificationResult);
       } catch (emailError) {
-        console.error(`[ASYNC] Email notification failed for report ${reportId}:`, emailError);
+        console.error(`[ASYNC] Writer/Admin email notification failed for report ${reportId}:`, emailError);
       }
 
       // 新機能: company_emails経由での取引先メール送信（冪等性・リトライ・ログ記録付き）

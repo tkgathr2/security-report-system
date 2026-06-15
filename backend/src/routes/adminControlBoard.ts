@@ -30,16 +30,41 @@ export function deriveShift(startTime: string | null | undefined): Shift {
   return 'evening';
 }
 
+/** 文字列を正規化（NFKC＋全空白除去）。表記揺れ(全角半角/㈱⇄(株)/空白)を吸収しキーの衝突・分割を防ぐ。 */
+function normalizeForKey(s: string | null | undefined): string {
+  return (s ?? '').normalize('NFKC').replace(/[\s　]/g, '');
+}
+
+/** すべて空の現場を受ける番兵キー（盤面から落とさず「(現場未設定)」列に集約）。 */
+export const UNSET_SITE_KEY = '__unset__';
+
 /**
- * 現場のキーを生成する。取引先名(clients.name)を優先し、無ければ location を使う。
- * 重複排除・cell との突き合わせに使う安定キー。
+ * 現場を一意に識別するキーを生成する（盤面の「列」の同定に使う）。
+ * 取引先名(clients.name)・所在地(location)・作業名(work_name)の複合＋正規化。
+ *  - 同一取引先の別現場(所在地/作業違い)を別キーにする（取引先名だけだと衝突して片方が盤面から消えるため）。
+ *  - 表記揺れ(全角半角/異体字/空白)は正規化で同一キーに寄せる（同一現場が別列に割れるのを防ぐ）。
+ *  - すべて空なら UNSET_SITE_KEY を返し、「(現場未設定)」列で受ける（silent drop しない）。
  * ※ projects.client_name_raw は migration 1771200000000 で削除済みのため clients.name を使う。
  */
-export function deriveSiteKey(clientName: string | null | undefined, location: string | null | undefined): string {
-  const raw = (clientName ?? '').trim();
-  if (raw !== '') return raw;
-  const loc = (location ?? '').trim();
-  return loc;
+export function deriveSiteKey(
+  clientName: string | null | undefined,
+  location: string | null | undefined,
+  workName?: string | null | undefined
+): string {
+  const key = [normalizeForKey(clientName), normalizeForKey(location), normalizeForKey(workName)].join('|');
+  return key === '||' ? UNSET_SITE_KEY : key;
+}
+
+/** 列の表示ラベル。作業名→取引先名→所在地→「(現場未設定)」の順で人が読める名前を選ぶ。 */
+export function deriveSiteLabel(
+  clientName: string | null | undefined,
+  location: string | null | undefined,
+  workName?: string | null | undefined
+): string {
+  const w = (workName ?? '').trim();
+  const c = (clientName ?? '').trim();
+  const l = (location ?? '').trim();
+  return w || c || l || '(現場未設定)';
 }
 
 export interface StaffPlacement {
@@ -168,7 +193,7 @@ const CASTS_SQL = `
     AND p.status IS DISTINCT FROM 'cancelled'
     AND p.cancelled_at IS NULL
     AND pc.deleted_at IS NULL
-  ORDER BY pc.row_index ASC`;
+  ORDER BY pc.row_index ASC NULLS LAST, pc.id ASC`;
 
 /** ある日の配置を StaffPlacement[] に展開する（warning 計算用の素材）。 */
 function buildPlacements(projects: ProjectRow[], casts: CastRow[]): StaffPlacement[] {
@@ -177,10 +202,8 @@ function buildPlacements(projects: ProjectRow[], casts: CastRow[]): StaffPlaceme
   for (const c of casts) {
     const proj = projById.get(c.project_id);
     if (!proj) continue;
-    const siteKey = deriveSiteKey(proj.client_name, proj.location);
-    const siteLabel = (proj.work_name && proj.work_name.trim() !== '')
-      ? proj.work_name
-      : (proj.client_name && proj.client_name.trim() !== '' ? proj.client_name : siteKey);
+    const siteKey = deriveSiteKey(proj.client_name, proj.location, proj.work_name);
+    const siteLabel = deriveSiteLabel(proj.client_name, proj.location, proj.work_name);
     out.push({
       staffId: c.staff_id,
       name: displayName(c),
@@ -219,13 +242,11 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     // sites: その日の現場(列)。重複排除。
     const siteMap = new Map<string, { key: string; label: string; meta: string }>();
     for (const p of projects) {
-      const key = deriveSiteKey(p.client_name, p.location);
-      if (key === '') continue;
+      const key = deriveSiteKey(p.client_name, p.location, p.work_name);
       if (siteMap.has(key)) continue;
-      const label = (p.work_name && p.work_name.trim() !== '')
-        ? p.work_name
-        : (p.client_name && p.client_name.trim() !== '' ? p.client_name : key);
-      siteMap.set(key, { key, label, meta: (p.location ?? '') });
+      const label = deriveSiteLabel(p.client_name, p.location, p.work_name);
+      const meta = (p.location ?? '').trim() || (p.client_name ?? '').trim();
+      siteMap.set(key, { key, label, meta });
     }
     const sites = Array.from(siteMap.values()).map((s) => ({ key: s.key, label: s.label, meta: s.meta }));
 
@@ -249,7 +270,7 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     }
 
     const cells = projects.map((p) => {
-      const siteKey = deriveSiteKey(p.client_name, p.location);
+      const siteKey = deriveSiteKey(p.client_name, p.location, p.work_name);
       const shift = deriveShift(p.start_time);
       const rows = castsByProject.get(p.project_id) ?? [];
       const seenForHandoff = new Set<string>();
@@ -286,8 +307,11 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     const seenHandover = new Set<string>();
     for (const p of prevEvening) {
       if (p.name === '') continue;
-      if (seenHandover.has(p.name)) continue;
-      seenHandover.add(p.name);
+      // 同一人物の重複排除は staff_id 基準（同姓同名の別人を name で潰さない）。
+      // staff_id が null のキャストは突き合わせ不可のため name 基準にフォールバック。
+      const dedupKey = p.staffId != null ? `id:${p.staffId}` : `name:${p.name}`;
+      if (seenHandover.has(dedupKey)) continue;
+      seenHandover.add(dedupKey);
       handoverNames.push(p.name);
     }
     const handover = handoverNames.length > 0

@@ -215,6 +215,14 @@ const ADMIN_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAILS || '')
   .map(e => e.trim())
   .filter(e => e && emailRegex.test(e));
 
+/**
+ * @deprecated 2026-06-16: emailSender.sendWriterAndAdminNotifications + sendCompanyNotificationEmails
+ *   へ全面切替済み（reports.ts / adminReports.ts はもう呼ばない）。
+ *   旧経路は email_logs に成否を残さないため、田所Critical#3（承認したがメール飛んでない状態が
+ *   DBから追跡不能）対策として廃止。コードは後方互換・将来再利用可能性のために保持するが、
+ *   新規呼び出しは禁止。新規実装は emailSender 系を使うこと。
+ *   この関数自体はどこからも呼ばれない孤児関数（orphan）。
+ */
 export async function sendReportApprovalNotifications(params: {
   reportId: string;
   companyName: string;

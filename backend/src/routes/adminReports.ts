@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
-import { sendReportApprovalNotifications, uploadPdfToSlack, sendSlackNotification } from '../services/notifications';
-import { sendCompanyNotificationEmails } from '../services/emailSender';
+import { uploadPdfToSlack, sendSlackNotification } from '../services/notifications';
+import { sendCompanyNotificationEmails, sendWriterAndAdminNotifications, sendEmailWithLog } from '../services/emailSender';
 import { logAudit } from '../utils/auditLog';
 import { generateReportPdf } from '../services/pdfGenerator';
 import type { PdfLayout, PdfDesign } from '../services/pdfGenerator';
@@ -358,32 +358,71 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
       }
     }
 
-    let emailResult = { emailSent: false, castEmailSent: false, adminEmailSent: false, warnings: [] as string[] };
+    let writerSent = false;
+    let adminSent = false;
+    let emailWarnings: string[] = [];
     let companyEmailWarnings: string[] = [];
     if (pdfOk) {
       // 承認時と同じフラグ分岐に揃える（再送がフラグを無視して旧経路へ流れる不整合を解消）
       const clientEmailEnabled = await isSettingEnabled('client_email_enabled');
       const newEmailNotificationEnabled = await isSettingEnabled('email_notification_enabled');
-      // 新フラグONなら旧クライアント送信を無効化（writer/admin通知は旧経路のまま残す・二重送信防止）
+      // 新フラグONなら旧クライアント送信を無効化（writer/admin通知は emailSender 経由・二重送信防止）
       const skipLegacyClientEmail = newEmailNotificationEnabled || !clientEmailEnabled;
 
-      emailResult = await sendReportApprovalNotifications({
+      // writer/admin は emailSender 経由で email_logs に記録（田所Critical#3対策）
+      const writerAdminResult = await sendWriterAndAdminNotifications({
         reportId,
+        companyId: report.client_id || null,
         companyName: report.client_name_raw,
         contactName: report.client_contact_name || '',
         contactTitle: report.client_contact_title || '',
         clientAddress: report.client_address || '',
         workDate: workDateStr,
         projectName,
-        clientEmails: report.client_emails || [],
         writerEmail,
         writerName: report.writer_name || '',
         supervisorName: report.supervisor_name || '',
         location: report.location || '',
-        pdfBytes: pdfBuffer,
-        skipSlack: true,
-        skipClientEmail: skipLegacyClientEmail
+        pdfBuffer,
+        isResend: true,
       });
+      writerSent = writerAdminResult.writerSent;
+      adminSent = writerAdminResult.adminSent;
+      emailWarnings = writerAdminResult.warnings;
+
+      // 旧クライアントメール経路を使うケース（新フラグOFF かつ client_email_enabled=ON）。
+      // 既存挙動維持のため legacy path も残すが、emailSender 経由で client 送信に切替える。
+      if (!skipLegacyClientEmail) {
+        const clientList: string[] = Array.isArray(report.client_emails) ? report.client_emails : [];
+        for (const addr of clientList) {
+          try {
+            const r = await sendEmailWithLog({
+              reportId,
+              companyId: report.client_id || null,
+              recipientEmail: addr,
+              recipientType: 'client',
+              companyName: report.client_name_raw,
+              contactName: report.client_contact_name || '',
+              contactTitle: report.client_contact_title || '',
+              clientAddress: report.client_address || '',
+              workDate: workDateStr,
+              projectName,
+              writerName: report.writer_name || '',
+              supervisorName: report.supervisor_name || '',
+              location: report.location || '',
+              pdfBuffer,
+              isResend: true,
+              enforceFeatureFlag: false,
+            });
+            if (!r.success) {
+              emailWarnings.push(`クライアントメール送信失敗: ${r.error}`);
+            }
+          } catch (clientErr) {
+            console.error('[RESEND] Legacy client email failed:', clientErr);
+            emailWarnings.push('クライアントメール送信失敗（例外）');
+          }
+        }
+      }
 
       // 新経路ONなら取引先へは company_emails 経由で再送（冪等性キーに resend サフィックス付き）
       if (newEmailNotificationEnabled && report.client_id) {
@@ -412,15 +451,20 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
     }
 
     const adminUser = req.user as { email: string };
-    logAudit({ req, actorEmail: adminUser.email, action: 'RESEND_REPORT', targetType: 'report', targetId: reportId, payload: { slack_sent: slackSent, email_sent: emailResult.emailSent } });
+    logAudit({ req, actorEmail: adminUser.email, action: 'RESEND_REPORT', targetType: 'report', targetId: reportId, payload: { slack_sent: slackSent, writer_sent: writerSent, admin_sent: adminSent } });
 
     res.json({
       ok: true,
       slackSent,
-      emailSent: emailResult.emailSent,
-      castEmailSent: emailResult.castEmailSent,
-      adminEmailSent: emailResult.adminEmailSent,
-      warnings: [...emailResult.warnings, ...companyEmailWarnings]
+      // 旧フィールド名と互換: emailSent は「取引先（client）メール送信」相当として扱われていたが、
+      // 切替後は writer/admin が emailSender 経由・client は company_emails 経由のため、
+      // 後方互換のため writerSent をそのまま返す（管理画面側は新名も読めるよう両方返す）。
+      emailSent: writerSent,
+      castEmailSent: writerSent,
+      adminEmailSent: adminSent,
+      writerSent,
+      adminSent,
+      warnings: [...emailWarnings, ...companyEmailWarnings]
     });
   } catch (error) {
     console.error('[RESEND] Error:', error);

@@ -315,6 +315,113 @@ export async function sendCompanyNotificationEmails(params: {
   return { sent, failed, skipped, warnings };
 }
 
+// --- ②' 報告書承認時の writer / admin 通知（email_logs 記録付き・冪等・リトライ付き） ---
+// 旧 notifications.ts:sendReportApprovalNotifications は setImmediate 内で発火し、
+// admin/writer 宛の送信成否が email_logs に一切残らないため、田所Critical#3 で「承認したが
+// メール飛んでいない」状態が DB から追跡不能だった。この関数で writer / admin 通知を
+// emailSender.sendEmailWithLog 経由に切替え、各宛先1件ずつ email_logs に記録する。
+//
+// 取引先（client）通知は sendCompanyNotificationEmails（既存）に任せるためここでは扱わない。
+// 旧 sendReportApprovalNotifications 同様、email_notification_enabled フラグの影響を writer/admin
+// は受けない（既存挙動：フラグOFFでも admin/writer 通知は飛ぶ）。
+const ADMIN_EMAIL_REGEX = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+function resolveAdminEmails(): string[] {
+  return (process.env.ADMIN_NOTIFICATION_EMAILS || '')
+    .split(',')
+    .map(e => e.trim())
+    .filter(e => e && ADMIN_EMAIL_REGEX.test(e));
+}
+
+export async function sendWriterAndAdminNotifications(params: {
+  reportId: string;
+  companyId: string | null;
+  companyName: string;
+  contactName: string;
+  contactTitle: string;
+  clientAddress: string;
+  workDate: string;
+  projectName: string;
+  writerEmail: string;
+  writerName: string;
+  supervisorName: string;
+  location: string;
+  pdfBuffer: Buffer;
+  isResend?: boolean;
+}): Promise<{
+  writerSent: boolean;
+  adminSent: boolean;
+  warnings: string[];
+}> {
+  const warnings: string[] = [];
+  let writerSent = false;
+  let adminSent = false;
+
+  // writer（キャスト）通知
+  if (params.writerEmail) {
+    const result = await sendEmailWithLog({
+      reportId: params.reportId,
+      companyId: params.companyId,
+      recipientEmail: params.writerEmail,
+      recipientType: 'writer',
+      companyName: params.companyName,
+      contactName: params.contactName,
+      contactTitle: params.contactTitle,
+      clientAddress: params.clientAddress,
+      workDate: params.workDate,
+      projectName: params.projectName,
+      writerName: params.writerName,
+      supervisorName: params.supervisorName,
+      location: params.location,
+      pdfBuffer: params.pdfBuffer,
+      isResend: params.isResend,
+      // writer/admin は email_notification_enabled フラグの影響を受けない（既存挙動維持）
+      enforceFeatureFlag: false,
+    });
+    if (result.success) {
+      writerSent = true;
+    } else {
+      warnings.push(`キャストメール送信失敗 (${maskEmail(params.writerEmail)}): ${result.error}`);
+    }
+  }
+
+  // 管理者通知（ADMIN_NOTIFICATION_EMAILS）。1宛先ずつ個別送信＋email_logs個別記録。
+  // 1件の bounce が他者を巻き込まないよう並列。1件でも成功すれば adminSent=true。
+  const adminEmails = resolveAdminEmails();
+  if (adminEmails.length > 0) {
+    const adminResults = await Promise.all(
+      adminEmails.map(addr =>
+        sendEmailWithLog({
+          reportId: params.reportId,
+          companyId: params.companyId,
+          recipientEmail: addr,
+          recipientType: 'admin',
+          companyName: params.companyName,
+          contactName: params.contactName,
+          contactTitle: params.contactTitle,
+          clientAddress: params.clientAddress,
+          workDate: params.workDate,
+          projectName: params.projectName,
+          writerName: params.writerName,
+          supervisorName: params.supervisorName,
+          location: params.location,
+          pdfBuffer: params.pdfBuffer,
+          isResend: params.isResend,
+          enforceFeatureFlag: false,
+        }).then(r => ({ addr, ...r }))
+      )
+    );
+    const successCount = adminResults.filter(r => r.success).length;
+    adminSent = successCount > 0;
+    for (const r of adminResults) {
+      if (!r.success) {
+        warnings.push(`管理者メール送信失敗 (${maskEmail(r.addr)}): ${r.error}`);
+      }
+    }
+  }
+
+  return { writerSent, adminSent, warnings };
+}
+
 // --- ③ 案件取消（現場の中止）連絡メール ---
 
 interface CancellationEmailData {
