@@ -53,6 +53,27 @@ describe('deriveShift', () => {
   it('前後空白は trim される', () => {
     expect(deriveShift(' 09:00 ')).toBe('morning');
   });
+
+  // 回帰防止：1桁時刻(ゼロ埋めなし)でも正しく判定する（辞書順比較の罠）
+  it('9:00（1桁時）は morning', () => {
+    expect(deriveShift('9:00')).toBe('morning');
+  });
+
+  it('8:30（1桁時）は morning', () => {
+    expect(deriveShift('8:30')).toBe('morning');
+  });
+
+  it('7:00（1桁時）は morning', () => {
+    expect(deriveShift('7:00')).toBe('morning');
+  });
+
+  it('9:30（1桁時・09:00超）は mid', () => {
+    expect(deriveShift('9:30')).toBe('mid');
+  });
+
+  it('不正な値(時刻でない)は mid', () => {
+    expect(deriveShift('あ')).toBe('mid');
+  });
 });
 
 describe('deriveSiteKey', () => {
