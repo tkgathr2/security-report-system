@@ -103,6 +103,101 @@ function CastTag({ cast }: { cast: ControlBoardCast }) {
   )
 }
 
+// ===== 下部ドック：自動管制システムと会話 =====
+interface ChatMsg { role: 'user' | 'assistant'; text: string }
+
+function ChatDock({ onMutated }: { onMutated: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const [msgs, setMsgs] = useState<ChatMsg[]>([
+    {
+      role: 'assistant',
+      text:
+        'こんにちは。自動管制システムです。話すだけで覚えます。例：「中村さんは1人立ちOK」「川面さんは夜勤NG」「AさんとBさんは組ませないで」。質問もどうぞ（例：「中村さんは1人立ちできる？」）。',
+    },
+  ])
+  const listRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
+  }, [msgs, open])
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || sending) return
+    setInput('')
+    setMsgs((m) => [...m, { role: 'user', text }])
+    setSending(true)
+    try {
+      const res = await fetch('/api/admin/control-chat', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const d = (await res.json()) as { reply: string; mutated: boolean }
+      setMsgs((m) => [...m, { role: 'assistant', text: d.reply }])
+      if (d.mutated) onMutated()
+    } catch {
+      setMsgs((m) => [...m, { role: 'assistant', text: '送信に失敗しました。少し待って再度お試しください。' }])
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const dockStyle: React.CSSProperties = {
+    position: 'fixed', right: 20, bottom: 20, width: 360, maxWidth: 'calc(100vw - 40px)',
+    background: '#fff', border: `1px solid ${C.lineStrong}`, borderRadius: 14,
+    boxShadow: '0 8px 30px rgba(0,0,0,0.16)', fontFamily: C.font, zIndex: 1000, overflow: 'hidden',
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          position: 'fixed', right: 20, bottom: 20, zIndex: 1000,
+          background: C.blue, color: '#fff', border: 'none', borderRadius: 24,
+          padding: '12px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+          boxShadow: '0 6px 20px rgba(37,99,235,0.4)', fontFamily: C.font,
+        }}
+      >
+        管制アシスタントと話す
+      </button>
+    )
+  }
+
+  return (
+    <div style={dockStyle}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', borderBottom: `1px solid ${C.line}`, background: C.blueBg }}>
+        <strong style={{ fontSize: 14, color: C.text }}>自動管制システム</strong>
+        <button onClick={() => setOpen(false)} style={{ border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.sub, lineHeight: 1 }}>×</button>
+      </div>
+      <div ref={listRef} style={{ height: 320, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {msgs.map((m, i) => (
+          <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', background: m.role === 'user' ? C.blue : C.tag, color: m.role === 'user' ? '#fff' : C.text, padding: '8px 11px', borderRadius: 11, fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+            {m.text}
+          </div>
+        ))}
+        {sending && <div style={{ alignSelf: 'flex-start', color: C.sub, fontSize: 12 }}>考えています…</div>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: `1px solid ${C.line}` }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) send() }}
+          placeholder="例：中村さんは1人立ちOK"
+          disabled={sending}
+          style={{ flex: 1, border: `1px solid ${C.lineStrong}`, borderRadius: 9, padding: '9px 11px', fontSize: 13, fontFamily: C.font }}
+        />
+        <button onClick={send} disabled={sending || !input.trim()} style={{ border: 'none', background: C.blue, color: '#fff', borderRadius: 9, padding: '0 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: sending || !input.trim() ? 0.5 : 1 }}>送信</button>
+      </div>
+    </div>
+  )
+}
+
 // ===== メインコンポーネント =====
 export function ControlBoardPage() {
   const [date, setDate] = useState<string>(todayJST)
@@ -651,6 +746,9 @@ export function ControlBoardPage() {
 
       {/* メインボディ */}
       {renderBody()}
+
+      {/* 下部ドック：自動管制システムと会話（覚えさせる／質問する） */}
+      <ChatDock onMutated={() => load(date)} />
     </div>
   )
 }
