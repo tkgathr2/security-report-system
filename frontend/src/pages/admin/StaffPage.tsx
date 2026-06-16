@@ -418,6 +418,193 @@ function CompatSection({ staff }: CompatSectionProps) {
   )
 }
 
+// ===== 過去データから学ぶ（管制ナレッジ学習アナライザ）セクション =====
+interface LearnSoloItem { staff_id: string; name: string | null; solo_count: number; total_count: number }
+interface LearnNightItem { staff_id: string; name: string | null; evening_count: number }
+interface LearnPairItem {
+  staff_a_id: string; staff_a_name: string | null
+  staff_b_id: string; staff_b_name: string | null
+  together_count: number
+}
+interface LearnSuggestions {
+  days: number
+  counts: { solo: number; night: number; pairs: number }
+  suggestions: { solo: LearnSoloItem[]; night: LearnNightItem[]; pairs: LearnPairItem[] }
+}
+
+function LearnSection() {
+  const [data, setData] = useState<LearnSuggestions | null>(null)
+  const [days, setDays] = useState(30)
+  const [loading, setLoading] = useState(false)
+  const [applying, setApplying] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [soloSel, setSoloSel] = useState<Set<string>>(new Set())
+  const [nightSel, setNightSel] = useState<Set<string>>(new Set())
+  const [pairSel, setPairSel] = useState<Set<string>>(new Set())
+
+  const fetchSuggestions = async (d: number) => {
+    setLoading(true)
+    setError(null)
+    setNotice(null)
+    setSoloSel(new Set()); setNightSel(new Set()); setPairSel(new Set())
+    try {
+      const res = await fetch(`/api/admin/control-knowledge/learn/suggestions?days=${d}`, { credentials: 'include' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setData(await res.json() as LearnSuggestions)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '取得に失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggle = (set: Set<string>, key: string, setter: (s: Set<string>) => void) => {
+    const next = new Set(set)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    setter(next)
+  }
+
+  const handleApply = async () => {
+    if (!data) return
+    const solo_ok_staff_ids = data.suggestions.solo.filter(s => soloSel.has(s.staff_id)).map(s => s.staff_id)
+    const night_ok_staff_ids = data.suggestions.night.filter(n => nightSel.has(n.staff_id)).map(n => n.staff_id)
+    const good_pairs = data.suggestions.pairs
+      .filter(p => pairSel.has(`${p.staff_a_id}|${p.staff_b_id}`))
+      .map(p => ({ staff_a_id: p.staff_a_id, staff_b_id: p.staff_b_id }))
+    if (solo_ok_staff_ids.length + night_ok_staff_ids.length + good_pairs.length === 0) {
+      setError('取り込む項目を選択してください')
+      return
+    }
+    setApplying(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const res = await fetch('/api/admin/control-knowledge/learn/apply', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ solo_ok_staff_ids, night_ok_staff_ids, good_pairs }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error((d as { message?: string }).message || `HTTP ${res.status}`)
+      }
+      const r = await res.json() as { applied: { solo_ok: number; night_ok: number; good_pairs: number } }
+      setNotice(`学習を反映しました：1人立ちOK ${r.applied.solo_ok}件／夜勤OK ${r.applied.night_ok}件／相性◯ペア ${r.applied.good_pairs}件`)
+      fetchSuggestions(days)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '反映に失敗しました')
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const totalCount = data ? data.counts.solo + data.counts.night + data.counts.pairs : 0
+  const rowStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px',
+    borderBottom: `1px solid ${COLORS.gray}`, fontSize: '14px',
+  }
+  const groupTitle: React.CSSProperties = {
+    fontSize: '14px', fontWeight: 700, color: COLORS.darkGray, margin: '16px 0 6px',
+  }
+
+  return (
+    <div style={{ marginTop: '40px' }}>
+      <h3 style={{ ...styles.sectionTitle, marginBottom: '12px' }}>過去データから学ぶ（管制ナレッジ）</h3>
+      <p style={{ fontSize: '13px', color: COLORS.darkGray, marginBottom: '16px' }}>
+        直近の実配置データを集計し、「1人立ちできそうな人」「夜勤実績がある人」「よく一緒に組む良ペア」を提案します。
+        チェックして取り込むと管制ナレッジに反映され、管制ボードの判断に効きます。
+        ※「相性NG（組ませない方が良い）」は実績からは分からないため、ここでは提案しません（手で登録してください）。
+      </p>
+
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <label style={{ fontSize: '13px', color: COLORS.darkGray }}>集計期間</label>
+        <select
+          value={days}
+          onChange={e => setDays(Number(e.target.value))}
+          style={{ padding: '8px 12px', fontSize: '14px', border: `1px solid ${COLORS.gray}`, borderRadius: '8px' }}
+        >
+          <option value={30}>直近30日</option>
+          <option value={60}>直近60日</option>
+          <option value={90}>直近90日</option>
+        </select>
+        <button
+          style={{ ...styles.primaryButton, padding: '8px 16px' }}
+          onClick={() => fetchSuggestions(days)}
+          disabled={loading}
+        >
+          {loading ? '集計中...' : '過去データを分析'}
+        </button>
+      </div>
+
+      {error && <div style={{ ...styles.error, marginBottom: '12px' }}>{error}</div>}
+      {notice && (
+        <div style={{ marginBottom: '12px', padding: '10px 12px', backgroundColor: '#e8f5e9', color: '#2e7d32', borderRadius: '8px', fontSize: '14px' }}>
+          {notice}
+        </div>
+      )}
+
+      {data && totalCount === 0 && !loading && (
+        <p style={{ fontSize: '14px', color: COLORS.darkGray }}>
+          直近{data.days}日の配置データから、新しい学び候補は見つかりませんでした。
+        </p>
+      )}
+
+      {data && totalCount > 0 && (
+        <div style={{ border: `1px solid ${COLORS.gray}`, borderRadius: '8px', overflow: 'hidden' }}>
+          {data.suggestions.solo.length > 0 && (
+            <div>
+              <div style={groupTitle}>　1人立ちOK 候補（単独現場をこなした実績）</div>
+              {data.suggestions.solo.map(s => (
+                <label key={s.staff_id} style={rowStyle}>
+                  <input type="checkbox" checked={soloSel.has(s.staff_id)} onChange={() => toggle(soloSel, s.staff_id, setSoloSel)} />
+                  <span style={{ flex: 1 }}>{s.name || `(ID:${s.staff_id.slice(0, 8)})`}</span>
+                  <span style={{ color: COLORS.darkGray, fontSize: '13px' }}>単独 {s.solo_count}回 / 全{s.total_count}現場</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {data.suggestions.night.length > 0 && (
+            <div>
+              <div style={groupTitle}>　夜勤OK 候補（夜勤実績があるのに「夜勤NG」設定の人）</div>
+              {data.suggestions.night.map(n => (
+                <label key={n.staff_id} style={rowStyle}>
+                  <input type="checkbox" checked={nightSel.has(n.staff_id)} onChange={() => toggle(nightSel, n.staff_id, setNightSel)} />
+                  <span style={{ flex: 1 }}>{n.name || `(ID:${n.staff_id.slice(0, 8)})`}</span>
+                  <span style={{ color: COLORS.darkGray, fontSize: '13px' }}>夜番 {n.evening_count}回</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {data.suggestions.pairs.length > 0 && (
+            <div>
+              <div style={groupTitle}>　相性◯ペア 候補（よく一緒に組むペア）</div>
+              {data.suggestions.pairs.map(p => {
+                const key = `${p.staff_a_id}|${p.staff_b_id}`
+                return (
+                  <label key={key} style={rowStyle}>
+                    <input type="checkbox" checked={pairSel.has(key)} onChange={() => toggle(pairSel, key, setPairSel)} />
+                    <span style={{ flex: 1 }}>
+                      {(p.staff_a_name || p.staff_a_id.slice(0, 8))} × {(p.staff_b_name || p.staff_b_id.slice(0, 8))}
+                    </span>
+                    <span style={{ color: COLORS.darkGray, fontSize: '13px' }}>同現場 {p.together_count}回</span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+          <div style={{ padding: '12px', backgroundColor: '#f8f9fa', textAlign: 'right' }}>
+            <button style={styles.primaryButton} onClick={handleApply} disabled={applying}>
+              {applying ? '反映中...' : '選択した学びを取り込む'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function StaffPage({
   staff,
   filteredStaff,
@@ -637,6 +824,9 @@ export function StaffPage({
 
       {/* 相性NGペア管理 */}
       <CompatSection staff={staff} />
+
+      {/* 過去データから学ぶ（管制ナレッジ学習アナライザ） */}
+      <LearnSection />
 
       {/* 新規登録モーダル */}
       {showStaffModal && (

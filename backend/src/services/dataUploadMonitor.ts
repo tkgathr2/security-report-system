@@ -97,28 +97,48 @@ async function tryClaimNotification(
 async function sendSlackAlert(
   targetDate: string,
   checkLabel: string,
-  useChannelMention: boolean
+  useChannelMention: boolean,
+  kind: NotificationKind
 ): Promise<void> {
   const webhookUrl = getSlackWebhookUrl();
   if (!webhookUrl) {
-    console.log(`[DataMonitor] SLACK_WEBHOOK_URL not set. Would alert: ${targetDate} (${checkLabel})`);
+    console.log(`[DataMonitor] SLACK_WEBHOOK_URL not set. Would alert: ${targetDate} (${checkLabel}, ${kind})`);
     return;
   }
 
   const mention = useChannelMention ? '<!channel> ' : '';
   const mentionBlock = useChannelMention ? '<!channel>\n' : '';
 
+  // 通知文言は kind で出し分け：
+  //  - pre_day (前夜の事前チェック): 翌朝10時の自動取り込み前なので「まだ入っていない」のは正常。
+  //    紛らわしい「アラート」ではなく軽い「事前チェック」表記にする。
+  //  - same_day (当日チェック): 自動取り込み後でも入っていない＝本物の未登録。強めに出す。
+  const isPreDay = kind === 'pre_day';
+  const headerIcon = isPreDay ? ':memo:' : ':warning:';
+  const headerLabel = isPreDay ? '事前チェック（明日分）' : '案件データ未登録アラート';
+  const textSummary = isPreDay
+    ? `【ほうこちゃん】${targetDate}（明日）分の案件は ${checkLabel} 時点ではまだ未取り込み（事前チェック）`
+    : `${mention}【ほうこちゃん】${targetDate} の案件データが未登録です（${checkLabel}チェック）`;
+  const guidanceLines = isPreDay
+    ? [
+        '※ プロキャストからの自動取り込みは翌朝10時に走るため、いまの時点では未取り込みでも正常です。',
+        '※ 翌朝10時の取り込み後にも入っていなければ、当日チェックで再度お知らせします（その時は対応が必要）。',
+      ]
+    : [
+        '自動取り込み後も案件データが入っていません。CSVインポートで案件データをアップロードしてください。',
+      ];
+
   const message = {
-    text: `${mention}【ほうこちゃん】${targetDate} の案件データが未登録です（${checkLabel}チェック）`,
+    text: textSummary,
     blocks: [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${mentionBlock}:warning: *【ほうこちゃん】案件データ未登録アラート*\n\n` +
-            `*対象日:* ${targetDate}\n` +
+          text: `${isPreDay ? '' : mentionBlock}${headerIcon} *【ほうこちゃん】${headerLabel}*\n\n` +
+            `*対象日:* ${targetDate}${isPreDay ? '（明日）' : ''}\n` +
             `*チェック時刻:* ${checkLabel}\n\n` +
-            `CSVインポートで案件データをアップロードしてください。`
+            guidanceLines.join('\n')
         }
       }
     ]
@@ -169,7 +189,10 @@ export async function runCheck(): Promise<void> {
         return;
       }
       console.log(`[DataMonitor] No data for ${targetDate}, sending Slack alert (${kind})`);
-      await sendSlackAlert(targetDate, checkLabel, useChannelMention);
+      // pre_day（前夜の事前チェック）は @channel を使わない＝紛らわしい「アラート」感を消す。
+      // same_day は従来通り平日のみ @channel。
+      const mentionForSend = kind === 'pre_day' ? false : useChannelMention;
+      await sendSlackAlert(targetDate, checkLabel, mentionForSend, kind);
       console.log(`[DataMonitor] Slack alert sent for ${targetDate} (${kind})`);
     }
   } catch (err) {
