@@ -330,23 +330,38 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     }
     const prevDate = prevDateStr(date);
 
-    const [projRes, castRes, prevProjRes, prevCastRes, staffRes, compatRes] = await Promise.all([
+    const [projRes, castRes, prevProjRes, prevCastRes, staffRes, compatRes, activityRes] = await Promise.all([
       pool.query(PROJECTS_SQL, [date]),
       pool.query(CASTS_SQL, [date]),
       pool.query(PROJECTS_SQL, [prevDate]),
       pool.query(CASTS_SQL, [prevDate]),
       pool.query(
-        `SELECT id, display_name_kanji, solo_ok, night_ok FROM staff_master WHERE deleted_at IS NULL ORDER BY display_name_kana ASC NULLS LAST`
+        `SELECT id, display_name_kanji, solo_ok, night_ok, hidden FROM staff_master WHERE deleted_at IS NULL ORDER BY display_name_kana ASC NULLS LAST`
       ),
       pool.query(
         `SELECT staff_a_id, staff_b_id FROM staff_compatibility WHERE kind = 'avoid' AND deleted_at IS NULL`
       ),
+      // 未配置スタッフの並べ替え用：各スタッフの最終出勤日と出勤回数（履歴）。
+      pool.query(
+        `SELECT pc.staff_id, MAX(p.work_date) AS last_seen, COUNT(*)::int AS appear_count
+         FROM project_casts pc
+         INNER JOIN projects p ON p.id = pc.project_id
+         WHERE pc.staff_id IS NOT NULL AND pc.deleted_at IS NULL
+           AND p.deleted_at IS NULL AND p.status IS DISTINCT FROM 'cancelled' AND p.cancelled_at IS NULL
+         GROUP BY pc.staff_id`
+      ),
     ]);
 
+    // 非表示スタッフ（高木など配置対象でない人）：盤面・警告・引継ぎ・未配置から除外する。
+    const hiddenSet = new Set(
+      (staffRes.rows as Array<{ id: string; hidden?: boolean }>).filter((s) => s.hidden).map((s) => s.id)
+    );
+    const notHidden = (c: CastRow) => c.staff_id == null || !hiddenSet.has(c.staff_id);
+
     const projects = projRes.rows as ProjectRow[];
-    const casts = castRes.rows as CastRow[];
+    const casts = (castRes.rows as CastRow[]).filter(notHidden);
     const prevProjects = prevProjRes.rows as ProjectRow[];
-    const prevCasts = prevCastRes.rows as CastRow[];
+    const prevCasts = (prevCastRes.rows as CastRow[]).filter(notHidden);
 
     // sites: その日の現場(列)。重複排除。
     const siteMap = new Map<string, { key: string; label: string; meta: string }>();
@@ -428,8 +443,32 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     const assignedStaffIds = new Set(
       casts.filter((c) => c.staff_id != null).map((c) => c.staff_id as string)
     );
-    const poolOut = (staffRes.rows as Array<{ id: string; display_name_kanji: string | null }>)
-      .filter((s) => !assignedStaffIds.has(s.id))
+    // 各スタッフの活動履歴（最終出勤日・出勤回数）。未配置の並べ替えに使う。
+    const activityMap = new Map(
+      (activityRes.rows as Array<{ staff_id: string; last_seen: string | Date | null; appear_count: number }>)
+        .map((r) => [r.staff_id, { last_seen: r.last_seen ? String(r.last_seen).slice(0, 10) : null, appear_count: r.appear_count }])
+    );
+    const allStaff = staffRes.rows as Array<{ id: string; display_name_kanji: string | null; hidden?: boolean }>;
+
+    // pool: その日未配置 かつ 非表示でない staff_master。
+    // 並び＝最終出勤日が新しい順（履歴で来ている人を上へ）→ 未経験(null)は下へ → 出勤回数の多い順 → 名前。
+    const poolOut = allStaff
+      .filter((s) => !assignedStaffIds.has(s.id) && !s.hidden)
+      .map((s) => {
+        const a = activityMap.get(s.id);
+        return { staff_id: s.id, name: s.display_name_kanji ?? '', last_seen: a?.last_seen ?? null, appear_count: a?.appear_count ?? 0 };
+      })
+      .sort((x, y) => {
+        const lx = x.last_seen ?? '';
+        const ly = y.last_seen ?? '';
+        if (lx !== ly) return ly < lx ? -1 : 1; // 日付降順（新しいほど上・null は最下）
+        if (x.appear_count !== y.appear_count) return y.appear_count - x.appear_count;
+        return x.name.localeCompare(y.name);
+      });
+
+    // 非表示中スタッフ（UI で「戻す」ために返す）。
+    const hiddenStaff = allStaff
+      .filter((s) => s.hidden)
       .map((s) => ({ staff_id: s.id, name: s.display_name_kanji ?? '' }));
 
     // handover: 前日夜番の配置者を names に列挙
@@ -455,6 +494,7 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
       sites,
       cells,
       pool: poolOut,
+      hidden_staff: hiddenStaff,
       warnings,
       handover,
       violations,

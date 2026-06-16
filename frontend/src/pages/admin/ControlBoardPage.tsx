@@ -243,6 +243,18 @@ export function ControlBoardPage() {
   const go = (offset: number) => setDate((prev) => offsetDate(prev, offset))
   const goToday = () => setDate(todayJST())
 
+  // スタッフを管制ボードで非表示/再表示する（高木など配置対象でない人を隠す）。完了後に盤面を再取得。
+  const hideStaff = useCallback(async (staffId: string, hidden: boolean) => {
+    try {
+      await fetch(`/api/admin/control-knowledge/staff/${staffId}/hidden`, {
+        method: 'PUT', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hidden }),
+      })
+    } catch { /* 失敗時も再取得で現状に戻す */ }
+    load(date)
+  }, [load, date])
+
   // ===== ヘッダー =====
   const headerStyle: React.CSSProperties = {
     display: 'flex',
@@ -414,6 +426,12 @@ export function ControlBoardPage() {
   const renderSide = () => {
     if (!data) return null
     const { pool, handover } = data
+    const hiddenStaff = data.hidden_staff ?? []
+    const seenLabel = (ls?: string | null) => {
+      if (!ls) return '未'
+      const [, m, d] = ls.split('-')
+      return `${parseInt(m, 10)}/${parseInt(d, 10)}`
+    }
 
     const sideStyle: React.CSSProperties = {
       width: 248,
@@ -431,32 +449,59 @@ export function ControlBoardPage() {
 
     return (
       <div style={sideStyle}>
-        {/* 未配置スタッフ */}
+        {/* 未配置スタッフ（最近出勤している人が上・来ていない人ほど下） */}
         <section style={{ marginBottom: 26 }}>
-          <h3 style={h3Style}>未配置スタッフ</h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+          <h3 style={h3Style}>未配置スタッフ <span style={{ fontWeight: 400, color: C.sub, fontSize: 11 }}>（最近出勤順）</span></h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {pool.length === 0 ? (
               <span style={{ fontSize: 13, color: C.sub }}>なし</span>
             ) : (
               pool.map((p) => (
-                <span
+                <div
                   key={p.staff_id}
                   style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    background: C.tag,
-                    border: `1px solid ${C.tagLine}`,
-                    borderRadius: 7,
-                    padding: '5px 10px',
-                    fontSize: 13,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 6, background: C.tag, border: `1px solid ${C.tagLine}`,
+                    borderRadius: 7, padding: '5px 8px 5px 10px', fontSize: 13,
+                    opacity: p.last_seen ? 1 : 0.55,
                   }}
                 >
-                  {p.name}
-                </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                    <span style={{ color: C.sub, fontSize: 11, flexShrink: 0 }}>{seenLabel(p.last_seen)}</span>
+                  </span>
+                  <button
+                    onClick={() => hideStaff(p.staff_id, true)}
+                    title="この人を盤面から非表示にする"
+                    style={{ border: 'none', background: 'transparent', color: C.sub, cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+                  >
+                    ×
+                  </button>
+                </div>
               ))
             )}
           </div>
         </section>
+
+        {/* 非表示中スタッフ（戻せる） */}
+        {hiddenStaff.length > 0 && (
+          <section style={{ marginBottom: 26 }}>
+            <h3 style={h3Style}>非表示中 <span style={{ fontWeight: 400, color: C.sub, fontSize: 11 }}>（{hiddenStaff.length}名）</span></h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {hiddenStaff.map((s) => (
+                <div key={s.staff_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontSize: 13, color: C.sub }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                  <button
+                    onClick={() => hideStaff(s.staff_id, false)}
+                    style={{ border: `1px solid ${C.lineStrong}`, background: '#fff', color: C.text, cursor: 'pointer', fontSize: 11, borderRadius: 6, padding: '2px 8px', flexShrink: 0 }}
+                  >
+                    戻す
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* 夜勤引継ぎ */}
         <section style={{ marginBottom: 26 }}>

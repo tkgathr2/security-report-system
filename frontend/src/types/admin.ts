@@ -25,6 +25,8 @@ export interface ControlBoardCell {
 export interface ControlBoardPoolEntry {
   staff_id: string
   name: string
+  last_seen?: string | null
+  appear_count?: number
 }
 
 export interface ControlBoardWarning {
@@ -63,6 +65,7 @@ export interface ControlBoardData {
   sites: ControlBoardSite[]
   cells: ControlBoardCell[]
   pool: ControlBoardPoolEntry[]
+  hidden_staff?: ControlBoardPoolEntry[]
   warnings: ControlBoardWarning[]
   handover: ControlBoardHandover[]
   kpi: ControlBoardKpi

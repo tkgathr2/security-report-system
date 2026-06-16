@@ -279,6 +279,8 @@ async function seedStaffData() {
         await pool.query(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS solo_ok BOOLEAN NOT NULL DEFAULT false;`);
         await pool.query(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS night_ok BOOLEAN NOT NULL DEFAULT true;`);
         await pool.query(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS control_note TEXT;`);
+        // 管制ボードで非表示にするフラグ（高木など、配置対象でない人を盤面/未配置から隠す）。
+        await pool.query(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false;`);
         await pool.query(`CREATE TABLE IF NOT EXISTS staff_compatibility (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           staff_a_id UUID NOT NULL,
