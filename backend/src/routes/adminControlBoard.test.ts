@@ -12,7 +12,10 @@ import {
   deriveSiteLabel,
   UNSET_SITE_KEY,
   computeWarnings,
+  pairKey,
+  computeViolations,
   StaffPlacement,
+  ViolationCell,
 } from './adminControlBoard';
 
 describe('deriveShift', () => {
@@ -166,5 +169,73 @@ describe('computeWarnings', () => {
     const { warnings } = computeWarnings(currMorning, prevEvening, '6/16朝', '6/15夜');
 
     expect(warnings).toHaveLength(1);
+  });
+});
+
+describe('pairKey（順序非依存のペアキー）', () => {
+  it('順序によらず同じキーになる', () => {
+    expect(pairKey('a', 'b')).toBe(pairKey('b', 'a'));
+  });
+  it('辞書順で小さい方が先', () => {
+    expect(pairKey('b', 'a')).toBe('a|b');
+  });
+});
+
+describe('computeViolations（管制ナレッジ違反検出）', () => {
+  function cell(site_key: string, shift: ViolationCell['shift'], casts: Array<{ staff_id: string | null; name: string }>): ViolationCell {
+    return { site_key, site_label: site_key, shift, casts: casts.map((c) => ({ ...c, warn: [] })) };
+  }
+  const cons = (m: Record<string, { solo_ok: boolean; night_ok: boolean }>) => new Map(Object.entries(m));
+
+  it('1人立ち未承認の単独配置を検出し warn を付ける', () => {
+    const cells = [cell('siteA', 'morning', [{ staff_id: 's1', name: '田中' }])];
+    const v = computeViolations(cells, cons({ s1: { solo_ok: false, night_ok: true } }), new Set());
+    expect(v).toHaveLength(1);
+    expect(v[0].kind).toBe('solo');
+    expect(cells[0].casts[0].warn).toContain('1人立ち未承認');
+  });
+
+  it('1人立ちOK承認済みなら単独でも警告しない', () => {
+    const cells = [cell('siteA', 'morning', [{ staff_id: 's1', name: '田中' }])];
+    const v = computeViolations(cells, cons({ s1: { solo_ok: true, night_ok: true } }), new Set());
+    expect(v).toHaveLength(0);
+  });
+
+  it('2人現場なら1人立ち警告は出ない', () => {
+    const cells = [cell('siteA', 'morning', [{ staff_id: 's1', name: '田中' }, { staff_id: 's2', name: '佐藤' }])];
+    const v = computeViolations(cells, cons({ s1: { solo_ok: false, night_ok: true }, s2: { solo_ok: false, night_ok: true } }), new Set());
+    expect(v.filter((x) => x.kind === 'solo')).toHaveLength(0);
+  });
+
+  it('夜勤NGのキャストが夜番に居ると警告', () => {
+    const cells = [cell('siteA', 'evening', [{ staff_id: 's1', name: '田中' }, { staff_id: 's2', name: '佐藤' }])];
+    const v = computeViolations(cells, cons({ s1: { solo_ok: true, night_ok: false }, s2: { solo_ok: true, night_ok: true } }), new Set());
+    expect(v).toHaveLength(1);
+    expect(v[0].kind).toBe('night');
+    expect(cells[0].casts[0].warn).toContain('夜勤NG');
+  });
+
+  it('avoidペアが同一現場に同居すると両者に相性NG', () => {
+    const cells = [cell('siteA', 'morning', [{ staff_id: 's1', name: '田中' }, { staff_id: 's2', name: '佐藤' }])];
+    const v = computeViolations(cells, cons({ s1: { solo_ok: true, night_ok: true }, s2: { solo_ok: true, night_ok: true } }), new Set([pairKey('s1', 's2')]));
+    expect(v).toHaveLength(1);
+    expect(v[0].kind).toBe('compat');
+    expect(cells[0].casts[0].warn).toContain('相性NG');
+    expect(cells[0].casts[1].warn).toContain('相性NG');
+  });
+
+  it('avoidペアでも別現場なら警告しない', () => {
+    const cells = [
+      cell('siteA', 'morning', [{ staff_id: 's1', name: '田中' }, { staff_id: 'sx', name: 'X' }]),
+      cell('siteB', 'morning', [{ staff_id: 's2', name: '佐藤' }, { staff_id: 'sy', name: 'Y' }]),
+    ];
+    const v = computeViolations(cells, cons({ s1: { solo_ok: true, night_ok: true }, s2: { solo_ok: true, night_ok: true }, sx: { solo_ok: true, night_ok: true }, sy: { solo_ok: true, night_ok: true } }), new Set([pairKey('s1', 's2')]));
+    expect(v.filter((x) => x.kind === 'compat')).toHaveLength(0);
+  });
+
+  it('staff_id が null のキャストは違反対象外', () => {
+    const cells = [cell('siteA', 'morning', [{ staff_id: null, name: '未解決' }])];
+    const v = computeViolations(cells, cons({}), new Set());
+    expect(v).toHaveLength(0);
   });
 });

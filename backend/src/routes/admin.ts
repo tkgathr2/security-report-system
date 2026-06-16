@@ -233,6 +233,7 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT sm.id, sm.display_name_kanji, sm.display_name_kana, sm.email, sm.created_at, sm.updated_at,
               sm.procast_staff_no,
+              sm.solo_ok, sm.night_ok, sm.control_note,
               CASE WHEN sm.email IS NOT NULL AND sm.email != '' THEN sm.email WHEN sm.email = '' THEN NULL ELSE cu.email END as registered_email, cu.id as cast_user_id,
               CASE WHEN cu.pin_hash IS NOT NULL THEN true ELSE false END as has_pin
        FROM staff_master sm
@@ -245,6 +246,7 @@ router.get('/staff', requireAdmin, async (req: Request, res: Response) => {
        UNION ALL
        SELECT cu2.id, cu2.email as display_name_kanji, cu2.email as display_name_kana, cu2.email, cu2.created_at, cu2.updated_at,
               NULL as procast_staff_no,
+              false as solo_ok, true as night_ok, NULL as control_note,
               cu2.email as registered_email, cu2.id as cast_user_id,
               true as has_pin
        FROM cast_users cu2

@@ -126,6 +126,112 @@ export function computeWarnings(
   return { warnings, warnStaffIds };
 }
 
+// ----- 管制ナレッジ（制約・相性）の違反検出 -----
+
+/** 2人のstaff_idを順序非依存のペアキーにする（相性ペアの突き合わせ用）。 */
+export function pairKey(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+export interface ViolationCast {
+  staff_id: string | null;
+  name: string;
+  warn: string[];
+}
+export interface ViolationCell {
+  site_key: string;
+  site_label: string;
+  shift: Shift;
+  casts: ViolationCast[];
+}
+export interface Violation {
+  site_key: string;
+  site_label: string;
+  kind: 'solo' | 'night' | 'compat';
+  message: string;
+  names: string[];
+}
+
+/**
+ * 管制ナレッジ（暗黙知）に基づく配置違反を検出する pure 関数。各 cast の warn[] に警告ラベルを付け、
+ * 違反サマリ（Violation[]）を返す。
+ *  - solo : solo_ok=false のキャストが、その現場(cell)で1人だけ＝単独配置 → 「1人立ち未承認」
+ *  - night: night_ok=false のキャストが夜番(evening)に居る → 「夜勤NG」
+ *  - compat: avoid ペアが同一現場(site_key・シフト跨ぎ)に同居 → 両者に「相性NG」
+ * staff_id が null（マスタ未解決）のキャストは突き合わせ不可のため対象外。
+ */
+export function computeViolations(
+  cells: ViolationCell[],
+  constraints: Map<string, { solo_ok: boolean; night_ok: boolean }>,
+  avoidPairs: Set<string>
+): Violation[] {
+  const violations: Violation[] = [];
+  const add = (c: ViolationCast, label: string) => {
+    if (!c.warn.includes(label)) c.warn.push(label);
+  };
+
+  // solo / night（cell 単位）
+  for (const cell of cells) {
+    for (const c of cell.casts) {
+      if (c.staff_id == null) continue;
+      const cons = constraints.get(c.staff_id);
+      if (!cons) continue;
+      if (cell.casts.length === 1 && !cons.solo_ok) {
+        add(c, '1人立ち未承認');
+        violations.push({
+          site_key: cell.site_key,
+          site_label: cell.site_label,
+          kind: 'solo',
+          message: `${c.name}：1人立ち未承認の単独配置`,
+          names: [c.name],
+        });
+      }
+      if (cell.shift === 'evening' && !cons.night_ok) {
+        add(c, '夜勤NG');
+        violations.push({
+          site_key: cell.site_key,
+          site_label: cell.site_label,
+          kind: 'night',
+          message: `${c.name}：夜勤NG（夜番に配置）`,
+          names: [c.name],
+        });
+      }
+    }
+  }
+
+  // compat（同一現場 site_key にまとめ、avoid ペアの同居を検出）
+  const bySite = new Map<string, { label: string; casts: ViolationCast[] }>();
+  for (const cell of cells) {
+    const e = bySite.get(cell.site_key) ?? { label: cell.site_label, casts: [] };
+    for (const c of cell.casts) if (c.staff_id != null) e.casts.push(c);
+    bySite.set(cell.site_key, e);
+  }
+  for (const [site_key, { label, casts }] of bySite) {
+    const seenPair = new Set<string>();
+    for (let i = 0; i < casts.length; i++) {
+      for (let j = i + 1; j < casts.length; j++) {
+        const a = casts[i].staff_id as string;
+        const b = casts[j].staff_id as string;
+        if (a === b) continue;
+        const pk = pairKey(a, b);
+        if (!avoidPairs.has(pk) || seenPair.has(pk)) continue;
+        seenPair.add(pk);
+        add(casts[i], '相性NG');
+        add(casts[j], '相性NG');
+        violations.push({
+          site_key,
+          site_label: label,
+          kind: 'compat',
+          message: `${casts[i].name}×${casts[j].name}：相性NG（同現場回避）`,
+          names: [casts[i].name, casts[j].name],
+        });
+      }
+    }
+  }
+
+  return violations;
+}
+
 // ----- ヘルパ -----
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -224,13 +330,16 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     }
     const prevDate = prevDateStr(date);
 
-    const [projRes, castRes, prevProjRes, prevCastRes, staffRes] = await Promise.all([
+    const [projRes, castRes, prevProjRes, prevCastRes, staffRes, compatRes] = await Promise.all([
       pool.query(PROJECTS_SQL, [date]),
       pool.query(CASTS_SQL, [date]),
       pool.query(PROJECTS_SQL, [prevDate]),
       pool.query(CASTS_SQL, [prevDate]),
       pool.query(
-        `SELECT id, display_name_kanji FROM staff_master WHERE deleted_at IS NULL ORDER BY display_name_kana ASC NULLS LAST`
+        `SELECT id, display_name_kanji, solo_ok, night_ok FROM staff_master WHERE deleted_at IS NULL ORDER BY display_name_kana ASC NULLS LAST`
+      ),
+      pool.query(
+        `SELECT staff_a_id, staff_b_id FROM staff_compatibility WHERE kind = 'avoid' AND deleted_at IS NULL`
       ),
     ]);
 
@@ -284,6 +393,7 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
           name: displayName(c),
           over,
           handoff,
+          warn: [] as string[],
         };
       });
       return {
@@ -293,6 +403,26 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
         casts: castsOut,
       };
     });
+
+    // 管制ナレッジ違反の検出（各 cast の warn[] に付与し、違反サマリを作る）
+    const constraintMap = new Map(
+      (staffRes.rows as Array<{ id: string; solo_ok: boolean; night_ok: boolean }>).map((s) => [
+        s.id,
+        { solo_ok: s.solo_ok, night_ok: s.night_ok },
+      ])
+    );
+    const avoidPairs = new Set(
+      (compatRes.rows as Array<{ staff_a_id: string; staff_b_id: string }>).map((r) =>
+        pairKey(r.staff_a_id, r.staff_b_id)
+      )
+    );
+    const violCells: ViolationCell[] = cells.map((c) => ({
+      site_key: c.site_key,
+      site_label: siteMap.get(c.site_key)?.label ?? c.site_key,
+      shift: c.shift,
+      casts: c.casts,
+    }));
+    const violations = computeViolations(violCells, constraintMap, avoidPairs);
 
     // pool: その日どの案件にも配置されていない staff_master（deleted_at IS NULL）
     const assignedStaffIds = new Set(
@@ -327,11 +457,13 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
       pool: poolOut,
       warnings,
       handover,
+      violations,
       kpi: {
         sites: sites.length,
         assigned: assignedCount,
         pool: poolOut.length,
         warnings: warnings.length,
+        violations: violations.length,
       },
     });
   } catch (error) {

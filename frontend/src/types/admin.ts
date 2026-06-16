@@ -12,6 +12,7 @@ export interface ControlBoardCast {
   name: string
   over: boolean
   handoff: boolean
+  warn?: string[]
 }
 
 export interface ControlBoardCell {
@@ -46,6 +47,15 @@ export interface ControlBoardKpi {
   assigned: number
   pool: number
   warnings: number
+  violations?: number
+}
+
+export interface ControlBoardViolation {
+  site_key: string
+  site_label: string
+  kind: 'solo' | 'night' | 'compat'
+  message: string
+  names: string[]
 }
 
 export interface ControlBoardData {
@@ -56,6 +66,7 @@ export interface ControlBoardData {
   warnings: ControlBoardWarning[]
   handover: ControlBoardHandover[]
   kpi: ControlBoardKpi
+  violations?: ControlBoardViolation[]
 }
 
 export interface AdminUser {
@@ -158,6 +169,19 @@ export interface StaffMember {
   has_pin: boolean
   created_at: string
   updated_at: string
+  solo_ok?: boolean
+  night_ok?: boolean
+  control_note?: string | null
+}
+
+export interface CompatPair {
+  id: string
+  staff_a_id: string
+  staff_a_name: string
+  staff_b_id: string
+  staff_b_name: string
+  kind: 'avoid' | 'good'
+  note: string | null
 }
 
 export interface ImportResult {

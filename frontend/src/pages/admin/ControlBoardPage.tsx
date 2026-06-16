@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type {
   ControlBoardData,
   ControlBoardCast,
+  ControlBoardViolation,
 } from '../../types/admin'
 
 // ===== CSS-in-JS スタイル定数（kansei_simple.html の変数に対応） =====
@@ -62,31 +63,42 @@ async function fetchControlBoard(date: string, signal?: AbortSignal): Promise<Co
 function CastTag({ cast }: { cast: ControlBoardCast }) {
   const isOver = cast.over
   const isHandoff = cast.handoff
+  const hasWarn = Array.isArray(cast.warn) && cast.warn.length > 0
+  // warn が over より優先（赤系統一、追加の warn を注記で出す）
+  const isAlert = isOver || hasWarn
 
   const tagStyle: React.CSSProperties = {
     display: 'inline-flex',
-    alignItems: 'center',
+    flexDirection: hasWarn ? 'column' : 'row',
+    alignItems: hasWarn ? 'flex-start' : 'center',
     gap: 4,
     borderRadius: 7,
     padding: '4px 9px',
     fontSize: 13,
     lineHeight: 1.4,
-    border: isOver
+    border: isAlert
       ? `1px solid ${C.red}`
       : isHandoff
       ? `1px dashed ${C.lineStrong}`
       : `1px solid ${C.tagLine}`,
-    background: isOver ? C.redBg : isHandoff ? '#fff' : C.tag,
-    color: isOver ? C.red : isHandoff ? C.sub : C.text,
-    fontWeight: isOver ? 600 : 400,
+    background: isAlert ? C.redBg : isHandoff ? '#fff' : C.tag,
+    color: isAlert ? C.red : isHandoff ? C.sub : C.text,
+    fontWeight: isAlert ? 600 : 400,
     whiteSpace: 'nowrap' as const,
   }
 
   return (
     <span style={tagStyle}>
-      {isOver && '⚠️'}
-      {isHandoff && '🌙'}
-      {cast.name}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {isAlert && '⚠️'}
+        {!isAlert && isHandoff && '🌙'}
+        {cast.name}
+      </span>
+      {hasWarn && (
+        <span style={{ fontSize: 11, color: C.red, lineHeight: 1.3, marginTop: 2 }}>
+          {(cast.warn ?? []).join(' / ')}
+        </span>
+      )}
     </span>
   )
 }
@@ -401,7 +413,7 @@ export function ControlBoardPage() {
                   background: C.red,
                 }}
               />
-              連続勤務の警告
+              連続勤務 / 管制注意
             </span>
             <span>
               <i
@@ -553,6 +565,21 @@ export function ControlBoardPage() {
             </b>
             <span style={{ color: C.sub, fontSize: 13 }}>連続勤務警告</span>
           </div>
+          {data.kpi.violations !== undefined && (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <b
+                style={{
+                  fontSize: 26,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  color: data.kpi.violations > 0 ? C.red : C.blue,
+                }}
+              >
+                {data.kpi.violations}
+              </b>
+              <span style={{ color: C.sub, fontSize: 13 }}>管制注意</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -573,6 +600,33 @@ export function ControlBoardPage() {
           {data.warnings
             .map((w) => `${w.name}さん（${w.prev}→${w.curr}・${w.site}）`)
             .join('　／　')}
+        </div>
+      )}
+
+      {/* 管制ナレッジ違反バナー */}
+      {data && data.violations && data.violations.length > 0 && (
+        <div
+          style={{
+            margin: 0,
+            padding: '11px 24px',
+            background: '#fff8e1',
+            color: C.text,
+            fontSize: 13,
+            borderBottom: `1px solid ${C.line}`,
+          }}
+        >
+          <strong style={{ color: '#f57f17' }}>⚠️ 管制ナレッジ注意：</strong>
+          <ul style={{ margin: '6px 0 0', paddingLeft: '20px', lineHeight: 1.7 }}>
+            {(data.violations as ControlBoardViolation[]).map((v, i) => (
+              <li key={i} style={{ color: '#5d4037' }}>
+                <strong style={{ color: '#c0392b' }}>[{v.site_label}]</strong>{' '}
+                {v.message}
+                {v.names && v.names.length > 0 && (
+                  <span style={{ color: '#8d6e63', marginLeft: 6 }}>（{v.names.join('・')}）</span>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
