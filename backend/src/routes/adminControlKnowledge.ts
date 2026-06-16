@@ -116,6 +116,40 @@ router.put('/staff/:id/constraints', requireAdmin, async (req: Request, res: Res
   }
 });
 
+// ── PUT /staff/:id/hidden ───────────────────────────────────────────────────
+// スタッフを管制ボードで非表示/再表示する（高木など配置対象でない人を隠す）。
+router.put('/staff/:id/hidden', requireAdmin, async (req: Request, res: Response) => {
+  const staffId = req.params.id as string;
+  if (!staffId || !UUID_REGEX.test(staffId)) {
+    sendBadRequest(res, 'スタッフIDの形式が不正です');
+    return;
+  }
+  const { hidden } = req.body as { hidden: unknown };
+  if (typeof hidden !== 'boolean') {
+    sendBadRequest(res, 'hidden は boolean で指定してください');
+    return;
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE staff_master SET hidden = $1, updated_at = NOW()
+       WHERE id = $2 AND deleted_at IS NULL RETURNING id, hidden`,
+      [hidden, staffId]
+    );
+    if (result.rows.length === 0) {
+      sendNotFound(res, 'スタッフが見つかりません');
+      return;
+    }
+    const adminUser = req.user as { email: string };
+    logAudit({
+      req, actorEmail: adminUser.email, action: 'SET_STAFF_HIDDEN',
+      targetType: 'staff_master', targetId: staffId, payload: { hidden },
+    });
+    res.json({ staff: result.rows[0] });
+  } catch (error) {
+    handleDbError(res, error, 'Set staff hidden');
+  }
+});
+
 // ── GET /compat ────────────────────────────────────────────────────────────
 router.get('/compat', requireAdmin, async (_req: Request, res: Response) => {
   try {
