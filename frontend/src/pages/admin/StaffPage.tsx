@@ -427,14 +427,15 @@ interface LearnPairItem {
   together_count: number
 }
 interface LearnSuggestions {
-  days: number
+  days: number | null
+  period_label: string
   counts: { solo: number; night: number; pairs: number }
   suggestions: { solo: LearnSoloItem[]; night: LearnNightItem[]; pairs: LearnPairItem[] }
 }
 
 function LearnSection() {
   const [data, setData] = useState<LearnSuggestions | null>(null)
-  const [days, setDays] = useState(30)
+  const [days, setDays] = useState<number | 'all'>('all')
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -443,7 +444,7 @@ function LearnSection() {
   const [nightSel, setNightSel] = useState<Set<string>>(new Set())
   const [pairSel, setPairSel] = useState<Set<string>>(new Set())
 
-  const fetchSuggestions = async (d: number) => {
+  const fetchSuggestions = async (d: number | 'all') => {
     setLoading(true)
     setError(null)
     setNotice(null)
@@ -522,9 +523,10 @@ function LearnSection() {
         <label style={{ fontSize: '13px', color: COLORS.darkGray }}>集計期間</label>
         <select
           value={days}
-          onChange={e => setDays(Number(e.target.value))}
+          onChange={e => setDays(e.target.value === 'all' ? 'all' : Number(e.target.value))}
           style={{ padding: '8px 12px', fontSize: '14px', border: `1px solid ${COLORS.gray}`, borderRadius: '8px' }}
         >
+          <option value="all">全期間（過去の全日程）</option>
           <option value={30}>直近30日</option>
           <option value={60}>直近60日</option>
           <option value={90}>直近90日</option>
@@ -547,7 +549,7 @@ function LearnSection() {
 
       {data && totalCount === 0 && !loading && (
         <p style={{ fontSize: '14px', color: COLORS.darkGray }}>
-          直近{data.days}日の配置データから、新しい学び候補は見つかりませんでした。
+          {data.period_label}の配置データから、新しい学び候補は見つかりませんでした。
         </p>
       )}
 

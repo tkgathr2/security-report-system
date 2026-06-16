@@ -285,12 +285,8 @@ router.delete('/compat/:id', requireAdmin, async (req: Request, res: Response) =
 const LEARN_DEFAULT_DAYS = 30;
 const LEARN_MAX_DAYS = 365;
 
-// 直近 N 日の配置履歴（projects × project_casts）。名寄せ済み(staff_id 非null)のみ。
-const LEARN_PLACEMENTS_SQL = `
-  SELECT pc.project_id, pc.staff_id, p.start_time
-  FROM project_casts pc
-  INNER JOIN projects p ON p.id = pc.project_id
-  WHERE p.work_date >= (CURRENT_DATE - (($1::int - 1) || ' days')::interval)
+// 共通の絞り込み（有効な配置・名寄せ済みのみ）。
+const LEARN_PLACEMENTS_FILTER = `
     AND p.work_date <= CURRENT_DATE
     AND p.deleted_at IS NULL
     AND p.status IS DISTINCT FROM 'cancelled'
@@ -298,21 +294,45 @@ const LEARN_PLACEMENTS_SQL = `
     AND pc.deleted_at IS NULL
     AND pc.staff_id IS NOT NULL`;
 
-// ── GET /learn/suggestions?days=30 ─────────────────────────────────────────
+// 直近 N 日の配置履歴（projects × project_casts）。
+const LEARN_PLACEMENTS_SQL = `
+  SELECT pc.project_id, pc.staff_id, p.start_time
+  FROM project_casts pc
+  INNER JOIN projects p ON p.id = pc.project_id
+  WHERE p.work_date >= (CURRENT_DATE - (($1::int - 1) || ' days')::interval)
+  ${LEARN_PLACEMENTS_FILTER}`;
+
+// 全期間の配置履歴（下限なし）。days=all のとき使う。
+const LEARN_PLACEMENTS_ALL_SQL = `
+  SELECT pc.project_id, pc.staff_id, p.start_time
+  FROM project_casts pc
+  INNER JOIN projects p ON p.id = pc.project_id
+  WHERE 1 = 1
+  ${LEARN_PLACEMENTS_FILTER}`;
+
+// ── GET /learn/suggestions?days=30|all ─────────────────────────────────────
 // 過去データを集計して「学び候補」を返す（読み取り専用・適用しない）。
+// days=all で全期間（過去の全日程）を対象にする。
 router.get('/learn/suggestions', requireAdmin, async (req: Request, res: Response) => {
-  let days = LEARN_DEFAULT_DAYS;
+  let days: number | null = LEARN_DEFAULT_DAYS; // null = 全期間
   if (req.query.days !== undefined) {
-    const parsed = Number(req.query.days);
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > LEARN_MAX_DAYS) {
-      sendBadRequest(res, `days は 1〜${LEARN_MAX_DAYS} の整数で指定してください`);
-      return;
+    if (req.query.days === 'all') {
+      days = null;
+    } else {
+      const parsed = Number(req.query.days);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > LEARN_MAX_DAYS) {
+        sendBadRequest(res, `days は 1〜${LEARN_MAX_DAYS} の整数、または all を指定してください`);
+        return;
+      }
+      days = parsed;
     }
-    days = parsed;
   }
 
   try {
-    const placeRes = await pool.query(LEARN_PLACEMENTS_SQL, [days]);
+    const placeRes =
+      days === null
+        ? await pool.query(LEARN_PLACEMENTS_ALL_SQL)
+        : await pool.query(LEARN_PLACEMENTS_SQL, [days]);
     const result = analyzePlacements(placeRes.rows as PlacementInput[]);
 
     // 関与する staff_id の名前・現在状態を引く
@@ -397,7 +417,7 @@ router.get('/learn/suggestions', requireAdmin, async (req: Request, res: Respons
 
     res.json({
       days,
-      generated_for_days: days,
+      period_label: days === null ? '全期間' : `直近${days}日`,
       counts: { solo: soloOut.length, night: nightOut.length, pairs: pairOut.length },
       suggestions: { solo: soloOut, night: nightOut, pairs: pairOut },
     });
