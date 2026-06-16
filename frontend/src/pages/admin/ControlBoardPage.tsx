@@ -109,6 +109,7 @@ export function ControlBoardPage() {
   const [data, setData] = useState<ControlBoardData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
   // 日付連打のレース対策：最新リクエストのみ反映する（古いレスポンスが新しい表示を上書きしない）
   const reqIdRef = useRef(0)
@@ -121,6 +122,13 @@ export function ControlBoardPage() {
       const d = await fetchControlBoard(targetDate, signal)
       if (reqIdRef.current !== myId) return // 古いレスポンスは破棄
       setData(d)
+      setLastUpdated(
+        new Date().toLocaleTimeString('ja-JP', {
+          timeZone: 'Asia/Tokyo',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      )
     } catch (e) {
       if (signal?.aborted || reqIdRef.current !== myId) return
       setError(e instanceof Error ? e.message : '取得に失敗しました')
@@ -522,6 +530,17 @@ export function ControlBoardPage() {
         <button style={btnStyle} onClick={() => go(1)}>
           翌日
         </button>
+        <button
+          style={{ ...btnStyle, borderColor: C.blue, color: C.blue, fontWeight: 600 }}
+          onClick={() => load(date)}
+          disabled={loading}
+          title="いきなり入った仕事を反映するときに押す（最新の配置で警告を計算し直します）"
+        >
+          {loading ? '更新中…' : '🔄 更新'}
+        </button>
+        {lastUpdated && (
+          <span style={{ color: C.sub, fontSize: 12 }}>最終更新 {lastUpdated}</span>
+        )}
       </header>
 
       {/* KPI */}
