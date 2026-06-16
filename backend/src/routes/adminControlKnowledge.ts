@@ -19,6 +19,7 @@ import { requireAdmin } from '../middleware/auth';
 import { logAudit } from '../utils/auditLog';
 import { handleDbError, sendBadRequest, sendConflict, sendNotFound } from '../utils/errorHandler';
 import { validateStringField, MAX_LENGTHS } from '../utils/validation';
+import { analyzePlacements, PlacementInput } from '../utils/controlKnowledgeLearn';
 
 const router = Router();
 
@@ -277,6 +278,257 @@ router.delete('/compat/:id', requireAdmin, async (req: Request, res: Response) =
     res.json({ ok: true });
   } catch (error) {
     handleDbError(res, error, 'Delete compat');
+  }
+});
+
+// ── 学習アナライザ（過去配置データから学ぶ） ──────────────────────────────
+const LEARN_DEFAULT_DAYS = 30;
+const LEARN_MAX_DAYS = 365;
+
+// 直近 N 日の配置履歴（projects × project_casts）。名寄せ済み(staff_id 非null)のみ。
+const LEARN_PLACEMENTS_SQL = `
+  SELECT pc.project_id, pc.staff_id, p.start_time
+  FROM project_casts pc
+  INNER JOIN projects p ON p.id = pc.project_id
+  WHERE p.work_date >= (CURRENT_DATE - (($1::int - 1) || ' days')::interval)
+    AND p.work_date <= CURRENT_DATE
+    AND p.deleted_at IS NULL
+    AND p.status IS DISTINCT FROM 'cancelled'
+    AND p.cancelled_at IS NULL
+    AND pc.deleted_at IS NULL
+    AND pc.staff_id IS NOT NULL`;
+
+// ── GET /learn/suggestions?days=30 ─────────────────────────────────────────
+// 過去データを集計して「学び候補」を返す（読み取り専用・適用しない）。
+router.get('/learn/suggestions', requireAdmin, async (req: Request, res: Response) => {
+  let days = LEARN_DEFAULT_DAYS;
+  if (req.query.days !== undefined) {
+    const parsed = Number(req.query.days);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > LEARN_MAX_DAYS) {
+      sendBadRequest(res, `days は 1〜${LEARN_MAX_DAYS} の整数で指定してください`);
+      return;
+    }
+    days = parsed;
+  }
+
+  try {
+    const placeRes = await pool.query(LEARN_PLACEMENTS_SQL, [days]);
+    const result = analyzePlacements(placeRes.rows as PlacementInput[]);
+
+    // 関与する staff_id の名前・現在状態を引く
+    const staffIds = new Set<string>();
+    for (const s of result.solo) staffIds.add(s.staff_id);
+    for (const n of result.night) staffIds.add(n.staff_id);
+    for (const p of result.pairs) {
+      staffIds.add(p.staff_a_id);
+      staffIds.add(p.staff_b_id);
+    }
+
+    const staffMap = new Map<
+      string,
+      { name: string | null; solo_ok: boolean; night_ok: boolean }
+    >();
+    if (staffIds.size > 0) {
+      const staffRes = await pool.query(
+        `SELECT id, display_name_kanji, solo_ok, night_ok
+         FROM staff_master WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`,
+        [Array.from(staffIds)]
+      );
+      for (const r of staffRes.rows as Array<{
+        id: string;
+        display_name_kanji: string | null;
+        solo_ok: boolean;
+        night_ok: boolean;
+      }>) {
+        staffMap.set(r.id, {
+          name: r.display_name_kanji,
+          solo_ok: r.solo_ok,
+          night_ok: r.night_ok,
+        });
+      }
+    }
+
+    // 既存の good ペア（重複提案を避ける）
+    const existingGood = new Set<string>();
+    const goodRes = await pool.query(
+      `SELECT staff_a_id, staff_b_id FROM staff_compatibility
+       WHERE kind = 'good' AND deleted_at IS NULL`
+    );
+    for (const r of goodRes.rows as Array<{ staff_a_id: string; staff_b_id: string }>) {
+      existingGood.add(`${r.staff_a_id}|${r.staff_b_id}`);
+    }
+
+    // solo: 現在 solo_ok=false の人だけが「適用すると効く」候補。staff_master に居る人に限る。
+    const soloOut = result.solo
+      .filter((s) => staffMap.has(s.staff_id) && staffMap.get(s.staff_id)!.solo_ok === false)
+      .map((s) => ({
+        staff_id: s.staff_id,
+        name: staffMap.get(s.staff_id)!.name,
+        solo_count: s.solo_count,
+        total_count: s.total_count,
+        already: false,
+      }));
+
+    // night: 夜勤実績があるのに現在 night_ok=false の人（＝夜勤NG警告と実績が矛盾）を提案。
+    const nightOut = result.night
+      .filter((n) => staffMap.has(n.staff_id) && staffMap.get(n.staff_id)!.night_ok === false)
+      .map((n) => ({
+        staff_id: n.staff_id,
+        name: staffMap.get(n.staff_id)!.name,
+        evening_count: n.evening_count,
+        already: false,
+      }));
+
+    // pairs: 既存 good ペアを除外。両者が staff_master に居るもののみ。
+    const pairOut = result.pairs
+      .filter(
+        (p) =>
+          staffMap.has(p.staff_a_id) &&
+          staffMap.has(p.staff_b_id) &&
+          !existingGood.has(`${p.staff_a_id}|${p.staff_b_id}`)
+      )
+      .map((p) => ({
+        staff_a_id: p.staff_a_id,
+        staff_a_name: staffMap.get(p.staff_a_id)!.name,
+        staff_b_id: p.staff_b_id,
+        staff_b_name: staffMap.get(p.staff_b_id)!.name,
+        together_count: p.together_count,
+      }));
+
+    res.json({
+      days,
+      generated_for_days: days,
+      counts: { solo: soloOut.length, night: nightOut.length, pairs: pairOut.length },
+      suggestions: { solo: soloOut, night: nightOut, pairs: pairOut },
+    });
+  } catch (error) {
+    handleDbError(res, error, 'Learn suggestions');
+  }
+});
+
+// ── POST /learn/apply ──────────────────────────────────────────────────────
+// 選択された学び候補を実際に管制ナレッジへ反映する（冪等）。
+router.post('/learn/apply', requireAdmin, async (req: Request, res: Response) => {
+  const body = req.body as {
+    solo_ok_staff_ids?: unknown;
+    night_ok_staff_ids?: unknown;
+    good_pairs?: unknown;
+  };
+
+  const soloIds = Array.isArray(body.solo_ok_staff_ids) ? body.solo_ok_staff_ids : [];
+  const nightIds = Array.isArray(body.night_ok_staff_ids) ? body.night_ok_staff_ids : [];
+  const goodPairs = Array.isArray(body.good_pairs) ? body.good_pairs : [];
+
+  // バリデーション（UUID 形式・件数上限）
+  const MAX_ITEMS = 500;
+  if (soloIds.length > MAX_ITEMS || nightIds.length > MAX_ITEMS || goodPairs.length > MAX_ITEMS) {
+    sendBadRequest(res, `一度に適用できるのは各${MAX_ITEMS}件までです`);
+    return;
+  }
+  for (const id of [...soloIds, ...nightIds]) {
+    if (typeof id !== 'string' || !UUID_REGEX.test(id)) {
+      sendBadRequest(res, 'staff_id の形式が不正です');
+      return;
+    }
+  }
+  const normalizedPairs: Array<{ a: string; b: string }> = [];
+  for (const raw of goodPairs) {
+    const p = raw as { staff_a_id?: unknown; staff_b_id?: unknown };
+    if (
+      typeof p.staff_a_id !== 'string' ||
+      !UUID_REGEX.test(p.staff_a_id) ||
+      typeof p.staff_b_id !== 'string' ||
+      !UUID_REGEX.test(p.staff_b_id)
+    ) {
+      sendBadRequest(res, 'good_pairs の staff_id 形式が不正です');
+      return;
+    }
+    if (p.staff_a_id.toLowerCase() === p.staff_b_id.toLowerCase()) {
+      sendBadRequest(res, '同じスタッフ同士のペアは登録できません');
+      return;
+    }
+    const { normA, normB } = normalizeCompatPair(p.staff_a_id, p.staff_b_id);
+    normalizedPairs.push({ a: normA, b: normB });
+  }
+
+  const adminUser = req.user as { email: string };
+  const applied = { solo_ok: 0, night_ok: 0, good_pairs: 0 };
+
+  try {
+    // solo_ok=true を冪等に適用（既に true の人・存在しない人は対象外）
+    for (const id of soloIds as string[]) {
+      const r = await pool.query(
+        `UPDATE staff_master SET solo_ok = true, updated_at = NOW()
+         WHERE id = $1 AND solo_ok = false AND deleted_at IS NULL
+         RETURNING id`,
+        [id]
+      );
+      if (r.rows.length > 0) {
+        applied.solo_ok += 1;
+        logAudit({
+          req,
+          actorEmail: adminUser.email,
+          action: 'LEARN_SOLO_OK',
+          targetType: 'staff_master',
+          targetId: id,
+          payload: { solo_ok: true, source: 'learn' },
+        });
+      }
+    }
+
+    // night_ok=true を冪等に適用
+    for (const id of nightIds as string[]) {
+      const r = await pool.query(
+        `UPDATE staff_master SET night_ok = true, updated_at = NOW()
+         WHERE id = $1 AND night_ok = false AND deleted_at IS NULL
+         RETURNING id`,
+        [id]
+      );
+      if (r.rows.length > 0) {
+        applied.night_ok += 1;
+        logAudit({
+          req,
+          actorEmail: adminUser.email,
+          action: 'LEARN_NIGHT_OK',
+          targetType: 'staff_master',
+          targetId: id,
+          payload: { night_ok: true, source: 'learn' },
+        });
+      }
+    }
+
+    // good ペアを冪等に登録（既存・重複は ON CONFLICT で握る）
+    for (const { a, b } of normalizedPairs) {
+      // 両者の存在確認
+      const staffCheck = await pool.query(
+        `SELECT id FROM staff_master WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`,
+        [[a, b]]
+      );
+      if (staffCheck.rows.length < 2) continue;
+
+      const r = await pool.query(
+        `INSERT INTO staff_compatibility (staff_a_id, staff_b_id, kind, note, created_by)
+         VALUES ($1, $2, 'good', $3, $4)
+         ON CONFLICT (staff_a_id, staff_b_id, kind) WHERE deleted_at IS NULL DO NOTHING
+         RETURNING id`,
+        [a, b, '過去配置データから学習（よく一緒に組むペア）', adminUser.email]
+      );
+      if (r.rows.length > 0) {
+        applied.good_pairs += 1;
+        logAudit({
+          req,
+          actorEmail: adminUser.email,
+          action: 'LEARN_GOOD_PAIR',
+          targetType: 'staff_compatibility',
+          targetId: r.rows[0].id as string,
+          payload: { staff_a_id: a, staff_b_id: b, kind: 'good', source: 'learn' },
+        });
+      }
+    }
+
+    res.json({ ok: true, applied });
+  } catch (error) {
+    handleDbError(res, error, 'Learn apply');
   }
 });
 
