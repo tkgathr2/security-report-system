@@ -23,6 +23,7 @@ import adminEmailLogsRouter from './routes/adminEmailLogs';
 import adminProjectCancelRouter from './routes/adminProjectCancel';
 import adminControlBoardRouter from './routes/adminControlBoard';
 import adminControlKnowledgeRouter from './routes/adminControlKnowledge';
+import buildControlChatRouter from './routes/adminControlChat';
 import pool from './db/pool';
 import { requestTimeout } from './middleware/requestTimeout';
 import { requireJsonContentType } from './middleware/contentType';
@@ -118,6 +119,8 @@ app.use('/api/admin/projects', adminProjectCancelRouter);
 app.use('/api/admin/control-board', adminControlBoardRouter);
 // 管制ナレッジ（スタッフ制約・相性ペア）。adminRouter より先に登録する
 app.use('/api/admin/control-knowledge', adminControlKnowledgeRouter);
+// 自動管制システム チャット（自然言語で覚えさせる）。adminRouter より先に登録する
+app.use('/api/admin/control-chat', buildControlChatRouter());
 app.use('/api/admin', adminRouter);
 app.use('/api/admin/reports', adminReportsRouter);
 app.use('/api/admin/recipients', adminRecipientsRouter);
