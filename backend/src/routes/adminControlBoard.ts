@@ -343,7 +343,7 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
       ),
       // 未配置スタッフの並べ替え用：各スタッフの最終出勤日と出勤回数（履歴）。
       pool.query(
-        `SELECT pc.staff_id, MAX(p.work_date) AS last_seen, COUNT(*)::int AS appear_count
+        `SELECT pc.staff_id, to_char(MAX(p.work_date), 'YYYY-MM-DD') AS last_seen, COUNT(*)::int AS appear_count
          FROM project_casts pc
          INNER JOIN projects p ON p.id = pc.project_id
          WHERE pc.staff_id IS NOT NULL AND pc.deleted_at IS NULL
