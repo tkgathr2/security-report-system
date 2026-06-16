@@ -268,6 +268,29 @@ async function seedStaffData() {
            WHERE deleted_at IS NULL AND procast_staff_no IS NOT NULL;`
         );
         seedDetail += ' staffNoKeyEnsured:1';
+
+        // 管制ナレッジ(2026-06): 1人立ち承認・夜勤可否・管制メモ＋相性ペアテーブル。
+        // migration 1781600000000 と同内容の冪等ガード。本番は startCommand が
+        // `(npm run migrate:up || true)` で migrate 失敗を握り潰すため、スキーマは
+        // この起動時補正で保証する（既存 procast_staff_no と同方式）。
+        await pool.query(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS solo_ok BOOLEAN NOT NULL DEFAULT false;`);
+        await pool.query(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS night_ok BOOLEAN NOT NULL DEFAULT true;`);
+        await pool.query(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS control_note TEXT;`);
+        await pool.query(`CREATE TABLE IF NOT EXISTS staff_compatibility (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          staff_a_id UUID NOT NULL,
+          staff_b_id UUID NOT NULL,
+          kind TEXT NOT NULL,
+          note TEXT,
+          created_by TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          deleted_at TIMESTAMPTZ,
+          CONSTRAINT staff_compatibility_no_self CHECK (staff_a_id <> staff_b_id)
+        );`);
+        await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_compatibility_pair_kind_active
+          ON staff_compatibility (staff_a_id, staff_b_id, kind) WHERE deleted_at IS NULL;`);
+        seedDetail += ' controlKnowledgeEnsured:1';
       } catch (schemaErr: unknown) {
         const msg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
         seedDetail += ` kanaSchemaFixErr:${msg}`;
