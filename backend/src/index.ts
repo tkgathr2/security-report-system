@@ -291,6 +291,40 @@ async function seedStaffData() {
         await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_compatibility_pair_kind_active
           ON staff_compatibility (staff_a_id, staff_b_id, kind) WHERE deleted_at IS NULL;`);
         seedDetail += ' controlKnowledgeEnsured:1';
+
+        // 管制ナレッジ補強(2026-06): FK + updated_at trigger。
+        // migration 1781700000000 と同内容の冪等ガード。
+        await pool.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'staff_compatibility_staff_a_fk') THEN
+              ALTER TABLE staff_compatibility
+                ADD CONSTRAINT staff_compatibility_staff_a_fk
+                FOREIGN KEY (staff_a_id) REFERENCES staff_master(id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'staff_compatibility_staff_b_fk') THEN
+              ALTER TABLE staff_compatibility
+                ADD CONSTRAINT staff_compatibility_staff_b_fk
+                FOREIGN KEY (staff_b_id) REFERENCES staff_master(id);
+            END IF;
+          END $$;
+        `);
+        await pool.query(`
+          CREATE OR REPLACE FUNCTION set_staff_compatibility_updated_at()
+          RETURNS TRIGGER AS $$
+          BEGIN
+            NEW.updated_at = NOW();
+            RETURN NEW;
+          END;
+          $$ LANGUAGE plpgsql;
+        `);
+        await pool.query(`DROP TRIGGER IF EXISTS trg_staff_compatibility_updated_at ON staff_compatibility;`);
+        await pool.query(`
+          CREATE TRIGGER trg_staff_compatibility_updated_at
+            BEFORE UPDATE ON staff_compatibility
+            FOR EACH ROW EXECUTE FUNCTION set_staff_compatibility_updated_at();
+        `);
+        seedDetail += ' controlKnowledgeFkTriggerEnsured:1';
       } catch (schemaErr: unknown) {
         const msg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
         seedDetail += ` kanaSchemaFixErr:${msg}`;

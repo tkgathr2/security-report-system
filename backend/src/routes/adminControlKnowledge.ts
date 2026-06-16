@@ -101,7 +101,12 @@ router.put('/staff/:id/constraints', requireAdmin, async (req: Request, res: Res
       action: 'UPDATE_STAFF_CONSTRAINTS',
       targetType: 'staff_master',
       targetId: staffId,
-      payload: { solo_ok, night_ok, control_note: controlNote },
+      payload: {
+        solo_ok,
+        night_ok,
+        control_note_len: controlNote?.length ?? 0,
+        control_note_present: controlNote !== null,
+      },
     });
 
     res.json({ staff: result.rows[0] });
@@ -216,7 +221,13 @@ router.post('/compat', requireAdmin, async (req: Request, res: Response) => {
       action: 'CREATE_COMPAT',
       targetType: 'staff_compatibility',
       targetId: result.rows[0].id as string,
-      payload: { staff_a_id: normA, staff_b_id: normB, kind, note },
+      payload: {
+        staff_a_id: normA,
+        staff_b_id: normB,
+        kind,
+        note_len: note?.length ?? 0,
+        note_present: note !== null,
+      },
     });
 
     res.status(201).json({ pair: result.rows[0] });
