@@ -218,9 +218,23 @@ export default function buildControlChatRouter(): Router {
           const toolResults: Anthropic.ToolResultBlockParam[] = [];
           for (const block of resp.content) {
             if (block.type === 'tool_use') {
-              const result = await executeTool(block.name, block.input as ToolResultPayload);
-              toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
+              // ツール単位で try/catch：1ツールの失敗で会話全体を捨てず、エラーをモデルに返して回復させる。
+              try {
+                const result = await executeTool(block.name, block.input as ToolResultPayload);
+                toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
+              } catch (toolErr) {
+                console.error('[control-chat] tool error:', block.name, toolErr);
+                toolResults.push({
+                  type: 'tool_result', tool_use_id: block.id, is_error: true,
+                  content: 'この操作の実行中にエラーが発生しました。',
+                });
+              }
             }
+          }
+          // tool_use と言いつつ実行可能なブロックが無い異常時は、空の user ターン（API 400）を避けて打ち切る。
+          if (toolResults.length === 0) {
+            res.json({ reply: 'うまく解釈できませんでした。短く言い直してもらえますか。', mutated, configured: true });
+            return;
           }
           messages.push({ role: 'assistant', content: resp.content });
           messages.push({ role: 'user', content: toolResults });

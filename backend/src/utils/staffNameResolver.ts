@@ -42,6 +42,19 @@ export function resolveStaffName(query: string, staff: StaffNameRow[]): NameMatc
   const q = normalizeName(query);
   if (q.length === 0) return [];
 
+  // 1文字のスタッフ名が長い問い合わせ文に含まれて誤マッチするのを防ぐため、
+  // 「問い合わせ側がスタッフ名を含む（逆包含）」マッチはスタッフ名が2文字以上のときだけ許可する。
+  const MIN_REVERSE = 2;
+  const rank = (name: string): 'exact' | 'prefix' | 'partial' | null => {
+    if (!name) return null;
+    if (name === q) return 'exact';
+    if (name.startsWith(q)) return 'prefix'; // 略称（中村←中）
+    if (name.length >= MIN_REVERSE && q.startsWith(name)) return 'prefix'; // 問い合わせが長い
+    if (name.includes(q)) return 'partial';
+    if (name.length >= MIN_REVERSE && q.includes(name)) return 'partial';
+    return null;
+  };
+
   const exact: NameMatch[] = [];
   const prefix: NameMatch[] = [];
   const partial: NameMatch[] = [];
@@ -52,19 +65,12 @@ export function resolveStaffName(query: string, staff: StaffNameRow[]): NameMatc
     const display = (s.display_name_kanji && s.display_name_kanji.trim()) || (s.display_name_kana && s.display_name_kana.trim()) || s.id;
     const m: NameMatch = { id: s.id, name: display };
 
-    if ((kanji && kanji === q) || (kana && kana === q)) {
-      exact.push(m);
-    } else if (
-      (kanji && (kanji.startsWith(q) || q.startsWith(kanji))) ||
-      (kana && (kana.startsWith(q) || q.startsWith(kana)))
-    ) {
-      prefix.push(m);
-    } else if (
-      (kanji && (kanji.includes(q) || q.includes(kanji))) ||
-      (kana && (kana.includes(q) || q.includes(kana)))
-    ) {
-      partial.push(m);
-    }
+    // kanji / kana のうち最も強い一致を採用
+    const ranks = [rank(kanji), rank(kana)];
+    const best = ranks.includes('exact') ? 'exact' : ranks.includes('prefix') ? 'prefix' : ranks.includes('partial') ? 'partial' : null;
+    if (best === 'exact') exact.push(m);
+    else if (best === 'prefix') prefix.push(m);
+    else if (best === 'partial') partial.push(m);
   }
 
   // 重複 id を除去しつつ exact→prefix→partial の優先順で。

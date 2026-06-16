@@ -58,6 +58,14 @@ describe('resolveStaffName', () => {
     expect(resolveStaffName('山田', staff)).toEqual([]);
   });
 
+  it('1文字のスタッフ名は長い問い合わせ文に逆包含で誤マッチしない（誤爆防止）', () => {
+    const oneChar: StaffNameRow[] = [{ id: 'x', display_name_kanji: '中', display_name_kana: null }];
+    // 「中村は1人立ちOK」のような文に1文字名「中」が含まれても解決しない
+    expect(resolveStaffName('中村は1人立ちOK', oneChar)).toEqual([]);
+    // ただし完全一致（「中」そのもの）は解決する
+    expect(resolveStaffName('中', oneChar).map((m) => m.id)).toEqual(['x']);
+  });
+
   it('空クエリは空配列（誤爆防止）', () => {
     expect(resolveStaffName('', staff)).toEqual([]);
     expect(resolveStaffName('さん', staff)).toEqual([]);
