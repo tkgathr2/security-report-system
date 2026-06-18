@@ -103,6 +103,8 @@ describe('POST /api/admin/control-board/assign', () => {
     );
     expect(insertCall).toBeDefined();
     expect(insertCall![1]).toEqual([PROJ_ID, STAFF_ID, 'no-42']);
+    // INSERT クエリに row_index 算出ロジックが含まれていること（NOT NULL違反防止）
+    expect(String(insertCall![0])).toContain('row_index');
   });
 });
 

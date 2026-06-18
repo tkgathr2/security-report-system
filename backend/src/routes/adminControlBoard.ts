@@ -571,9 +571,18 @@ router.post('/assign', requireAdmin, async (req: Request, res: Response) => {
       return;
     }
 
+    // row_index は同 project の active 最大値+1。空なら 0 から開始。
+    // project_casts.row_index は NOT NULL なので必ず数値を入れる。
     const ins = await pool.query<{ id: string }>(
-      `INSERT INTO project_casts (project_id, staff_id, staff_no)
-       VALUES ($1, $2, $3)
+      `INSERT INTO project_casts (project_id, staff_id, staff_no, row_index)
+       VALUES (
+         $1, $2, $3,
+         COALESCE(
+           (SELECT MAX(row_index) + 1 FROM project_casts
+             WHERE project_id = $1 AND deleted_at IS NULL),
+           0
+         )
+       )
        RETURNING id`,
       [projectId, staffId, staffNo]
     );
