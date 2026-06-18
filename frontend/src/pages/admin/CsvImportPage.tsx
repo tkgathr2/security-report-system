@@ -1,6 +1,7 @@
 import React from 'react'
 import { styles } from '../../styles/adminStyles'
 import type { ImportResult } from '../../types/admin'
+import { ProcastSyncNowButton } from '../../components/admin/ProcastSyncNowButton'
 
 interface CsvImportPageProps {
   importResult: ImportResult | null
@@ -28,6 +29,7 @@ export function CsvImportPage({
   return (
     <div>
       <h2 style={styles.pageTitle}>CSV取込</h2>
+      <ProcastSyncNowButton />
       <div style={styles.card}>
         <h3 style={styles.cardTitle}>案件データのインポート</h3>
         <p style={styles.cardDesc}>案件データのCSVファイルを選択またはドラッグ＆ドロップしてインポートします。</p>
