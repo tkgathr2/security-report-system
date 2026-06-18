@@ -772,12 +772,14 @@ async function seedTakagiProjectData() {
         try {
           await client.query('BEGIN');
 
+          // projects.work_title_raw は本番DBで NOT NULL かつ DEFAULT 無し。
+          // INSERT に含めないと新規環境/再シード時に必ず500。work_name と同値で安全に埋める。
           const newProj = await client.query(
-            `INSERT INTO projects (project_key, work_date, work_name, location, start_time, end_time, unique_url, url_expires_at, status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            `INSERT INTO projects (project_key, work_date, work_name, work_title_raw, location, start_time, end_time, unique_url, url_expires_at, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              ON CONFLICT DO NOTHING
              RETURNING id`,
-            [projectKey, dateStr, '警備業務', '現場A', '09:00', '18:00', uniqueUrl, urlExpires, 'active']
+            [projectKey, dateStr, '警備業務', '警備業務', '現場A', '09:00', '18:00', uniqueUrl, urlExpires, 'active']
           );
 
           if (newProj.rows.length > 0) {
