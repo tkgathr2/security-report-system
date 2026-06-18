@@ -15,7 +15,20 @@ import type {
 } from '../../types/admin'
 import { ControlBoardWeekView } from './ControlBoardWeekView'
 
-type ViewMode = 'day' | 'week'
+type ViewMode = 'day' | '3day' | 'week' | '2week'
+
+const VIEW_MODE_DAYS: Record<Exclude<ViewMode, 'day'>, number> = {
+  '3day': 3,
+  'week': 7,
+  '2week': 14,
+}
+
+const VIEW_MODE_LABEL: Record<ViewMode, string> = {
+  day: '📋 1日',
+  '3day': '📅 3日',
+  week: '📅 1週間',
+  '2week': '📅 2週間',
+}
 
 // 月曜開始の週初日（YYYY-MM-DD）を返す（D&D範囲・週ビュー用）。
 function weekStartDate(base: string): string {
@@ -339,7 +352,7 @@ export function ControlBoardPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<ViewMode>('day')
+  const [viewMode, setViewMode] = useState<ViewMode>('week')
   const [assignBusy, setAssignBusy] = useState(false)
   const [assignError, setAssignError] = useState<string | null>(null)
   const [weekReloadToken, setWeekReloadToken] = useState(0)
@@ -830,10 +843,14 @@ export function ControlBoardPage() {
       )
     }
 
-    if (viewMode === 'week') {
+    if (viewMode !== 'day') {
+      const days = VIEW_MODE_DAYS[viewMode]
+      // 1週間モードは「月曜開始」、3日/2週間モードは date 起点
+      const from = viewMode === 'week' ? weekStartDate(date) : date
       return (
         <ControlBoardWeekView
-          from={weekStartDate(date)}
+          from={from}
+          days={days}
           today={todayJST()}
           onPickDate={(d) => {
             setDate(d)
@@ -898,32 +915,30 @@ export function ControlBoardPage() {
         <span style={{ color: C.sub, fontSize: 14 }}>{formatDateJa(date)}</span>
         <span style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 4, marginRight: 4 }}>
-          <button
-            style={{
-              ...btnStyle,
-              background: viewMode === 'day' ? C.blue : '#fff',
-              color: viewMode === 'day' ? '#fff' : C.text,
-              borderColor: viewMode === 'day' ? C.blue : C.lineStrong,
-              fontWeight: viewMode === 'day' ? 700 : 400,
-            }}
-            onClick={() => setViewMode('day')}
-            title="1日の詳細（ドラッグ&ドロップ編集可）"
-          >
-            📋 1日
-          </button>
-          <button
-            style={{
-              ...btnStyle,
-              background: viewMode === 'week' ? C.blue : '#fff',
-              color: viewMode === 'week' ? '#fff' : C.text,
-              borderColor: viewMode === 'week' ? C.blue : C.lineStrong,
-              fontWeight: viewMode === 'week' ? 700 : 400,
-            }}
-            onClick={() => setViewMode('week')}
-            title="月曜〜日曜の1週間ぶんを縦に並べて表示"
-          >
-            📅 1週間
-          </button>
+          {(['day', '3day', 'week', '2week'] as ViewMode[]).map((m) => (
+            <button
+              key={m}
+              style={{
+                ...btnStyle,
+                background: viewMode === m ? C.blue : '#fff',
+                color: viewMode === m ? '#fff' : C.text,
+                borderColor: viewMode === m ? C.blue : C.lineStrong,
+                fontWeight: viewMode === m ? 700 : 400,
+              }}
+              onClick={() => setViewMode(m)}
+              title={
+                m === 'day'
+                  ? '1日の詳細（ドラッグ&ドロップ編集可）'
+                  : m === '3day'
+                    ? '今日から3日ぶんを縦に並べて表示'
+                    : m === 'week'
+                      ? '月曜〜日曜の1週間ぶんを縦に並べて表示'
+                      : '今日から2週間（14日）ぶんを縦に並べて表示'
+              }
+            >
+              {VIEW_MODE_LABEL[m]}
+            </button>
+          ))}
         </div>
         <button style={btnStyle} onClick={() => go(-1)}>
           前日
