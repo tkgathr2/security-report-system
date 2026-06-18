@@ -72,6 +72,23 @@ export interface ControlBoardData {
   violations?: ControlBoardViolation[]
 }
 
+// 1週間ビュー：各日が day 形状を持つ。pool は night_ok 含む簡略版。
+export interface ControlBoardWeekDay {
+  date: string
+  sites: ControlBoardSite[]
+  cells: ControlBoardCell[]
+  pool: Array<{ staff_id: string; name: string; night_ok: boolean }>
+  warnings: ControlBoardWarning[]
+  violations?: ControlBoardViolation[]
+  kpi: ControlBoardKpi
+}
+
+export interface ControlBoardRange {
+  from: string
+  days: number
+  range: ControlBoardWeekDay[]
+}
+
 export interface AdminUser {
   id: string
   email: string

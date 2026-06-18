@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
-import { handleDbError, sendBadRequest } from '../utils/errorHandler';
+import { handleDbError, sendBadRequest, sendNotFound, sendConflict } from '../utils/errorHandler';
+import { logAudit } from '../utils/auditLog';
 
 const router = Router();
 
@@ -508,6 +509,278 @@ router.get('/', requireAdmin, async (req: Request, res: Response) => {
     });
   } catch (error) {
     handleDbError(res, error, 'Control board');
+  }
+});
+
+// ===== D&D 書き込み API（管制ボードからスタッフ配置を編集）=====
+//
+// 設計:
+//  - 配置の追加（pool→cell / cell→cell の片側）= POST /assign
+//  - 配置の解除（cell→pool / cell→cell の元側）= DELETE /assign
+//  - cell→cell 移動 はクライアント側で DELETE→POST の 2回呼び出しで表現する
+//  - 同じ project_id × staff_id が既に active（deleted_at IS NULL）なら 409
+//  - staff_no は staff_master.procast_staff_no から自動取得（無ければ空文字）
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+router.post('/assign', requireAdmin, async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { project_id?: unknown; staff_id?: unknown };
+  const projectId = typeof body.project_id === 'string' ? body.project_id : '';
+  const staffId = typeof body.staff_id === 'string' ? body.staff_id : '';
+
+  if (!UUID_RE.test(projectId)) {
+    sendBadRequest(res, 'project_id の形式が不正です');
+    return;
+  }
+  if (!UUID_RE.test(staffId)) {
+    sendBadRequest(res, 'staff_id の形式が不正です');
+    return;
+  }
+
+  try {
+    const projRes = await pool.query<{ id: string }>(
+      `SELECT id FROM projects
+        WHERE id = $1 AND deleted_at IS NULL
+          AND status IS DISTINCT FROM 'cancelled' AND cancelled_at IS NULL`,
+      [projectId]
+    );
+    if (projRes.rowCount === 0) {
+      sendNotFound(res, '案件が見つからない／中止案件のため配置できません');
+      return;
+    }
+
+    const staffRes = await pool.query<{ id: string; procast_staff_no: string | null; display_name_kanji: string | null }>(
+      `SELECT id, procast_staff_no, display_name_kanji
+         FROM staff_master WHERE id = $1 AND deleted_at IS NULL`,
+      [staffId]
+    );
+    if (staffRes.rowCount === 0) {
+      sendNotFound(res, 'スタッフが見つかりません');
+      return;
+    }
+    const staffNo = staffRes.rows[0].procast_staff_no ?? '';
+
+    const dupRes = await pool.query<{ id: string }>(
+      `SELECT id FROM project_casts
+        WHERE project_id = $1 AND staff_id = $2 AND deleted_at IS NULL
+        LIMIT 1`,
+      [projectId, staffId]
+    );
+    if ((dupRes.rowCount ?? 0) > 0) {
+      sendConflict(res, '同じスタッフがこの現場に既に配置されています');
+      return;
+    }
+
+    const ins = await pool.query<{ id: string }>(
+      `INSERT INTO project_casts (project_id, staff_id, staff_no)
+       VALUES ($1, $2, $3)
+       RETURNING id`,
+      [projectId, staffId, staffNo]
+    );
+
+    const adminUser = req.user as { email?: string } | undefined;
+    logAudit({
+      req,
+      actorEmail: adminUser?.email ?? 'unknown',
+      action: 'CONTROL_BOARD_ASSIGN',
+      targetType: 'project_casts',
+      targetId: ins.rows[0].id,
+      payload: { project_id: projectId, staff_id: staffId },
+    });
+
+    res.status(201).json({ id: ins.rows[0].id });
+  } catch (error) {
+    handleDbError(res, error, 'Control board assign');
+  }
+});
+
+router.delete('/assign', requireAdmin, async (req: Request, res: Response) => {
+  const projectId = typeof req.query.project_id === 'string' ? req.query.project_id : '';
+  const staffId = typeof req.query.staff_id === 'string' ? req.query.staff_id : '';
+
+  if (!UUID_RE.test(projectId)) {
+    sendBadRequest(res, 'project_id の形式が不正です');
+    return;
+  }
+  if (!UUID_RE.test(staffId)) {
+    sendBadRequest(res, 'staff_id の形式が不正です');
+    return;
+  }
+
+  try {
+    const upd = await pool.query<{ id: string }>(
+      `UPDATE project_casts
+          SET deleted_at = NOW()
+        WHERE project_id = $1 AND staff_id = $2 AND deleted_at IS NULL
+        RETURNING id`,
+      [projectId, staffId]
+    );
+    if ((upd.rowCount ?? 0) === 0) {
+      sendNotFound(res, '配置が見つかりません（既に解除されている可能性があります）');
+      return;
+    }
+
+    const adminUser = req.user as { email?: string } | undefined;
+    logAudit({
+      req,
+      actorEmail: adminUser?.email ?? 'unknown',
+      action: 'CONTROL_BOARD_UNASSIGN',
+      targetType: 'project_casts',
+      targetId: upd.rows[0].id,
+      payload: { project_id: projectId, staff_id: staffId },
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    handleDbError(res, error, 'Control board unassign');
+  }
+});
+
+// ===== 1週間ビュー API（GET /api/admin/control-board/range） =====
+// 既存 GET / を 1 日ぶんに使い回す形にせず、from + days で範囲取得して per-day で返す。
+// 既存 / は互換維持（破壊なし）。FE は range を呼んで横並び/縦並びの週ビューを描く。
+
+router.get('/range', requireAdmin, async (req: Request, res: Response) => {
+  const from = typeof req.query.from === 'string' ? req.query.from : '';
+  const daysRaw = typeof req.query.days === 'string' ? parseInt(req.query.days, 10) : 7;
+  if (!DATE_RE.test(from)) {
+    sendBadRequest(res, 'from は YYYY-MM-DD 形式で指定してください');
+    return;
+  }
+  const days = Math.max(1, Math.min(14, Number.isFinite(daysRaw) ? daysRaw : 7));
+
+  // 日付配列を作る（TZ非依存・UTC基準で +N 日）
+  const dateList: string[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(`${from}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + i);
+    dateList.push(d.toISOString().slice(0, 10));
+  }
+
+  try {
+    // 1ユーザ操作 = 1 まとめての fetch でも、per-day SQL は既存 GET / と同じ形に揃える。
+    // 7並列で叩けば PG プールが詰まらず安全に取れる（日数上限14のため）。
+    const perDay = await Promise.all(
+      dateList.map(async (date) => {
+        const prevDate = prevDateStr(date);
+        const [projRes, castRes, prevProjRes, prevCastRes, staffRes, compatRes] = await Promise.all([
+          pool.query(PROJECTS_SQL, [date]),
+          pool.query(CASTS_SQL, [date]),
+          pool.query(PROJECTS_SQL, [prevDate]),
+          pool.query(CASTS_SQL, [prevDate]),
+          pool.query(
+            `SELECT id, display_name_kanji, solo_ok, night_ok, hidden FROM staff_master WHERE deleted_at IS NULL ORDER BY display_name_kana ASC NULLS LAST`
+          ),
+          pool.query(
+            `SELECT staff_a_id, staff_b_id FROM staff_compatibility WHERE kind = 'avoid' AND deleted_at IS NULL`
+          ),
+        ]);
+
+        const hiddenSet = new Set(
+          (staffRes.rows as Array<{ id: string; hidden?: boolean }>).filter((s) => s.hidden).map((s) => s.id)
+        );
+        const notHidden = (c: CastRow) => c.staff_id == null || !hiddenSet.has(c.staff_id);
+
+        const projects = projRes.rows as ProjectRow[];
+        const casts = (castRes.rows as CastRow[]).filter(notHidden);
+        const prevProjects = prevProjRes.rows as ProjectRow[];
+        const prevCasts = (prevCastRes.rows as CastRow[]).filter(notHidden);
+
+        const siteMap = new Map<string, { key: string; label: string; meta: string }>();
+        for (const p of projects) {
+          const key = deriveSiteKey(p.client_name, p.location, p.work_name);
+          if (siteMap.has(key)) continue;
+          const label = deriveSiteLabel(p.client_name, p.location, p.work_name);
+          const meta = (p.location ?? '').trim() || (p.client_name ?? '').trim();
+          siteMap.set(key, { key, label, meta });
+        }
+        const sites = Array.from(siteMap.values());
+
+        const currPlacements = buildPlacements(projects, casts);
+        const prevPlacements = buildPlacements(prevProjects, prevCasts);
+        const currLabel = `${shortDate(date)}朝`;
+        const prevLabel = `${shortDate(prevDate)}夜`;
+        const currMorning = currPlacements.filter((p) => p.shift === 'morning');
+        const prevEvening = prevPlacements.filter((p) => p.shift === 'evening');
+        const { warnings, warnStaffIds } = computeWarnings(currMorning, prevEvening, currLabel, prevLabel);
+
+        const castsByProject = new Map<string, CastRow[]>();
+        for (const c of casts) {
+          const arr = castsByProject.get(c.project_id);
+          if (arr) arr.push(c);
+          else castsByProject.set(c.project_id, [c]);
+        }
+        const cells = projects.map((p) => {
+          const siteKey = deriveSiteKey(p.client_name, p.location, p.work_name);
+          const shift = deriveShift(p.start_time);
+          const rows = castsByProject.get(p.project_id) ?? [];
+          const seenForHandoff = new Set<string>();
+          const castsOut = rows.map((c) => {
+            const over = c.staff_id != null && warnStaffIds.has(c.staff_id);
+            const handoff = shift === 'evening' && c.staff_id != null && !seenForHandoff.has(c.staff_id);
+            if (handoff && c.staff_id != null) seenForHandoff.add(c.staff_id);
+            return {
+              staff_id: c.staff_id,
+              name: displayName(c),
+              over,
+              handoff,
+              warn: [] as string[],
+            };
+          });
+          return { project_id: p.project_id, site_key: siteKey, shift, casts: castsOut };
+        });
+
+        const constraintMap = new Map(
+          (staffRes.rows as Array<{ id: string; solo_ok: boolean; night_ok: boolean }>).map((s) => [
+            s.id,
+            { solo_ok: s.solo_ok, night_ok: s.night_ok },
+          ])
+        );
+        const avoidPairs = new Set(
+          (compatRes.rows as Array<{ staff_a_id: string; staff_b_id: string }>).map((r) =>
+            pairKey(r.staff_a_id, r.staff_b_id)
+          )
+        );
+        const violCells: ViolationCell[] = cells.map((c) => ({
+          site_key: c.site_key,
+          site_label: siteMap.get(c.site_key)?.label ?? c.site_key,
+          shift: c.shift,
+          casts: c.casts,
+        }));
+        const violations = computeViolations(violCells, constraintMap, avoidPairs);
+
+        const assignedStaffIds = new Set(
+          casts.filter((c) => c.staff_id != null).map((c) => c.staff_id as string)
+        );
+        const allStaff = staffRes.rows as Array<{
+          id: string; display_name_kanji: string | null; solo_ok: boolean; night_ok: boolean; hidden?: boolean;
+        }>;
+        // 週ビューでは pool は各日最小限（id・name・night_ok）でよい（履歴ソートは GET / 側だけで実施）。
+        const poolOut = allStaff
+          .filter((s) => !assignedStaffIds.has(s.id) && !s.hidden)
+          .map((s) => ({ staff_id: s.id, name: s.display_name_kanji ?? '', night_ok: !!s.night_ok }));
+
+        return {
+          date,
+          sites,
+          cells,
+          pool: poolOut,
+          warnings,
+          violations,
+          kpi: {
+            sites: sites.length,
+            assigned: assignedStaffIds.size,
+            pool: poolOut.length,
+            warnings: warnings.length,
+            violations: violations.length,
+          },
+        };
+      })
+    );
+
+    res.json({ from, days, range: perDay });
+  } catch (error) {
+    handleDbError(res, error, 'Control board range');
   }
 });
 

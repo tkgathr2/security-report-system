@@ -1,9 +1,106 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  type DragEndEvent,
+} from '@dnd-kit/core'
 import type {
   ControlBoardData,
   ControlBoardCast,
   ControlBoardViolation,
 } from '../../types/admin'
+import { ControlBoardWeekView } from './ControlBoardWeekView'
+
+type ViewMode = 'day' | 'week'
+
+// 月曜開始の週初日（YYYY-MM-DD）を返す（D&D範囲・週ビュー用）。
+function weekStartDate(base: string): string {
+  const d = new Date(base + 'T12:00:00')
+  const dow = d.getDay() // 0=日..6=土
+  const diff = dow === 0 ? -6 : 1 - dow // 月曜まで戻す
+  d.setDate(d.getDate() + diff)
+  return d.toISOString().slice(0, 10)
+}
+
+// D&D サーバ呼び出し
+async function postAssign(projectId: string, staffId: string): Promise<void> {
+  const res = await fetch('/api/admin/control-board/assign', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_id: projectId, staff_id: staffId }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error || `HTTP ${res.status}`)
+  }
+}
+
+async function deleteAssign(projectId: string, staffId: string): Promise<void> {
+  const res = await fetch(
+    `/api/admin/control-board/assign?project_id=${encodeURIComponent(projectId)}&staff_id=${encodeURIComponent(staffId)}`,
+    { method: 'DELETE', credentials: 'include' }
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error || `HTTP ${res.status}`)
+  }
+}
+
+// pool の各スタッフを draggable に
+function DraggableStaff({
+  staffId,
+  children,
+}: {
+  staffId: string
+  children: React.ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `staff:${staffId}`,
+    data: { kind: 'staff', staffId },
+  })
+  const style: React.CSSProperties = {
+    cursor: 'grab',
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    opacity: isDragging ? 0.5 : 1,
+    touchAction: 'none',
+  }
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      {children}
+    </div>
+  )
+}
+
+// 各 cell を droppable に
+function DroppableCell({
+  projectId,
+  children,
+  baseStyle,
+}: {
+  projectId: string
+  children: React.ReactNode
+  baseStyle: React.CSSProperties
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `cell:${projectId}`,
+    data: { kind: 'cell', projectId },
+  })
+  const style: React.CSSProperties = {
+    ...baseStyle,
+    background: isOver ? '#e3f2fd' : baseStyle.background,
+    outline: isOver ? '2px dashed #2563eb' : 'none',
+  }
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children}
+    </div>
+  )
+}
 
 // ===== CSS-in-JS スタイル定数（kansei_simple.html の変数に対応） =====
 const C = {
@@ -106,6 +203,43 @@ function CastTag({ cast }: { cast: ControlBoardCast }) {
 // ===== 下部ドック：自動管制システムと会話 =====
 interface ChatMsg { role: 'user' | 'assistant'; text: string }
 
+// 削除ボタン付き CastTag（× で配置解除）
+function CastTagWithRemove({
+  cast,
+  onRemove,
+  disabled,
+}: {
+  cast: ControlBoardCast
+  onRemove?: () => void
+  disabled?: boolean
+}) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'stretch', gap: 0 }}>
+      <CastTag cast={cast} />
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          disabled={disabled}
+          title="この配置を外す"
+          style={{
+            border: '1px solid #e0e0e0',
+            borderLeft: 'none',
+            background: '#fafafa',
+            color: '#666',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            fontSize: 12,
+            padding: '0 6px',
+            borderRadius: '0 7px 7px 0',
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          ×
+        </button>
+      )}
+    </span>
+  )
+}
+
 function ChatDock({ onMutated }: { onMutated: () => void }) {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -205,6 +339,14 @@ export function ControlBoardPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>('day')
+  const [assignBusy, setAssignBusy] = useState(false)
+  const [assignError, setAssignError] = useState<string | null>(null)
+  const [weekReloadToken, setWeekReloadToken] = useState(0)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+  )
 
   // 日付連打のレース対策：最新リクエストのみ反映する（古いレスポンスが新しい表示を上書きしない）
   const reqIdRef = useRef(0)
@@ -242,6 +384,43 @@ export function ControlBoardPage() {
   // 日付移動
   const go = (offset: number) => setDate((prev) => offsetDate(prev, offset))
   const goToday = () => setDate(todayJST())
+
+  // ===== D&D：プールのスタッフ → 現場セル =====
+  const handleDragEnd = useCallback(async (e: DragEndEvent) => {
+    setAssignError(null)
+    const activeData = e.active?.data?.current as { kind?: string; staffId?: string } | undefined
+    const overData = e.over?.data?.current as { kind?: string; projectId?: string } | undefined
+    if (activeData?.kind !== 'staff' || overData?.kind !== 'cell') return
+    const staffId = activeData.staffId
+    const projectId = overData.projectId
+    if (!staffId || !projectId) return
+    setAssignBusy(true)
+    try {
+      await postAssign(projectId, staffId)
+      // 楽観的UXより堅実：再fetchで盤面を整合
+      await load(date)
+      setWeekReloadToken((t) => t + 1)
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : '配置に失敗しました')
+    } finally {
+      setAssignBusy(false)
+    }
+  }, [date, load])
+
+  // セル内の × ボタンで配置解除（クリックベースの編集経路）
+  const handleRemoveAssign = useCallback(async (projectId: string, staffId: string) => {
+    setAssignError(null)
+    setAssignBusy(true)
+    try {
+      await deleteAssign(projectId, staffId)
+      await load(date)
+      setWeekReloadToken((t) => t + 1)
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : '解除に失敗しました')
+    } finally {
+      setAssignBusy(false)
+    }
+  }, [date, load])
 
   // スタッフを管制ボードで非表示/再表示する（高木など配置対象でない人を隠す）。完了後に盤面を再取得。
   const hideStaff = useCallback(async (staffId: string, hidden: boolean) => {
@@ -386,6 +565,15 @@ export function ControlBoardPage() {
                   const key = `${site.key}::${shift}`
                   const cell = cellMap.get(key)
                   const casts: ControlBoardCast[] = cell?.casts ?? []
+                  const cellBaseStyle: React.CSSProperties = {
+                    minHeight: 42,
+                    padding: '7px 10px',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 5,
+                    alignContent: 'flex-start',
+                    borderRight: `1px solid ${C.line}`,
+                  }
                   return (
                     <td
                       key={site.key}
@@ -396,21 +584,27 @@ export function ControlBoardPage() {
                         padding: 0,
                       }}
                     >
-                      <div
-                        style={{
-                          minHeight: 42,
-                          padding: '7px 10px',
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: 5,
-                          alignContent: 'flex-start',
-                          borderRight: `1px solid ${C.line}`,
-                        }}
-                      >
-                        {casts.map((c, ci) => (
-                          <CastTag key={`${c.staff_id ?? 'x'}-${ci}`} cast={c} />
-                        ))}
-                      </div>
+                      {cell ? (
+                        <DroppableCell projectId={cell.project_id} baseStyle={cellBaseStyle}>
+                          {casts.map((c, ci) => (
+                            <CastTagWithRemove
+                              key={`${c.staff_id ?? 'x'}-${ci}`}
+                              cast={c}
+                              onRemove={
+                                c.staff_id
+                                  ? () => handleRemoveAssign(cell.project_id, c.staff_id as string)
+                                  : undefined
+                              }
+                              disabled={assignBusy}
+                            />
+                          ))}
+                          {casts.length === 0 && (
+                            <span style={{ color: C.sub, fontSize: 11 }}>ドロップで配置</span>
+                          )}
+                        </DroppableCell>
+                      ) : (
+                        <div style={{ ...cellBaseStyle, color: C.sub, fontSize: 11 }}>—</div>
+                      )}
                     </td>
                   )
                 })}
@@ -457,27 +651,30 @@ export function ControlBoardPage() {
               <span style={{ fontSize: 13, color: C.sub }}>なし</span>
             ) : (
               pool.map((p) => (
-                <div
-                  key={p.staff_id}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    gap: 6, background: C.tag, border: `1px solid ${C.tagLine}`,
-                    borderRadius: 7, padding: '5px 8px 5px 10px', fontSize: 13,
-                    opacity: p.last_seen ? 1 : 0.55,
-                  }}
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                    <span style={{ color: C.sub, fontSize: 11, flexShrink: 0 }}>{seenLabel(p.last_seen)}</span>
-                  </span>
-                  <button
-                    onClick={() => hideStaff(p.staff_id, true)}
-                    title="この人を盤面から非表示にする"
-                    style={{ border: 'none', background: 'transparent', color: C.sub, cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+                <DraggableStaff key={p.staff_id} staffId={p.staff_id}>
+                  <div
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: 6, background: C.tag, border: `1px solid ${C.tagLine}`,
+                      borderRadius: 7, padding: '5px 8px 5px 10px', fontSize: 13,
+                      opacity: p.last_seen ? 1 : 0.55,
+                    }}
+                    title="ドラッグして現場セルにドロップで配置"
                   >
-                    ×
-                  </button>
-                </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                      <span style={{ color: C.sub, fontSize: 11, flexShrink: 0 }}>{seenLabel(p.last_seen)}</span>
+                    </span>
+                    <button
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => hideStaff(p.staff_id, true)}
+                      title="この人を盤面から非表示にする"
+                      style={{ border: 'none', background: 'transparent', color: C.sub, cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </DraggableStaff>
               ))
             )}
           </div>
@@ -633,6 +830,20 @@ export function ControlBoardPage() {
       )
     }
 
+    if (viewMode === 'week') {
+      return (
+        <ControlBoardWeekView
+          from={weekStartDate(date)}
+          today={todayJST()}
+          onPickDate={(d) => {
+            setDate(d)
+            setViewMode('day')
+          }}
+          reloadToken={weekReloadToken}
+        />
+      )
+    }
+
     return (
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
         {/* メイングリッド */}
@@ -653,7 +864,32 @@ export function ControlBoardPage() {
   }
 
   return (
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
     <div style={{ fontFamily: C.font, color: C.text, background: C.bg }}>
+      {assignError && (
+        <div
+          style={{
+            padding: '8px 24px',
+            background: C.redBg,
+            color: C.red,
+            fontSize: 13,
+            borderBottom: `1px solid ${C.line}`,
+          }}
+        >
+          配置エラー: {assignError}
+          <button
+            onClick={() => setAssignError(null)}
+            style={{ marginLeft: 12, background: 'transparent', border: 'none', color: C.red, cursor: 'pointer', fontWeight: 700 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {assignBusy && (
+        <div style={{ padding: '6px 24px', background: '#fff8e1', color: '#5d4037', fontSize: 12, borderBottom: `1px solid ${C.line}` }}>
+          配置を更新中…
+        </div>
+      )}
       {/* ヘッダー */}
       <header style={headerStyle}>
         <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: '0.02em' }}>
@@ -661,6 +897,34 @@ export function ControlBoardPage() {
         </h1>
         <span style={{ color: C.sub, fontSize: 14 }}>{formatDateJa(date)}</span>
         <span style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 4, marginRight: 4 }}>
+          <button
+            style={{
+              ...btnStyle,
+              background: viewMode === 'day' ? C.blue : '#fff',
+              color: viewMode === 'day' ? '#fff' : C.text,
+              borderColor: viewMode === 'day' ? C.blue : C.lineStrong,
+              fontWeight: viewMode === 'day' ? 700 : 400,
+            }}
+            onClick={() => setViewMode('day')}
+            title="1日の詳細（ドラッグ&ドロップ編集可）"
+          >
+            📋 1日
+          </button>
+          <button
+            style={{
+              ...btnStyle,
+              background: viewMode === 'week' ? C.blue : '#fff',
+              color: viewMode === 'week' ? '#fff' : C.text,
+              borderColor: viewMode === 'week' ? C.blue : C.lineStrong,
+              fontWeight: viewMode === 'week' ? 700 : 400,
+            }}
+            onClick={() => setViewMode('week')}
+            title="月曜〜日曜の1週間ぶんを縦に並べて表示"
+          >
+            📅 1週間
+          </button>
+        </div>
         <button style={btnStyle} onClick={() => go(-1)}>
           前日
         </button>
@@ -795,5 +1059,6 @@ export function ControlBoardPage() {
       {/* 下部ドック：自動管制システムと会話（覚えさせる／質問する） */}
       <ChatDock onMutated={() => load(date)} />
     </div>
+    </DndContext>
   )
 }
