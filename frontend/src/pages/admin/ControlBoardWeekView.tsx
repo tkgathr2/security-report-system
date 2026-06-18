@@ -58,6 +58,8 @@ async function fetchRange(from: string, days: number, signal?: AbortSignal): Pro
 
 interface Props {
   from: string
+  /** 取得・表示する日数（1〜14）。省略時=7。 */
+  days?: number
   today: string
   onPickDate?: (dateStr: string) => void
   reloadToken?: number
@@ -68,16 +70,18 @@ interface Props {
  * 各セルに「配置済みキャスト数 / 必要人数（暫定: 0表記）」と上番下番警告アイコンを集約表示。
  * 読み取り専用（D&Dは1日モードのみ）。日付ヘッダクリックで1日モードに戻る導線を親に通知。
  */
-export function ControlBoardWeekView({ from, today, onPickDate, reloadToken }: Props) {
+export function ControlBoardWeekView({ from, days = 7, today, onPickDate, reloadToken }: Props) {
   const [data, setData] = useState<ControlBoardRange | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 1〜14 にクランプ（backend と同じガード）。
+  const clampedDays = Math.max(1, Math.min(14, Math.floor(days)))
 
   useEffect(() => {
     const ac = new AbortController()
     setLoading(true)
     setError(null)
-    fetchRange(from, 7, ac.signal)
+    fetchRange(from, clampedDays, ac.signal)
       .then((r) => {
         setData(r)
         setLoading(false)
@@ -88,12 +92,12 @@ export function ControlBoardWeekView({ from, today, onPickDate, reloadToken }: P
         setLoading(false)
       })
     return () => ac.abort()
-  }, [from, reloadToken])
+  }, [from, clampedDays, reloadToken])
 
   if (loading) {
     return (
       <div style={{ padding: 24, color: COLORS.sub, fontFamily: COLORS.font }}>
-        1週間ぶんを取得中…
+        {clampedDays}日ぶんを取得中…
       </div>
     )
   }
