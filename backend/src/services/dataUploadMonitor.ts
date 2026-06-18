@@ -6,9 +6,14 @@ function getSlackWebhookUrl(): string {
 
 const CHECK_HOURS_JST = [17, 19, 21, 0, 9, 12];
 const PRE_DAY_HOURS = new Set([17, 19, 21]);
-const SAME_DAY_HOURS = new Set([0, 9, 12]);
+// プロキャストからの自動取り込みは「JST 10:00」と「JST 22:00」に走る。
+// したがって 0:00 / 9:00 のチェック時点では「当日分の自動取り込み」はまだ走っていない＝
+// "自動取り込み後も入っていない" と書くのは事実誤認になる（西村さん・社長混乱の元）。
+// 0:00 / 9:00 は「当日の事前チェック（取り込み前）」、12:00 だけが「取り込み後の本物チェック」。
+const SAME_DAY_PREFETCH_HOURS = new Set([0, 9]);
+const SAME_DAY_POSTFETCH_HOURS = new Set([12]);
 
-export type NotificationKind = 'pre_day' | 'same_day';
+export type NotificationKind = 'pre_day' | 'same_day_prefetch' | 'same_day_postfetch';
 
 /**
  * 2026年の主要祝日 (JST, YYYY-MM-DD)。
@@ -54,7 +59,8 @@ export function getJSTDate(offset = 0): { dateStr: string; hour: number; minute:
 
 export function classifyKind(hour: number): NotificationKind | null {
   if (PRE_DAY_HOURS.has(hour)) return 'pre_day';
-  if (SAME_DAY_HOURS.has(hour)) return 'same_day';
+  if (SAME_DAY_PREFETCH_HOURS.has(hour)) return 'same_day_prefetch';
+  if (SAME_DAY_POSTFETCH_HOURS.has(hour)) return 'same_day_postfetch';
   return null;
 }
 
@@ -109,24 +115,42 @@ async function sendSlackAlert(
   const mention = useChannelMention ? '<!channel> ' : '';
   const mentionBlock = useChannelMention ? '<!channel>\n' : '';
 
-  // 通知文言は kind で出し分け：
-  //  - pre_day (前夜の事前チェック): 翌朝10時の自動取り込み前なので「まだ入っていない」のは正常。
-  //    紛らわしい「アラート」ではなく軽い「事前チェック」表記にする。
-  //  - same_day (当日チェック): 自動取り込み後でも入っていない＝本物の未登録。強めに出す。
+  // 通知文言は kind で3分岐：
+  //  - pre_day              (前夜 17/19/21): 翌朝10時の自動取り込み前。軽い「事前チェック」表記。
+  //  - same_day_prefetch    (当日 0/9):     当日朝10時の自動取り込み前。事実誤認しないよう「取り込み前」と明記。
+  //  - same_day_postfetch   (当日 12):      自動取り込み後でも入っていない＝本物の未登録。強めに出す。
   const isPreDay = kind === 'pre_day';
-  const headerIcon = isPreDay ? ':memo:' : ':warning:';
-  const headerLabel = isPreDay ? '事前チェック（明日分）' : '案件データ未登録アラート';
-  const textSummary = isPreDay
-    ? `【ほうこちゃん】${targetDate}（明日）分の案件は ${checkLabel} 時点ではまだ未取り込み（事前チェック）`
-    : `${mention}【ほうこちゃん】${targetDate} の案件データが未登録です（${checkLabel}チェック）`;
+  const isPrefetch = kind === 'same_day_prefetch';
+  const isPostfetch = kind === 'same_day_postfetch';
+
+  const headerIcon = isPostfetch ? ':warning:' : ':memo:';
+  const headerLabel = isPreDay
+    ? '事前チェック（明日分）'
+    : isPrefetch
+      ? '事前チェック（本日分・取り込み前）'
+      : '案件データ未登録アラート';
+
+  const dateSuffix = isPreDay ? '（明日）' : isPrefetch ? '（本日・取り込み前）' : '';
+
+  const textSummary = isPostfetch
+    ? `${mention}【ほうこちゃん】${targetDate} の案件データが未登録です（${checkLabel}チェック）`
+    : isPreDay
+      ? `【ほうこちゃん】${targetDate}（明日）分の案件は ${checkLabel} 時点ではまだ未取り込み（事前チェック）`
+      : `【ほうこちゃん】${targetDate}（本日）分の案件は ${checkLabel} 時点ではまだ未取り込み（取り込み前の事前チェック）`;
+
   const guidanceLines = isPreDay
     ? [
         '※ プロキャストからの自動取り込みは翌朝10時に走るため、いまの時点では未取り込みでも正常です。',
         '※ 翌朝10時の取り込み後にも入っていなければ、当日チェックで再度お知らせします（その時は対応が必要）。',
       ]
-    : [
-        '自動取り込み後も案件データが入っていません。CSVインポートで案件データをアップロードしてください。',
-      ];
+    : isPrefetch
+      ? [
+          '※ プロキャストからの自動取り込みは本日10時に走るため、いまの時点では未取り込みでも正常です。',
+          '※ 本日10時の取り込み後にも入っていなければ、12時の当日チェックで再度お知らせします（その時は対応が必要）。',
+        ]
+      : [
+          '自動取り込み後も案件データが入っていません。CSVインポートで案件データをアップロードしてください。',
+        ];
 
   const message = {
     text: textSummary,
@@ -135,8 +159,8 @@ async function sendSlackAlert(
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${isPreDay ? '' : mentionBlock}${headerIcon} *【ほうこちゃん】${headerLabel}*\n\n` +
-            `*対象日:* ${targetDate}${isPreDay ? '（明日）' : ''}\n` +
+          text: `${isPostfetch ? mentionBlock : ''}${headerIcon} *【ほうこちゃん】${headerLabel}*\n\n` +
+            `*対象日:* ${targetDate}${dateSuffix}\n` +
             `*チェック時刻:* ${checkLabel}\n\n` +
             guidanceLines.join('\n')
         }
@@ -189,9 +213,9 @@ export async function runCheck(): Promise<void> {
         return;
       }
       console.log(`[DataMonitor] No data for ${targetDate}, sending Slack alert (${kind})`);
-      // pre_day（前夜の事前チェック）は @channel を使わない＝紛らわしい「アラート」感を消す。
-      // same_day は従来通り平日のみ @channel。
-      const mentionForSend = kind === 'pre_day' ? false : useChannelMention;
+      // @channel メンションは「本物の未登録アラート (same_day_postfetch=12時)」のときだけ。
+      // 事前チェック (pre_day / same_day_prefetch) は静かに通知する。
+      const mentionForSend = kind === 'same_day_postfetch' ? useChannelMention : false;
       await sendSlackAlert(targetDate, checkLabel, mentionForSend, kind);
       console.log(`[DataMonitor] Slack alert sent for ${targetDate} (${kind})`);
     }

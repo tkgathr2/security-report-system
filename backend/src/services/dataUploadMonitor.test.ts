@@ -25,10 +25,13 @@ describe('classifyKind', () => {
     expect(classifyKind(21)).toBe('pre_day');
   });
 
-  it('classifies 0/9/12 JST as same_day', () => {
-    expect(classifyKind(0)).toBe('same_day');
-    expect(classifyKind(9)).toBe('same_day');
-    expect(classifyKind(12)).toBe('same_day');
+  it('classifies 0/9 JST as same_day_prefetch (取り込み前)', () => {
+    expect(classifyKind(0)).toBe('same_day_prefetch');
+    expect(classifyKind(9)).toBe('same_day_prefetch');
+  });
+
+  it('classifies 12 JST as same_day_postfetch (取り込み後の本物アラート)', () => {
+    expect(classifyKind(12)).toBe('same_day_postfetch');
   });
 
   it('returns null for non-check hours', () => {
@@ -111,7 +114,7 @@ describe('getJSTDate', () => {
   });
 });
 
-describe('runCheck dedup (pre_day vs same_day are independent)', () => {
+describe('runCheck dedup (pre_day vs same_day_prefetch vs same_day_postfetch are independent)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mockedQuery.mockReset();
@@ -150,18 +153,32 @@ describe('runCheck dedup (pre_day vs same_day are independent)', () => {
     expect(mockedQuery).toHaveBeenCalledTimes(2);
   });
 
-  it('same_day at 09:00 is independent from earlier pre_day claim', async () => {
-    // 09:00 JST Mon 2026-06-15 == 00:00 UTC -> target_date = 2026-06-15, kind = same_day
+  it('same_day_prefetch at 09:00 is independent from earlier pre_day claim', async () => {
+    // 09:00 JST Mon 2026-06-15 == 00:00 UTC -> target_date = 2026-06-15, kind = same_day_prefetch
     vi.setSystemTime(new Date('2026-06-15T00:00:00Z'));
     mockProjectCount(0);
-    mockClaim(true); // independent slot (target=2026-06-15, kind=same_day)
+    mockClaim(true); // independent slot (target=2026-06-15, kind=same_day_prefetch)
     await runCheck();
 
     const insertCall = mockedQuery.mock.calls.find((c) =>
       String(c[0]).includes('INSERT INTO data_monitor_notifications')
     );
     expect(insertCall).toBeDefined();
-    expect(insertCall![1]).toEqual(['2026-06-15', 'same_day', 9]);
+    expect(insertCall![1]).toEqual(['2026-06-15', 'same_day_prefetch', 9]);
+  });
+
+  it('same_day_postfetch at 12:00 is independent from prefetch claim earlier the same day', async () => {
+    // 12:00 JST Mon 2026-06-15 == 03:00 UTC -> target_date = 2026-06-15, kind = same_day_postfetch
+    vi.setSystemTime(new Date('2026-06-15T03:00:00Z'));
+    mockProjectCount(0);
+    mockClaim(true);
+    await runCheck();
+
+    const insertCall = mockedQuery.mock.calls.find((c) =>
+      String(c[0]).includes('INSERT INTO data_monitor_notifications')
+    );
+    expect(insertCall).toBeDefined();
+    expect(insertCall![1]).toEqual(['2026-06-15', 'same_day_postfetch', 12]);
   });
 
   it('skips send when projects exist (count > 0) and does not touch claim table', async () => {
@@ -238,9 +255,28 @@ describe('runCheck weekend/holiday handling (Bug-C)', () => {
     fetchSpy.mockRestore();
   });
 
-  it('on weekday non-holiday, uses @channel mention', async () => {
+  it('weekday 09:00 (prefetch) does NOT use @channel — 取り込み前の事前チェックなので静かに', async () => {
     // 2026-06-15 Monday 09:00 JST == 2026-06-15 00:00 UTC
     vi.setSystemTime(new Date('2026-06-15T00:00:00Z'));
+    process.env.SLACK_WEBHOOK_URL = 'https://example.invalid/webhook';
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response('ok', { status: 200 })
+    );
+    mockedQuery.mockResolvedValueOnce({ rows: [{ cnt: '0' }], rowCount: 1 } as never);
+    mockedQuery.mockResolvedValueOnce({ rows: [{ target_date: 'x' }], rowCount: 1 } as never);
+
+    await runCheck();
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(String(init?.body ?? '{}'));
+    expect(body.text).not.toContain('<!channel>');
+    fetchSpy.mockRestore();
+  });
+
+  it('weekday 12:00 (postfetch) USES @channel — 取り込み後の本物アラート', async () => {
+    // 2026-06-15 Monday 12:00 JST == 2026-06-15 03:00 UTC
+    vi.setSystemTime(new Date('2026-06-15T03:00:00Z'));
     process.env.SLACK_WEBHOOK_URL = 'https://example.invalid/webhook';
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
       new Response('ok', { status: 200 })
