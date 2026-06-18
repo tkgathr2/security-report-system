@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   DndContext,
   PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   useDraggable,
@@ -357,8 +359,15 @@ export function ControlBoardPage() {
   const [assignError, setAssignError] = useState<string | null>(null)
   const [weekReloadToken, setWeekReloadToken] = useState(0)
 
+  // 入力デバイスを総当たりでサポート：
+  //  - PointerSensor: モダンブラウザ標準（マウス＋タッチ＋ペン統合）
+  //  - MouseSensor: 古い経路や computer-use 系の MouseEvent もカバー
+  //  - TouchSensor: スマホ・タブレットの長押し→ドラッグ
+  // activationConstraint で「クリックと判定される短い動き」では発火しない。
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   )
 
   // 日付連打のレース対策：最新リクエストのみ反映する（古いレスポンスが新しい表示を上書きしない）
