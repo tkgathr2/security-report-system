@@ -82,16 +82,18 @@ describe('resolveStaffForImport', () => {
     expect(result).toEqual({ staffId: 'staff-4', autoAdded: false });
   });
 
-  it('soft-deleted済みの同Noキャストは復活させて紐付ける', async () => {
+  it('soft-deleted済みの同Noキャストは復活させず、新規レコードを作成する（意図的な削除をCSV同期が上書きしない）', async () => {
+    // 削除済み検索では何もせず fall-through → INSERT で新規スタッフを作る。
     const { db, calls } = makeDb([
-      { match: /procast_staff_no = \$1 AND deleted_at IS NOT NULL/, rows: [{ id: 'staff-5' }] },
+      // soft-deleted照合は削除済みのため何も返さない → fall-through
+      { match: /INSERT INTO staff_master/, rows: [{ id: 'staff-new' }] },
     ]);
 
     const result = await resolveStaffForImport(db, { ...base, staffNo: 'S005' });
 
-    expect(result).toEqual({ staffId: 'staff-5', autoAdded: false });
+    expect(result).toEqual({ staffId: 'staff-new', autoAdded: true });
     const revive = calls.find(c => /SET deleted_at = NULL/.test(c.text));
-    expect(revive).toBeDefined();
+    expect(revive).toBeUndefined(); // 復活しない
   });
 
   it('新規作成が残存ユニーク制約で弾かれ続け、Noなし行なら同名既存へ縮退して取込を止めない', async () => {
