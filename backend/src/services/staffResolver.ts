@@ -121,20 +121,8 @@ export async function resolveStaffForImport(
       return { staffId: row.id, autoAdded: false };
     }
 
-    const softDeletedByNo = await db.query(
-      `SELECT id FROM staff_master
-       WHERE procast_staff_no = $1 AND deleted_at IS NOT NULL LIMIT 1`,
-      [no]
-    );
-    if (softDeletedByNo.rows[0]) {
-      const id = (softDeletedByNo.rows[0] as { id: string }).id;
-      await db.query(
-        `UPDATE staff_master SET deleted_at = NULL, display_name_kanji = $1, display_name_kana = $2, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3`,
-        [castName, normalizedKana, id]
-      );
-      return { staffId: id, autoAdded: false };
-    }
+    // 意図的に削除された（soft-delete）スタッフはCSV同期で復活させない。
+    // fall-through して新規レコードを作成する（部分UNIQUEはdeleted_at IS NULLのみが対象のため競合しない）。
   }
 
   // 2) 名前で照合（No未付与レコードのみ。別Noの同姓同名は別人なので対象外）
@@ -164,22 +152,7 @@ export async function resolveStaffForImport(
     return { staffId: row.id, autoAdded: false };
   }
 
-  // soft-deleted の名前復活（No未付与 or 同No のものに限る）
-  const softParams = no ? [staffKana, no] : [staffKana];
-  const softDeleted = await db.query(
-    `SELECT id FROM staff_master
-     WHERE ${NRM('display_name_kana')} = ${NRM('$1')} AND deleted_at IS NOT NULL
-       AND (procast_staff_no IS NULL${no ? ' OR procast_staff_no = $2' : ''}) LIMIT 1`,
-    softParams
-  );
-  if (softDeleted.rows[0]) {
-    const id = (softDeleted.rows[0] as { id: string }).id;
-    await db.query(
-      `UPDATE staff_master SET deleted_at = NULL${no ? ', procast_staff_no = $2' : ''}, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-      no ? [id, no] : [id]
-    );
-    return { staffId: id, autoAdded: false };
-  }
+  // soft-deleted スタッフは名前照合でも復活させない（意図的な削除を CSV 同期が上書きしない）。
 
   // 3) 新規作成（取込同時実行のレースは procast_staff_no の一意indexで防ぎ、衝突時は既存を引く）
   const inserted = await db.query(
