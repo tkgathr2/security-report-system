@@ -9,79 +9,43 @@
  */
 exports.up = (pgm) => {
   // ── staff_master への列追加 ──────────────────────────────────────────────
-  pgm.addColumns('staff_master', {
-    solo_ok: {
-      type: 'boolean',
-      notNull: true,
-      default: false,
-    },
-    night_ok: {
-      type: 'boolean',
-      notNull: true,
-      default: true,
-    },
-    control_note: {
-      type: 'text',
-      notNull: false,
-      default: null,
-    },
-  });
+  // IF NOT EXISTS を使って冪等にする（既にカラムが存在する環境でも安全に実行可能）
+  pgm.sql(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS solo_ok BOOLEAN NOT NULL DEFAULT false`);
+  pgm.sql(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS night_ok BOOLEAN NOT NULL DEFAULT true`);
+  pgm.sql(`ALTER TABLE staff_master ADD COLUMN IF NOT EXISTS control_note TEXT DEFAULT NULL`);
 
-  // ── staff_compatibility テーブル新設 ─────────────────────────────────────
-  pgm.createTable('staff_compatibility', {
-    id: {
-      type: 'uuid',
-      primaryKey: true,
-      default: pgm.func('gen_random_uuid()'),
-    },
-    staff_a_id: {
-      type: 'uuid',
-      notNull: true,
-    },
-    staff_b_id: {
-      type: 'uuid',
-      notNull: true,
-    },
-    kind: {
-      type: 'text',
-      notNull: true,
-    },
-    note: {
-      type: 'text',
-      notNull: false,
-      default: null,
-    },
-    created_by: {
-      type: 'text',
-      notNull: false,
-      default: null,
-    },
-    created_at: {
-      type: 'timestamptz',
-      default: pgm.func('NOW()'),
-    },
-    updated_at: {
-      type: 'timestamptz',
-      default: pgm.func('NOW()'),
-    },
-    deleted_at: {
-      type: 'timestamptz',
-      notNull: false,
-      default: null,
-    },
-  });
+  // ── staff_compatibility テーブル新設（IF NOT EXISTS で冪等化）───────────
+  pgm.sql(`
+    CREATE TABLE IF NOT EXISTS staff_compatibility (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      staff_a_id UUID NOT NULL,
+      staff_b_id UUID NOT NULL,
+      kind TEXT NOT NULL,
+      note TEXT DEFAULT NULL,
+      created_by TEXT DEFAULT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      deleted_at TIMESTAMPTZ DEFAULT NULL
+    )
+  `);
 
-  // a != b 制約
-  pgm.addConstraint('staff_compatibility', 'staff_compatibility_no_self', {
-    check: 'staff_a_id <> staff_b_id',
-  });
+  // a != b 制約（既存なら無視）
+  pgm.sql(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'staff_compatibility_no_self'
+      ) THEN
+        ALTER TABLE staff_compatibility ADD CONSTRAINT staff_compatibility_no_self CHECK (staff_a_id <> staff_b_id);
+      END IF;
+    END $$
+  `);
 
-  // 論理削除を除いた同ペア+kind の重複防止（partial unique index）
-  pgm.createIndex('staff_compatibility', ['staff_a_id', 'staff_b_id', 'kind'], {
-    name: 'idx_staff_compatibility_pair_kind_active',
-    unique: true,
-    where: 'deleted_at IS NULL',
-  });
+  // 論理削除を除いた同ペア+kind の重複防止（partial unique index・既存なら無視）
+  pgm.sql(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_compatibility_pair_kind_active
+      ON staff_compatibility (staff_a_id, staff_b_id, kind)
+      WHERE deleted_at IS NULL
+  `);
 };
 
 exports.down = (pgm) => {
