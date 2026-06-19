@@ -784,10 +784,18 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                       staffAutoAddedCount++;
                     }
                     processedStaffKana.add(staffKana);
+                    // ON CONFLICT は partial unique index にマッチさせるため WHERE 句を明示。
+                    // 2026-06-19 PR #480 で UNIQUE 制約を partial unique index (`WHERE deleted_at IS NULL`)
+                    // に変更したため、素の `ON CONFLICT (project_id, staff_no)` だと arbiter index に
+                    // マッチせず「there is no unique or exclusion constraint matching the ON CONFLICT
+                    // specification」で全行エラーになる（プロキャス自動同期で再発・西村さん指摘）。
+                    // 同じ (project_id, staff_no) で active な行があれば update、無ければ新規 INSERT。
+                    // soft-deleted な行は partial index 対象外＝新規 INSERT が成功する設計でよい。
                     await dbClient.query(
                       `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index, cast_name)
                        VALUES ($1, $2, $3, $4, $5)
-                       ON CONFLICT (project_id, staff_no) DO UPDATE SET staff_id = EXCLUDED.staff_id, cast_name = EXCLUDED.cast_name, deleted_at = NULL`,
+                       ON CONFLICT (project_id, staff_no) WHERE deleted_at IS NULL
+                       DO UPDATE SET staff_id = EXCLUDED.staff_id, cast_name = EXCLUDED.cast_name`,
                       [projectInfo.projectId, castIdentifier, resolved.staffId, i, castName]
                     );
                     projectInfo.casts.add(castIdentifier);
