@@ -11,11 +11,12 @@
  */
 exports.up = (pgm) => {
   pgm.dropConstraint('project_casts', 'project_casts_project_id_staff_no_unique', { ifExists: true });
-  pgm.createIndex('project_casts', ['project_id', 'staff_no'], {
-    name: 'project_casts_project_id_staff_no_active_unique',
-    unique: true,
-    where: 'deleted_at IS NULL',
-  });
+  // IF NOT EXISTS で冪等化（既にインデックスが存在する環境でも安全に実行可能）
+  pgm.sql(`
+    CREATE UNIQUE INDEX IF NOT EXISTS project_casts_project_id_staff_no_active_unique
+      ON project_casts (project_id, staff_no)
+      WHERE deleted_at IS NULL
+  `);
 };
 
 exports.down = (pgm) => {
