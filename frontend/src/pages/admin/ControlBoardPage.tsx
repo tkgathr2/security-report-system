@@ -69,14 +69,19 @@ async function deleteAssign(projectId: string, staffId: string): Promise<void> {
 // pool の各スタッフを draggable に
 function DraggableStaff({
   staffId,
+  fromProjectId,
   children,
 }: {
   staffId: string
+  fromProjectId?: string
   children: React.ReactNode
 }) {
+  const dragId = fromProjectId ? `placed:${fromProjectId}:${staffId}` : `staff:${staffId}`
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `staff:${staffId}`,
-    data: { kind: 'staff', staffId },
+    id: dragId,
+    data: fromProjectId
+      ? { kind: 'placed', staffId, fromProjectId }
+      : { kind: 'staff', staffId },
   })
   const style: React.CSSProperties = {
     cursor: 'grab',
@@ -407,19 +412,25 @@ export function ControlBoardPage() {
   const go = (offset: number) => setDate((prev) => offsetDate(prev, offset))
   const goToday = () => setDate(todayJST())
 
-  // ===== D&D：プールのスタッフ → 現場セル =====
+  // ===== D&D：プール or 配置済みスタッフ → 現場セル =====
   const handleDragEnd = useCallback(async (e: DragEndEvent) => {
     setAssignError(null)
-    const activeData = e.active?.data?.current as { kind?: string; staffId?: string } | undefined
+    const activeData = e.active?.data?.current as { kind?: string; staffId?: string; fromProjectId?: string } | undefined
     const overData = e.over?.data?.current as { kind?: string; projectId?: string } | undefined
-    if (activeData?.kind !== 'staff' || overData?.kind !== 'cell') return
-    const staffId = activeData.staffId
+    if (overData?.kind !== 'cell') return
+    const staffId = activeData?.staffId
     const projectId = overData.projectId
     if (!staffId || !projectId) return
+    const fromProjectId = activeData?.fromProjectId
+    // 同じ現場へのドロップは無視
+    if (fromProjectId === projectId) return
     setAssignBusy(true)
     try {
+      if (fromProjectId) {
+        // 配置済みスタッフの移動：元の現場から外して新しい現場へ
+        await deleteAssign(fromProjectId, staffId)
+      }
       await postAssign(projectId, staffId)
-      // 楽観的UXより堅実：再fetchで盤面を整合
       await load(date)
       setWeekReloadToken((t) => t + 1)
     } catch (err) {
@@ -608,18 +619,27 @@ export function ControlBoardPage() {
                     >
                       {cell ? (
                         <DroppableCell projectId={cell.project_id} baseStyle={cellBaseStyle}>
-                          {casts.map((c, ci) => (
-                            <CastTagWithRemove
-                              key={`${c.staff_id ?? 'x'}-${ci}`}
-                              cast={c}
-                              onRemove={
-                                c.staff_id
-                                  ? () => handleRemoveAssign(cell.project_id, c.staff_id as string)
-                                  : undefined
-                              }
-                              disabled={assignBusy}
-                            />
-                          ))}
+                          {casts.map((c, ci) =>
+                            c.staff_id ? (
+                              <DraggableStaff
+                                key={`${c.staff_id}-${ci}`}
+                                staffId={c.staff_id}
+                                fromProjectId={cell.project_id}
+                              >
+                                <CastTagWithRemove
+                                  cast={c}
+                                  onRemove={() => handleRemoveAssign(cell.project_id, c.staff_id as string)}
+                                  disabled={assignBusy}
+                                />
+                              </DraggableStaff>
+                            ) : (
+                              <CastTagWithRemove
+                                key={`x-${ci}`}
+                                cast={c}
+                                disabled={assignBusy}
+                              />
+                            )
+                          )}
                           {casts.length === 0 && (
                             <span style={{ color: C.sub, fontSize: 11 }}>ドロップで配置</span>
                           )}
