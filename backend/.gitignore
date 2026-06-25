@@ -3,3 +3,7 @@ dist/
 .env
 *.log
 frontend-dist/
+
+# 一時的な本番DB調査用デバッグスクリプト（DATABASE_URL で本番DBへ直接アクセスする野良ファイル。
+# リポジトリには含めない。恒久的な調査が必要なら scripts/ 配下に整理して別途追跡する）
+check-*.mjs
