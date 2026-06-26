@@ -1400,6 +1400,12 @@ function AdminApp() {
         <main style={styles.main}>
           {error && <div style={styles.error}>{error}</div>}
 
+          {/* カイゼンくん：フクロウ博士キャラ＋言葉で改善要望を促す */}
+          <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 14px',marginBottom:14,background:'#fffbf0',border:'1px solid #ffe082',borderRadius:8,fontSize:13,color:'#7a5200',cursor:'pointer'}} onClick={() => window.open('https://kaizen.takagi.bz/?sys=houko','_blank')}>
+            <span style={{fontSize:20,lineHeight:1,flexShrink:0}}>🦉</span>
+            <span><strong style={{color:'#e67e22'}}>カイゼンくん</strong>　使いにくい点・改善のご要望は右下のフクロウ博士にお声がけください</span>
+          </div>
+
           {screen === 'dashboard' && (
             <DashboardPage
               stats={stats}
