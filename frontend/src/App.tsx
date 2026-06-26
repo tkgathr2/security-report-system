@@ -145,6 +145,18 @@ function AdminApp() {
     return () => { if (abortRef.current) abortRef.current.abort() }
   }, [])
 
+  // カイゼンくんウィジェット：adminログイン後のみ注入（ログイン画面には表示しない）
+  useEffect(() => {
+    if (!admin) return
+    if (document.querySelector('script[data-kaizen-houko]')) return
+    const s = document.createElement('script')
+    s.src = 'https://kaizen.takagi.bz/widget.js'
+    s.setAttribute('data-sys', 'houko')
+    s.setAttribute('data-kaizen-houko', '1')
+    s.defer = true
+    document.body.appendChild(s)
+  }, [admin])
+
   const checkAuth = async () => {
     try {
       const response = await fetch('/api/admin/me', {
