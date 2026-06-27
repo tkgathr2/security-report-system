@@ -79,7 +79,7 @@ router.get('/projects', requireAdmin, async (req: Request, res: Response) => {
       json_agg(
         json_build_object('staff_no', pc.staff_no, 'cast_name', COALESCE(sm_pc.display_name_kanji, 'No.' || pc.staff_no), 'staff_id', pc.staff_id)
         ORDER BY pc.row_index
-      ) FILTER (WHERE pc.project_id IS NOT NULL),
+      ) FILTER (WHERE pc.project_id IS NOT NULL AND COALESCE(sm_pc.hidden, false) = false),
       '[]'::json
     ) as casts`;
 
@@ -1340,7 +1340,7 @@ router.post('/projects/:projectId/casts', requireAdmin, async (req: Request, res
     const result = await pool.query(
       `INSERT INTO project_casts (project_id, staff_no, staff_id, row_index)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (project_id, staff_no) DO NOTHING
+       ON CONFLICT (project_id, staff_no) WHERE deleted_at IS NULL DO NOTHING
        RETURNING id, staff_no, staff_id, row_index`,
       [projectId, staff_no, castStaffId || null, nextRow]
     );

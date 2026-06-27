@@ -544,6 +544,19 @@ async function fixProjectCasts() {
   try {
     await pool.query(`ALTER TABLE project_casts ADD COLUMN IF NOT EXISTS cast_name TEXT`);
 
+    // KZ-15: project_casts の partial unique index を冪等に保証する。
+    // migration 1781800000000 (PR #480) と完全に同内容。本番起動の `npm run migrate:up || true` が
+    // 何らかの理由でこの migration を握り潰して未適用になると、CSV取込側の
+    // `ON CONFLICT (project_id, staff_no) WHERE deleted_at IS NULL` が arbiter index に
+    // マッチせず全行エラー（「there is no unique or exclusion constraint matching the ON CONFLICT
+    // specification」）になり、プロキャス自動取込が落ちる。ここで index の存在を確実にする。
+    await pool.query(`ALTER TABLE project_casts DROP CONSTRAINT IF EXISTS project_casts_project_id_staff_no_unique`);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS project_casts_project_id_staff_no_active_unique
+        ON project_casts (project_id, staff_no)
+        WHERE deleted_at IS NULL
+    `);
+
     const pcCols = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'project_casts' ORDER BY ordinal_position`);
     const pcColNames = pcCols.rows.map((r: {column_name: string}) => r.column_name);
     castFixDetail = 'pc_cols:' + pcColNames.join(',');
@@ -703,6 +716,14 @@ async function seedTakagiProjectData() {
 
     await pool.query(
       `UPDATE staff_master SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL`,
+      [TAKAGI_ID]
+    );
+
+    // KZ-16: 高木 豊大（seed 用 staff）は盤面・日報の両方で必ず非表示にする。
+    // 盤面は staff_master.hidden で除外済みだが、日報の castsAgg も hidden を見るよう変更したため、
+    // ここで hidden=true を冪等に固定すれば両方から確実に消える（既存の表示も自動的に消える）。
+    await pool.query(
+      `UPDATE staff_master SET hidden = true WHERE id = $1 AND hidden IS DISTINCT FROM true`,
       [TAKAGI_ID]
     );
 
