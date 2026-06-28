@@ -3,3 +3,9 @@ dist/
 .env
 *.log
 frontend-dist/
+
+# 本番DB調査用デバッグスクリプト（一時作業用・リポジトリ管理外）
+check-*.mjs
+verify-*.mjs
+verify-*.js
+db_check*.js
