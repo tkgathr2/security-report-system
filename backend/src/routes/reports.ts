@@ -309,7 +309,6 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       let pdfLayout = 'classic';
       let pdfDesign = 'A';
       try {
-        await pool.query(`CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW())`);
         const layoutResult = await pool.query(`SELECT value FROM system_settings WHERE key = 'pdf_layout'`);
         if (layoutResult.rows.length > 0) pdfLayout = layoutResult.rows[0].value;
         const designResult = await pool.query(`SELECT value FROM system_settings WHERE key = 'pdf_design'`);
