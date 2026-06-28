@@ -58,12 +58,15 @@ export default function CastToday() {
           navigate('/cast/login');
           return null;
         }
+        if (!res.ok) {
+          throw new Error(`サーバーエラー: ${res.status}`);
+        }
         return res.json();
       })
       .then((data) => {
         if (data) {
           setUser(data.user);
-          setProjects(data.projects);
+          setProjects(data.projects || []);
           setDate(data.date);
           if (data.projects && data.projects.length === 1) {
             const p = data.projects[0];
