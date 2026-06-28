@@ -71,7 +71,7 @@ export default function CastToday() {
           if (data.projects && data.projects.length === 1) {
             const p = data.projects[0];
             if (p.unique_url) {
-              window.location.href = `/report/${p.unique_url}?email=${encodeURIComponent(data.user?.email || '')}`;
+              window.location.href = `/report/${p.unique_url}`;
               return;
             }
           }
@@ -185,8 +185,8 @@ export default function CastToday() {
                 <h3 className="cast-project-name">{project.work_name}</h3>
                 <p className="cast-project-location">{project.location}</p>
                 {project.unique_url && (
-                  <a 
-                    href={`/report/${project.unique_url}?email=${encodeURIComponent(user?.email || '')}`}
+                  <a
+                    href={`/report/${project.unique_url}`}
                     className="cast-project-link"
                     target="_blank"
                     rel="noopener noreferrer"
