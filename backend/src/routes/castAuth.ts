@@ -44,36 +44,36 @@ const router = Router();
 
 
 const KANJI_VARIANTS: Record<string, string> = {
-  '\u9AD9': '\u9AD8', // 髙 → 高
-  '\uFA30': '\u4FAE', // 侮 variant
-  '\uFA31': '\u4FBB', // 併 variant
-  '\u5861': '\u5D0E', // 埼 → 崎
-  '\uFA11': '\u5D0E', // 﨑 → 崎
-  '\u7E41': '\u7E4B', // 繁 variant
-  '\u6FF3': '\u6FA4', // 濃 → 澤
-  '\u6FA4': '\u6CA2', // 澤 → 沢
-  '\u9DB4': '\u9DB4', // 鶴
-  '\u5FB3': '\u5FB3', // 徳
-  '\u6589': '\u658E', // 斉 → 斎
-  '\u9F4B': '\u658E', // 齋 → 斎
-  '\u9F4A': '\u6589', // 齊 → 斉
-  '\u5EE3': '\u5E83', // 廣 → 広
-  '\u6AFB': '\u685C', // 櫻 → 桜
-  '\u6B1D': '\u6B63', // 歝 → 正
-  '\u6E0A': '\u6DF5', // 渊 → 淵
-  '\u7027': '\u6EDD', // 瀧 → 滝
-  '\u702C': '\u6E2C', // 瀬 variant
-  '\u5CF0': '\u5CEF', // 峰 → 峯
-  '\u5CEF': '\u5CF0', // 峯 → 峰
-  '\u9FD4': '\u9F8D', // 龍 variant
-  '\u9F8D': '\u7ADC', // 龍 → 竜
-  '\u9130': '\u90CE', // 郎 variant
-  '\u90DE': '\u90CE', // 郞 → 郎
-  '\u83EF': '\u82B1', // 華 → 花
-  '\u5B78': '\u5B66', // 學 → 学
-  '\u6B78': '\u5E30', // 歸 → 帰
-  '\u4E98': '\u4E99', // 亘 → 亙
-  '\u4E99': '\u4E98', // 亙 → 亘
+  '髙': '高', // 髙 → 高
+  '侮': '侮', // 侮 variant
+  '僧': '侻', // 併 variant
+  '塡': '崎', // 埼 → 崎
+  '﨑': '崎', // 﨑 → 崎
+  '繁': '繋', // 繁 variant
+  '濳': '澤', // 濃 → 澤
+  '澤': '沢', // 澤 → 沢
+  '鶴': '鶴', // 鶴
+  '徳': '徳', // 徳
+  '斉': '斎', // 斉 → 斎
+  '齋': '斎', // 齋 → 斎
+  '齊': '斉', // 齊 → 斉
+  '廣': '広', // 廣 → 広
+  '櫻': '桜', // 櫻 → 桜
+  '欝': '正', // 歝 → 正
+  '渊': '淵', // 渊 → 淵
+  '瀧': '滝', // 瀧 → 滝
+  '瀬': '測', // 瀬 variant
+  '峰': '峯', // 峰 → 峯
+  '峯': '峰', // 峯 → 峰
+  '鿔': '龍', // 龍 variant
+  '龍': '竜', // 龍 → 竜
+  '鄰': '郎', // 郎 variant
+  '郞': '郎', // 郞 → 郎
+  '華': '花', // 華 → 花
+  '學': '学', // 學 → 学
+  '歸': '帰', // 歸 → 帰
+  '亘': '亙', // 亘 → 亙
+  '亙': '亘', // 亙 → 亘
 };
 
 function normalizeKanjiVariants(name: string): string {
@@ -81,7 +81,7 @@ function normalizeKanjiVariants(name: string): string {
   for (const [variant, standard] of Object.entries(KANJI_VARIANTS)) {
     normalized = normalized.split(variant).join(standard);
   }
-  return normalized.replace(/[\s\u3000]/g, '');
+  return normalized.replace(/[\s　]/g, '');
 }
 
 function generateToken(): string {
@@ -390,10 +390,23 @@ router.post('/magic-link', async (req: Request, res: Response) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
+    // 第1段階: 5回/15分 の悪用防止 rate limit（既存）
     const rateCheck = await checkAndIncrementRateLimitDb(`magic-link:${normalizedEmail}`, { maxAttempts: 5, lockDurationMs: 15 * 60 * 1000 });
     if (!rateCheck.allowed) {
       const remainMin = Math.ceil((rateCheck.remainingMs || 0) / 60000);
       return res.status(429).json({ message: `送信回数の上限に達しました。${remainMin}分後にお試しください` });
+    }
+
+    // 第2段階: 同一メールへの 5分以内重複送信をブロック
+    const lastSendKey = `magic-link-last:${normalizedEmail}`;
+    const lastSendCheck = await pool.query(
+      `SELECT locked_until FROM rate_limits WHERE key = $1 AND locked_until > NOW()`,
+      [lastSendKey]
+    );
+    if (lastSendCheck.rows.length > 0) {
+      const remainMs = new Date(lastSendCheck.rows[0].locked_until).getTime() - Date.now();
+      const remainSec = Math.ceil(remainMs / 1000);
+      return res.status(429).json({ message: `メールは${remainSec}秒後に再送できます` });
     }
 
     const result = await pool.query(
@@ -427,6 +440,14 @@ router.post('/magic-link', async (req: Request, res: Response) => {
     if (!emailResult.success) {
       return res.status(500).json({ message: 'メール送信に失敗しました' });
     }
+
+    // 送信成功後: 5分間インターバル制限を記録（既存の locked_until 列を流用）
+    await pool.query(
+      `INSERT INTO rate_limits (key, attempts, locked_until)
+       VALUES ($1, 1, NOW() + INTERVAL '5 minutes')
+       ON CONFLICT (key) DO UPDATE SET locked_until = NOW() + INTERVAL '5 minutes'`,
+      [lastSendKey]
+    );
 
     res.json({ message: 'メールを送信しました。メールをご確認ください' });
   } catch (error) {
@@ -599,7 +620,7 @@ router.get('/search-staff', authenticateCast, async (req: Request, res: Response
     }
 
     const searchTerm = q.trim();
-    const searchNoSpace = searchTerm.replace(/[\s\u3000]/g, '');
+    const searchNoSpace = searchTerm.replace(/[\s　]/g, '');
     const searchNormalized = normalizeKanjiVariants(searchTerm);
 
     const result = await pool.query(

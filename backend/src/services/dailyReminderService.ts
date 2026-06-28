@@ -99,7 +99,7 @@ async function sendReminders(
     return { sent: 0, errors: 0 };
   }
 
-  // DB でも送信済みを確認（再起動後の重複メール防止）
+  // DB でも送信済みを確認（再起動後の重複メール防止・バッチ単位）
   const notificationKind = timing === 'morning' ? 'morning_reminder' : 'evening_reminder';
   const dbCheck = await pool.query(
     `SELECT 1 FROM data_monitor_notifications
@@ -134,6 +134,18 @@ async function sendReminders(
 
   for (const cast of casts) {
     try {
+      // reminder_sends テーブルで個人単位の送信済みチェック（再起動・重複呼び出し対策）
+      const perUserCheck = await pool.query(
+        `SELECT 1 FROM reminder_sends
+         WHERE cast_user_id = $1 AND target_date = $2 AND timing = $3
+         LIMIT 1`,
+        [cast.cast_user_id, targetDate, timing]
+      );
+      if (perUserCheck.rows.length > 0) {
+        console.log(`[DailyReminder] Already sent to ${cast.staff_name} (${cast.email}) [${timing}] — skipping`);
+        continue;
+      }
+
       const token = generateToken();
       const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
@@ -160,6 +172,14 @@ async function sendReminders(
       if (emailResult.success) {
         sentCount++;
         console.log(`[DailyReminder] Sent to ${cast.staff_name} (${cast.email}) [${timing}]`);
+
+        // 送信成功後に個人単位の記録を挿入（冪等: ON CONFLICT DO NOTHING）
+        await pool.query(
+          `INSERT INTO reminder_sends (cast_user_id, target_date, timing)
+           VALUES ($1, $2, $3)
+           ON CONFLICT ON CONSTRAINT reminder_sends_unique_per_user_date_timing DO NOTHING`,
+          [cast.cast_user_id, targetDate, timing]
+        );
       } else {
         errorCount++;
         console.error(`[DailyReminder] Failed to send to ${cast.email}: ${emailResult.error}`);
@@ -172,7 +192,7 @@ async function sendReminders(
 
   console.log(`[DailyReminder] Completed ${timing} for ${targetDate}: sent=${sentCount}, errors=${errorCount}`);
 
-  // 送信済みを DB に記録（再起動後の重複メール防止）
+  // 送信済みを DB に記録（バッチ単位・再起動後の重複メール防止）
   const { hour: currentHour } = getJSTNow();
   try {
     await pool.query(
