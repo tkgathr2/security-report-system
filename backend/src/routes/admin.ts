@@ -1094,7 +1094,7 @@ router.post('/clients/register-and-activate', requireAdmin, async (req: Request,
     const clientResult = await pool.query(
       `INSERT INTO clients (name, name_normalized, emails, is_active)
        VALUES ($1, $2, $3, true)
-       ON CONFLICT (name_normalized) DO UPDATE SET emails = EXCLUDED.emails, is_active = true
+       ON CONFLICT (name_normalized) WHERE deleted_at IS NULL DO UPDATE SET emails = EXCLUDED.emails, is_active = true
        RETURNING id, name`,
       [client_name_raw.trim(), nameNormalized, emails || []]
     );
