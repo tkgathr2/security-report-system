@@ -923,6 +923,18 @@ pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cast_users_email_active ON cas
   .then(() => console.log('[Startup] Unique index on cast_users.email ensured'))
   .catch((err: unknown) => console.error('[Startup] cast_users index creation error:', err));
 
+// clients.name_normalized を partial unique index 化（soft-delete 衝突の根治）。
+// 非partialの UNIQUE(name_normalized) だと、ソフト削除した同名 client がスロットを占有し、
+// CSV取込の新規 client INSERT が ON CONFLICT で弾かれ clientId=null になり、
+// 「クライアントIDが取得できませんでした」で毎回同じ行(行82/83)が落ちる。
+// migration 1781900000000 と同内容。本番は startCommand が `(npm run migrate:up || true)` で
+// migrate 失敗を握り潰すため、project_casts(1781800000000) と同じくここで起動時に冪等保証する。
+// 事前確認で deleted_at IS NULL の name_normalized 重複=0 を確認済み（partial index 作成は安全）。
+pool.query(`ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_name_normalized_key`)
+  .then(() => pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS clients_name_normalized_active_unique ON clients (name_normalized) WHERE deleted_at IS NULL`))
+  .then(() => console.log('[Startup] clients.name_normalized partial unique index ensured'))
+  .catch((err: unknown) => console.error('[Startup] clients partial index creation error:', err));
+
 pool.query(`CREATE TABLE IF NOT EXISTS inquiries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   cast_user_id UUID NOT NULL,
