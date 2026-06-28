@@ -73,7 +73,12 @@ export default function CastLogin() {
 
       if (!res.ok) {
         if (data.redirect) {
-          window.location.href = data.redirect;
+          const safeRedirect = (url: string) => {
+            if (url.startsWith('/') && !url.startsWith('//')) {
+              window.location.href = url;
+            }
+          };
+          safeRedirect(data.redirect);
           return;
         }
         throw new Error(data.message || 'ログインに失敗しました');
@@ -111,7 +116,12 @@ export default function CastLogin() {
 
       if (!res.ok) {
         if (data.redirect) {
-          window.location.href = data.redirect;
+          const safeRedirect = (url: string) => {
+            if (url.startsWith('/') && !url.startsWith('//')) {
+              window.location.href = url;
+            }
+          };
+          safeRedirect(data.redirect);
           return;
         }
         throw new Error(data.message || 'メール送信に失敗しました');

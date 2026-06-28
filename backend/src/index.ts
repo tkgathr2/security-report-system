@@ -109,7 +109,11 @@ let seedError = '';
 let seedDetail = '';
 
 app.get('/version', (_req: Request, res: Response) => {
-  res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v89', seedStatus, seedError, seedDetail, castFixDetail, cleanupDetail });
+  if (process.env.NODE_ENV === 'production') {
+    res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v89' });
+  } else {
+    res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v89', seedStatus, seedError, seedDetail, castFixDetail, cleanupDetail });
+  }
 });
 
 app.use('/api', requireJsonContentType);

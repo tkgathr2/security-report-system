@@ -116,13 +116,7 @@ export default function FieldReport() {
   
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (uniqueUrl) {
-      fetchProject()
-    }
-  }, [uniqueUrl])
-
-  const fetchProject = async () => {
+  const fetchProject = useCallback(async () => {
     try {
       const response = await fetch(`/api/projects/${uniqueUrl}`)
       
@@ -219,9 +213,15 @@ export default function FieldReport() {
       setErrorMessage('案件の取得に失敗しました')
       setPageState('error')
     }
-  }
+  }, [uniqueUrl, isViewMode])
 
-    const authenticateWithEmail = async (email: string, projectData: Project) => {
+  useEffect(() => {
+    if (uniqueUrl) {
+      fetchProject()
+    }
+  }, [uniqueUrl, fetchProject])
+
+  const authenticateWithEmail = async (email: string, projectData: Project) => {
       try {
         const castToken = localStorage.getItem('castToken')
         let response: Response | null = null

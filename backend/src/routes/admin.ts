@@ -13,7 +13,7 @@ import { checkAndIncrementRateLimitDb } from '../utils/rateLimit';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -1774,7 +1774,7 @@ router.put('/inquiries/:id/status', requireAdmin, async (req: Request, res: Resp
 
 router.post('/bulk-cleanup', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { since_date, delete_casts } = req.body;
+    const { since_date } = req.body;
     if (!since_date) {
       res.status(400).json({ error: 'since_date is required (YYYY-MM-DD)' });
       return;
@@ -1807,24 +1807,10 @@ router.post('/bulk-cleanup', requireAdmin, async (req: Request, res: Response) =
     );
     results.projects_deleted = projectsDel.rowCount || 0;
 
-    if (delete_casts) {
-      const staffDel = await pool.query(
-        `UPDATE staff_master SET deleted_at = NOW()
-         WHERE deleted_at IS NULL RETURNING id`
-      );
-      results.staff_deleted = staffDel.rowCount || 0;
-
-      const castUsersDel = await pool.query(
-        `UPDATE cast_users SET deleted_at = NOW()
-         WHERE deleted_at IS NULL RETURNING id`
-      );
-      results.cast_users_deleted = castUsersDel.rowCount || 0;
-    }
-
     await pool.query(
       `INSERT INTO admin_audit_logs (admin_email, action, target_type, payload_json)
        VALUES ($1, $2, $3, $4)`,
-      [adminUser.email, 'BULK_CLEANUP', 'projects', JSON.stringify({ since_date, delete_casts, results })]
+      [adminUser.email, 'BULK_CLEANUP', 'projects', JSON.stringify({ since_date, results })]
     );
 
     res.json({ ok: true, results });

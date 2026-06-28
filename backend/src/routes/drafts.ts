@@ -93,7 +93,7 @@ router.put('/:project_unique_url', authenticateCast, async (req: Request, res: R
           server_updated_at: upsertResult.rows[0].server_updated_at
         });
       } else {
-        const existing = await client.query(
+        const existing = await pool.query(
           'SELECT server_updated_at, client_updated_at FROM report_drafts WHERE project_id = $1 AND cast_user_id = $2',
           [projectId, castUserId]
         );
