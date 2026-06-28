@@ -548,10 +548,8 @@ router.get('/:reportId/pdf', (req: Request, res: Response, next: () => void) => 
     if (castUser && !(req.isAuthenticated && req.isAuthenticated())) {
       const ownerCheck = await pool.query(
         `SELECT 1 FROM reports r
-         LEFT JOIN cast_users cu ON cu.id = $2
-         LEFT JOIN project_casts pc ON pc.project_id = r.project_id AND pc.deleted_at IS NULL
          WHERE r.id = $1 AND r.deleted_at IS NULL
-           AND (r.cast_user_id = $2 OR (cu.staff_id IS NOT NULL AND pc.staff_id = cu.staff_id))
+           AND r.cast_user_id = $2
          LIMIT 1`,
         [reportId, castUser.userId]
       );
