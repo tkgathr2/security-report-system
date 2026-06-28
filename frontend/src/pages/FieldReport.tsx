@@ -191,8 +191,23 @@ export default function FieldReport() {
       }
 
       const queryEmail = searchParams.get('email')
+      // URLにemailが含まれている場合はブラウザ履歴・Refererから除去する
+      if (queryEmail) {
+        window.history.replaceState({}, '', window.location.pathname)
+      }
       const savedEmail = localStorage.getItem(`writer_email_${uniqueUrl}`)
-      const emailToUse = queryEmail || savedEmail
+      // castUser localStorage からも email を取得できる（castToken セッション経由）
+      let castUserEmail: string | null = null
+      try {
+        const castUserRaw = localStorage.getItem('castUser')
+        if (castUserRaw) {
+          const castUser = JSON.parse(castUserRaw)
+          castUserEmail = castUser?.email || null
+        }
+      } catch {
+        // ignore parse errors
+      }
+      const emailToUse = queryEmail || savedEmail || castUserEmail
       if (emailToUse) {
         setWriterEmail(emailToUse)
         setWriterName(emailToUse.split('@')[0] || emailToUse)
