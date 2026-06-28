@@ -521,31 +521,29 @@ router.get('/today', async (req: Request, res: Response) => {
       ? dateParam
       : todayJST();
 
-    const matchName = user.staff_name || '';
-
-    const normalizedMatchName = normalizeKanjiVariants(matchName);
+    if (!user.staff_id) {
+      return res.json({
+        user,
+        date: today,
+        projects: []
+      });
+    }
 
     const projectsResult = await pool.query(
-      `SELECT DISTINCT p.id, p.project_key, p.work_date, p.work_name, 
+      `SELECT DISTINCT p.id, p.project_key, p.work_date, p.work_name,
               p.location, p.status, p.unique_url, p.url_expires_at,
               c.name as client_name
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN project_casts pc ON p.id = pc.project_id
-       LEFT JOIN staff_master sm2 ON pc.staff_id = sm2.id
        LEFT JOIN reports r ON r.project_id = p.id AND r.deleted_at IS NULL
        WHERE p.work_date = $1
          AND p.status = 'active'
          AND p.deleted_at IS NULL
          AND r.id IS NULL
-         AND (
-           pc.staff_id = $2
-           OR REPLACE(REPLACE(sm2.display_name_kanji, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($3, ' ', ''), E'\\u3000', '')
-           OR TRANSLATE(REPLACE(REPLACE(sm2.display_name_kanji, ' ', ''), E'\\u3000', ''), E'\\u9AD9\\uFA11\\u5861\\u6FA4\\u9F8D\\u5EE3\\u6AFB\\u7027\\u90DE\\u9F4B\\u83EF\\u5B78', E'\\u9AD8\\u5D0E\\u5D0E\\u6CA2\\u7ADC\\u5E83\\u685C\\u6EDD\\u90CE\\u658E\\u82B1\\u5B66') = $4
-           OR (pc.staff_id IS NULL AND pc.cast_name IS NOT NULL AND REPLACE(REPLACE(pc.cast_name, ' ', ''), E'\\u3000', '') = REPLACE(REPLACE($3, ' ', ''), E'\\u3000', ''))
-         )
+         AND pc.staff_id = $2
        ORDER BY p.work_date, p.work_name`,
-     [today, user.staff_id, matchName, normalizedMatchName]
+     [today, user.staff_id]
     );
 
     res.json({ 
