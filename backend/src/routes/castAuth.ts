@@ -9,7 +9,7 @@ import { isValidEmail, validateStringField, MAX_LENGTHS } from '../utils/validat
 import { logAudit } from '../utils/auditLog';
 import { checkRateLimitDb, recordFailedAttemptDb, resetAttemptsDb, checkAndIncrementRateLimitDb } from '../utils/rateLimit';
 import { todayJST, escapeLikePattern } from '../utils/dateUtil';
-import { magicLinkHash } from '../middleware/auth';
+import { magicLinkHash, authenticateCast } from '../middleware/auth';
 
 const inquiryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -558,7 +558,7 @@ router.get('/today', async (req: Request, res: Response) => {
 });
 
 // Search staff by kana (for autocomplete)
-router.get('/search-staff', async (req: Request, res: Response) => {
+router.get('/search-staff', authenticateCast, async (req: Request, res: Response) => {
   try {
     const { q } = req.query;
 
