@@ -204,14 +204,19 @@ router.post('/verify', async (req: Request, res: Response) => {
       const nameErr = validateStringField(name, '氏名', MAX_LENGTHS.PERSON_NAME);
       if (nameErr) { return res.status(400).json({ message: nameErr }); }
 
-      // Verify staff exists
+      // Verify staff exists and email matches the registering user
       const staffCheck = await pool.query(
-        'SELECT id, display_name_kanji FROM staff_master WHERE id = $1',
+        'SELECT id, display_name_kanji, email FROM staff_master WHERE id = $1',
         [staffId]
       );
 
       if (staffCheck.rows.length === 0) {
         return res.status(400).json({ message: '選択されたスタッフが見つかりません' });
+      }
+
+      const staffEmail = staffCheck.rows[0].email;
+      if (!staffEmail || staffEmail.toLowerCase().trim() !== user.email.toLowerCase().trim()) {
+        return res.status(400).json({ message: '選択したスタッフ情報が一致しません' });
       }
 
       await pool.query(
