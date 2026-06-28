@@ -156,6 +156,7 @@ export default function CastVerify() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, staffId: selectedStaffId, name: nameKanji, pin }),
+        credentials: 'include',
       });
 
       const data = await res.json();

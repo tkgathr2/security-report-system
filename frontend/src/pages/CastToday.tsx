@@ -50,6 +50,7 @@ export default function CastToday() {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
+      credentials: 'include',
     })
       .then((res) => {
         if (res.status === 401) {
@@ -97,6 +98,7 @@ export default function CastToday() {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
     }
     localStorage.removeItem('castToken');

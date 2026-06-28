@@ -59,6 +59,7 @@ export default function CastMailHelp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), pin }),
+        credentials: 'include',
       });
 
       const data = await res.json();

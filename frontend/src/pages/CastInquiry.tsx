@@ -52,6 +52,7 @@ export default function CastInquiry() {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData,
+        credentials: 'include',
       });
 
       if (res.status === 401) {

@@ -23,7 +23,8 @@ export default function CastMagic() {
     fetch(`${API_BASE}/api/cast/magic`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
+      body: JSON.stringify({ token }),
+      credentials: 'include',
     })
       .then((res) => res.json())
       .then((data) => {

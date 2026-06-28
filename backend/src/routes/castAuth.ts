@@ -15,6 +15,27 @@ const inquiryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSi
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
 const JWT_EXPIRES_IN = '24h';
+const COOKIE_MAX_AGE_SEC = 30 * 24 * 60 * 60; // 30 days in seconds
+
+function setCastTokenCookie(res: Response, token: string): void {
+  res.cookie('castToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+    maxAge: COOKIE_MAX_AGE_SEC * 1000, // cookie() takes ms
+  });
+}
+
+function clearCastTokenCookie(res: Response): void {
+  res.cookie('castToken', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+    maxAge: 0,
+  });
+}
 
 // Token blacklist for logout functionality
 const tokenBlacklist = new Set<string>();
@@ -254,7 +275,8 @@ router.post('/verify', async (req: Request, res: Response) => {
 
       logAudit({ req, actorEmail: user.email, actorType: 'cast', action: 'CAST_VERIFY', targetType: 'cast_user', targetId: user.id, payload: { staff_id: staffId } });
 
-      res.json({ 
+      setCastTokenCookie(res, sessionToken);
+      res.json({
         message: '登録が完了しました',
         token: sessionToken,
         user: { id: user.id, email: user.email, name: name.trim() }
@@ -345,6 +367,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     logAudit({ req, actorEmail: normalizedEmail, actorType: 'cast', action: 'CAST_LOGIN', targetType: 'cast_user', targetId: user.id, payload: {} });
 
+    setCastTokenCookie(res, sessionToken);
     res.json({
       message: 'ログイン成功',
       token: sessionToken,
@@ -443,6 +466,7 @@ router.post('/magic', async (req: Request, res: Response) => {
       [sessionToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), user.id]
     );
 
+    setCastTokenCookie(res, sessionToken);
     res.json({
       message: 'ログイン成功',
       token: sessionToken,
@@ -458,11 +482,15 @@ router.post('/magic', async (req: Request, res: Response) => {
 router.get('/me', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    let token: string | undefined;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else if (req.cookies?.castToken) {
+      token = req.cookies.castToken as string;
+    }
+    if (!token) {
       return res.status(401).json({ message: '認証が必要です' });
     }
-
-    const token = authHeader.substring(7);
 
     const result = await pool.query(
       `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
@@ -488,11 +516,15 @@ router.get('/me', async (req: Request, res: Response) => {
 router.get('/today', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    let token: string | undefined;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else if (req.cookies?.castToken) {
+      token = req.cookies.castToken as string;
+    }
+    if (!token) {
       return res.status(401).json({ message: '認証が必要です' });
     }
-
-    const token = authHeader.substring(7);
 
     // Get user with staff info
     const userResult = await pool.query(
@@ -724,6 +756,7 @@ router.post('/reset-pin/confirm', async (req: Request, res: Response) => {
 
     logAudit({ req, actorEmail: user.email, actorType: 'cast', action: 'CAST_PIN_RESET', targetType: 'cast_user', targetId: user.id, payload: {} });
 
+    setCastTokenCookie(res, sessionToken);
     res.json({
       message: '暗証番号を再設定しました',
       token: sessionToken,
@@ -738,10 +771,15 @@ router.post('/reset-pin/confirm', async (req: Request, res: Response) => {
 // Logout
 router.post('/logout', async (req: Request, res: Response) => {
   try {
+    // Resolve token from header or cookie
     const authHeader = req.headers.authorization;
+    let token: string | undefined;
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      // Import and add to blacklist
+      token = authHeader.substring(7);
+    } else if (req.cookies?.castToken) {
+      token = req.cookies.castToken as string;
+    }
+    if (token) {
       const { addTokenToBlacklist } = await import('../middleware/auth');
       await addTokenToBlacklist(token);
       await pool.query(
@@ -750,6 +788,7 @@ router.post('/logout', async (req: Request, res: Response) => {
         [token]
       );
     }
+    clearCastTokenCookie(res);
     res.json({ message: 'ログアウトしました' });
   } catch (error) {
     console.error('Logout error:', error);
@@ -862,6 +901,7 @@ router.post('/field-login', async (req: Request, res: Response) => {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
+    setCastTokenCookie(res, token);
     res.status(200).json({
       user: {
         id: user.id,
@@ -969,6 +1009,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
           { expiresIn: JWT_EXPIRES_IN }
         );
 
+        setCastTokenCookie(res, token);
         res.status(200).json({
           user: {
             id: existing.id,
@@ -1032,6 +1073,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
+    setCastTokenCookie(res, token);
     res.status(201).json({
       user: {
         id: user.id,
@@ -1096,6 +1138,7 @@ router.post('/exchange-cast-token', async (req: Request, res: Response) => {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
+    setCastTokenCookie(res, token);
     res.status(200).json({
       user: {
         id: user.id,
@@ -1190,11 +1233,15 @@ const ADMIN_NOTIFICATION_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAILS || '').
 router.post('/inquiry', inquiryUpload.single('screenshot'), async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    let token: string | undefined;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else if (req.cookies?.castToken) {
+      token = req.cookies.castToken as string;
+    }
+    if (!token) {
       return res.status(401).json({ message: '認証が必要です' });
     }
-
-    const token = authHeader.substring(7);
 
     const userResult = await pool.query(
       `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
