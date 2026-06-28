@@ -970,10 +970,22 @@ pool.query(`CREATE TABLE IF NOT EXISTS data_monitor_notifications (
       DROP CONSTRAINT IF EXISTS data_monitor_notifications_notification_kind_check;
     ALTER TABLE data_monitor_notifications
       ADD CONSTRAINT data_monitor_notifications_notification_kind_check
-      CHECK (notification_kind IN ('pre_day', 'same_day', 'same_day_prefetch', 'same_day_postfetch'));
+      CHECK (notification_kind IN ('pre_day', 'same_day', 'same_day_prefetch', 'same_day_postfetch', 'morning_reminder', 'evening_reminder'));
   `))
   .then(() => console.log('[Startup] data_monitor_notifications check constraint ensured'))
   .catch((err: unknown) => console.error('[Startup] data_monitor_notifications table creation error:', err));
+
+// system_settings: PDF レイアウト・フィーチャーフラグ等を保存する KV ストア。
+// migration 1784000000000 と同内容の冪等ガード。本番は startCommand が
+// `(npm run migrate:up || true)` で migration 失敗を握り潰すため、ここで起動時に保証する。
+// reports.ts /approve ハンドラ内の DDL は削除済み（毎リクエストでのテーブルロック取得を解消）。
+pool.query(`CREATE TABLE IF NOT EXISTS system_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+)`)
+  .then(() => console.log('[Startup] system_settings table ensured'))
+  .catch((err: unknown) => console.error('[Startup] system_settings table creation error:', err));
 
 seedStaffData()
   .then(() => fixProjectCasts())
