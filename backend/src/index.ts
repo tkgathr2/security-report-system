@@ -960,12 +960,19 @@ pool.query(`CREATE TABLE IF NOT EXISTS jwt_token_blacklist (
 
 pool.query(`CREATE TABLE IF NOT EXISTS data_monitor_notifications (
   target_date DATE NOT NULL,
-  notification_kind TEXT NOT NULL CHECK (notification_kind IN ('pre_day', 'same_day')),
+  notification_kind TEXT NOT NULL CHECK (notification_kind IN ('pre_day', 'same_day', 'same_day_prefetch', 'same_day_postfetch')),
   notified_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   notified_hour INTEGER NOT NULL,
   PRIMARY KEY (target_date, notification_kind)
 )`)
-  .then(() => console.log('[Startup] data_monitor_notifications table ensured'))
+  .then(() => pool.query(`
+    ALTER TABLE data_monitor_notifications
+      DROP CONSTRAINT IF EXISTS data_monitor_notifications_notification_kind_check;
+    ALTER TABLE data_monitor_notifications
+      ADD CONSTRAINT data_monitor_notifications_notification_kind_check
+      CHECK (notification_kind IN ('pre_day', 'same_day', 'same_day_prefetch', 'same_day_postfetch'));
+  `))
+  .then(() => console.log('[Startup] data_monitor_notifications check constraint ensured'))
   .catch((err: unknown) => console.error('[Startup] data_monitor_notifications table creation error:', err));
 
 seedStaffData()
