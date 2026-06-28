@@ -99,6 +99,20 @@ async function sendReminders(
     return { sent: 0, errors: 0 };
   }
 
+  // DB でも送信済みを確認（再起動後の重複メール防止）
+  const notificationKind = timing === 'morning' ? 'morning_reminder' : 'evening_reminder';
+  const dbCheck = await pool.query(
+    `SELECT 1 FROM data_monitor_notifications
+     WHERE target_date = $1 AND notification_kind = $2
+     LIMIT 1`,
+    [targetDate, notificationKind]
+  );
+  if (dbCheck.rows.length > 0) {
+    console.log(`[DailyReminder] Already sent (DB record exists) for ${targetDate} (${timing}), skipping`);
+    alreadySent.add(sendKey);
+    return { sent: 0, errors: 0 };
+  }
+
   console.log(`[DailyReminder] Sending ${timing} reminders for ${targetDate}`);
 
   const casts = await getCastMembers(targetDate);
@@ -157,6 +171,20 @@ async function sendReminders(
   }
 
   console.log(`[DailyReminder] Completed ${timing} for ${targetDate}: sent=${sentCount}, errors=${errorCount}`);
+
+  // 送信済みを DB に記録（再起動後の重複メール防止）
+  const { hour: currentHour } = getJSTNow();
+  try {
+    await pool.query(
+      `INSERT INTO data_monitor_notifications (target_date, notification_kind, notified_hour)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (target_date, notification_kind) DO NOTHING`,
+      [targetDate, notificationKind, currentHour]
+    );
+  } catch (dbErr) {
+    console.error(`[DailyReminder] Failed to record notification in DB:`, dbErr);
+  }
+
   alreadySent.add(sendKey);
 
   if (alreadySent.size > 60) {

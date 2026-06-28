@@ -970,7 +970,7 @@ pool.query(`CREATE TABLE IF NOT EXISTS data_monitor_notifications (
       DROP CONSTRAINT IF EXISTS data_monitor_notifications_notification_kind_check;
     ALTER TABLE data_monitor_notifications
       ADD CONSTRAINT data_monitor_notifications_notification_kind_check
-      CHECK (notification_kind IN ('pre_day', 'same_day', 'same_day_prefetch', 'same_day_postfetch'));
+      CHECK (notification_kind IN ('pre_day', 'same_day', 'same_day_prefetch', 'same_day_postfetch', 'morning_reminder', 'evening_reminder'));
   `))
   .then(() => console.log('[Startup] data_monitor_notifications check constraint ensured'))
   .catch((err: unknown) => console.error('[Startup] data_monitor_notifications table creation error:', err));
