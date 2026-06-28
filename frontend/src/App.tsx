@@ -354,7 +354,7 @@ function AdminApp() {
       if (!response.ok) throw new Error('Failed to fetch projects')
       const data = await response.json()
       if (navCounterRef.current !== myNav) return
-      setProjects(data.projects)
+      setProjects(data.projects || [])
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
       if (navCounterRef.current !== myNav) return
@@ -456,7 +456,7 @@ function AdminApp() {
       if (!response.ok) throw new Error('Failed to fetch reports')
       const data = await response.json()
       if (navCounterRef.current !== myNav) return
-      setReports(data.reports)
+      setReports(data.reports || [])
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
       if (navCounterRef.current !== myNav) return

@@ -44,8 +44,8 @@ async function isTokenBlacklisted(token: string): Promise<boolean> {
     );
     return result.rows.length > 0;
   } catch (err) {
-    console.error('[AUTH] Failed to check token blacklist:', err);
-    return false;
+    console.error('[AUTH] Failed to check token blacklist — failing closed (deny access):', err);
+    return true;
   }
 }
 
