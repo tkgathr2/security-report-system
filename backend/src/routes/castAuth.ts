@@ -7,7 +7,7 @@ import pool from '../db/pool';
 import { sendVerificationEmail, sendMagicLinkEmail, sendWelcomeEmail, sendPinResetEmail, sendInquiryNotificationEmail } from '../utils/email';
 import { isValidEmail, validateStringField, MAX_LENGTHS } from '../utils/validation';
 import { logAudit } from '../utils/auditLog';
-import { checkRateLimitDb, recordFailedAttemptDb, resetAttemptsDb } from '../utils/rateLimit';
+import { checkRateLimitDb, recordFailedAttemptDb, resetAttemptsDb, checkAndIncrementRateLimitDb } from '../utils/rateLimit';
 import { todayJST, escapeLikePattern } from '../utils/dateUtil';
 import { magicLinkHash } from '../middleware/auth';
 
@@ -362,6 +362,12 @@ router.post('/magic-link', async (req: Request, res: Response) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
+    const rateCheck = await checkAndIncrementRateLimitDb(`magic-link:${normalizedEmail}`, { maxAttempts: 5, lockDurationMs: 15 * 60 * 1000 });
+    if (!rateCheck.allowed) {
+      const remainMin = Math.ceil((rateCheck.remainingMs || 0) / 60000);
+      return res.status(429).json({ message: `送信回数の上限に達しました。${remainMin}分後にお試しください` });
+    }
+
     const result = await pool.query(
       `SELECT cu.id, cu.email, cu.email_verified, cu.staff_id,
               sm.display_name_kanji as name
@@ -372,7 +378,7 @@ router.post('/magic-link', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0 || !result.rows[0].email_verified) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         message: '登録されていないメールアドレスです',
         redirect: '/cast/register'
       });
