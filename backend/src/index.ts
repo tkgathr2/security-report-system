@@ -403,8 +403,8 @@ async function seedStaffData() {
     const hasWriterStaffId = reportCols.includes('writer_staff_id');
 
     const missingSeedIdSet = new Set(missingSeedIds);
-    const normalizeKana = (s: string) => s.replace(/[\s\u3000\u00A0]/g, '');
-    const normalizeKanji = (s: string) => s.replace(/[\s\u3000\u00A0]/g, '').replace(/\u9AD9/g, '\u9AD8');
+    const normalizeKana = (s: string) => s.replace(/[\s　 ]/g, '');
+    const normalizeKanji = (s: string) => s.replace(/[\s　 ]/g, '').replace(/髙/g, '高');
 
     let inserted = 0;
     let enforced = 0;
@@ -441,8 +441,8 @@ async function seedStaffData() {
            WHERE deleted_at IS NULL
              AND (
                display_name_kana = $3
-               OR REPLACE(REPLACE(REPLACE(display_name_kana, ' ', ''), '　', ''), ' ', '') = $1
-               OR REPLACE(REPLACE(REPLACE(display_name_kanji, ' ', ''), '　', ''), ' ', '') = $2
+               OR REPLACE(REPLACE(REPLACE(display_name_kana, ' ', ''), '　', ''), ' ', '') = $1
+               OR REPLACE(REPLACE(REPLACE(display_name_kanji, ' ', ''), '　', ''), ' ', '') = $2
              )
            ORDER BY created_at ASC`,
           [normKana, normKanji, kana]
@@ -612,12 +612,12 @@ async function cleanupData() {
     const seedIds = new Set(SEEDED_STAFF_DATA.map(s => s[0]));
 
     const dupeResult = await pool.query(`
-      SELECT REPLACE(REPLACE(display_name_kana, ' ', ''), '\u3000', '') as norm_kana,
+      SELECT REPLACE(REPLACE(display_name_kana, ' ', ''), '　', '') as norm_kana,
              array_agg(id ORDER BY created_at ASC) as ids,
              array_agg(display_name_kana ORDER BY created_at ASC) as kanas
       FROM staff_master
       WHERE deleted_at IS NULL
-      GROUP BY REPLACE(REPLACE(display_name_kana, ' ', ''), '\u3000', '')
+      GROUP BY REPLACE(REPLACE(display_name_kana, ' ', ''), '　', '')
       HAVING COUNT(*) > 1
     `);
     let mergedCount = 0;
@@ -642,15 +642,15 @@ async function cleanupData() {
     cleanupDetail += ` dupesMerged:${mergedCount}`;
 
     const garbled = await pool.query(
-      `DELETE FROM csv_imports WHERE original_file_name ~ '[\u00C0-\u00FF][\u0080-\u00BF]'`
+      `DELETE FROM csv_imports WHERE original_file_name ~ '[À-ÿ][-¿]'`
     );
     cleanupDetail += ` garbledImportsDeleted:${garbled.rowCount}`;
 
     const highKanji = await pool.query(
       `UPDATE staff_master SET deleted_at = NOW()
        WHERE display_name_kanji = display_name_kana
-         AND display_name_kana !~ '[\u30A0-\u30FF]'
-         AND display_name_kana ~ '[\u4E00-\u9FFF]'
+         AND display_name_kana !~ '[゠-ヿ]'
+         AND display_name_kana ~ '[一-鿿]'
          AND deleted_at IS NULL
          AND id NOT IN (SELECT DISTINCT staff_id FROM project_casts WHERE staff_id IS NOT NULL)
          AND id NOT IN (SELECT DISTINCT staff_id FROM cast_users WHERE staff_id IS NOT NULL)`
@@ -905,89 +905,9 @@ server = app.listen(PORT, () => {
 server.keepAliveTimeout = 65_000;
 server.headersTimeout = 70_000;
 
-pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_project_id_active ON reports (project_id) WHERE deleted_at IS NULL`)
-  .then(() => console.log('[Startup] Unique index on reports ensured'))
-  .catch((err: unknown) => console.error('[Startup] Index creation error:', err));
-
-pool.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS notes TEXT`)
-  .then(() => console.log('[Startup] reports.notes column ensured'))
-  .catch((err: unknown) => console.error('[Startup] reports.notes column error:', err));
-
-pool.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS partner_company_name TEXT`)
-  .then(() => console.log('[Startup] reports.partner_company_name column ensured'))
-  .catch((err: unknown) => console.error('[Startup] reports.partner_company_name column error:', err));
-
-pool.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS writer_name TEXT`)
-  .then(() => console.log('[Startup] reports.writer_name snapshot column ensured'))
-  .catch((err: unknown) => console.error('[Startup] reports.writer_name column error:', err));
-
-pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cast_users_email_active ON cast_users (email) WHERE deleted_at IS NULL`)
-  .then(() => console.log('[Startup] Unique index on cast_users.email ensured'))
-  .catch((err: unknown) => console.error('[Startup] cast_users index creation error:', err));
-
-// clients.name_normalized を partial unique index 化（soft-delete 衝突の根治）。
-// 非partialの UNIQUE(name_normalized) だと、ソフト削除した同名 client がスロットを占有し、
-// CSV取込の新規 client INSERT が ON CONFLICT で弾かれ clientId=null になり、
-// 「クライアントIDが取得できませんでした」で毎回同じ行(行82/83)が落ちる。
-// migration 1781900000000 と同内容。本番は startCommand が `(npm run migrate:up || true)` で
-// migrate 失敗を握り潰すため、project_casts(1781800000000) と同じくここで起動時に冪等保証する。
-// 事前確認で deleted_at IS NULL の name_normalized 重複=0 を確認済み（partial index 作成は安全）。
-pool.query(`ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_name_normalized_key`)
-  .then(() => pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS clients_name_normalized_active_unique ON clients (name_normalized) WHERE deleted_at IS NULL`))
-  .then(() => console.log('[Startup] clients.name_normalized partial unique index ensured'))
-  .catch((err: unknown) => console.error('[Startup] clients partial index creation error:', err));
-
-pool.query(`CREATE TABLE IF NOT EXISTS inquiries (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  cast_user_id UUID NOT NULL,
-  cast_email TEXT NOT NULL,
-  cast_name TEXT,
-  category TEXT NOT NULL,
-  message TEXT NOT NULL,
-  screenshot_bytes BYTEA,
-  screenshot_mime_type TEXT,
-  status TEXT NOT NULL DEFAULT 'new',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-)`)
-  .then(() => console.log('[Startup] Inquiries table ensured'))
-  .catch((err: unknown) => console.error('[Startup] Inquiries table creation error:', err));
-
-pool.query(`CREATE TABLE IF NOT EXISTS jwt_token_blacklist (
-  token TEXT PRIMARY KEY,
-  expires_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-)`)
-  .then(() => console.log('[Startup] jwt_token_blacklist table ensured'))
-  .catch((err: unknown) => console.error('[Startup] jwt_token_blacklist table creation error:', err));
-
-pool.query(`CREATE TABLE IF NOT EXISTS data_monitor_notifications (
-  target_date DATE NOT NULL,
-  notification_kind TEXT NOT NULL CHECK (notification_kind IN ('pre_day', 'same_day', 'same_day_prefetch', 'same_day_postfetch')),
-  notified_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  notified_hour INTEGER NOT NULL,
-  PRIMARY KEY (target_date, notification_kind)
-)`)
-  .then(() => pool.query(`
-    ALTER TABLE data_monitor_notifications
-      DROP CONSTRAINT IF EXISTS data_monitor_notifications_notification_kind_check;
-    ALTER TABLE data_monitor_notifications
-      ADD CONSTRAINT data_monitor_notifications_notification_kind_check
-      CHECK (notification_kind IN ('pre_day', 'same_day', 'same_day_prefetch', 'same_day_postfetch', 'morning_reminder', 'evening_reminder'));
-  `))
-  .then(() => console.log('[Startup] data_monitor_notifications check constraint ensured'))
-  .catch((err: unknown) => console.error('[Startup] data_monitor_notifications table creation error:', err));
-
-// system_settings: PDF レイアウト・フィーチャーフラグ等を保存する KV ストア。
-// migration 1784000000000 と同内容の冪等ガード。本番は startCommand が
-// `(npm run migrate:up || true)` で migration 失敗を握り潰すため、ここで起動時に保証する。
-// reports.ts /approve ハンドラ内の DDL は削除済み（毎リクエストでのテーブルロック取得を解消）。
-pool.query(`CREATE TABLE IF NOT EXISTS system_settings (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-)`)
-  .then(() => console.log('[Startup] system_settings table ensured'))
-  .catch((err: unknown) => console.error('[Startup] system_settings table creation error:', err));
+// DDL は migration 1784300000000_move-startup-ddl-to-migration.js に移動済み。
+// 起動時の fire-and-forget pool.query DDL はここには存在しない。
+console.log('[Startup] Schema DDLs are managed via migrations (see backend/migrations/)');
 
 seedStaffData()
   .then(() => fixProjectCasts())
