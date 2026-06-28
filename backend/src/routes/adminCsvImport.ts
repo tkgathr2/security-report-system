@@ -21,7 +21,7 @@ function requireAdminOrApiKey(req: Request, res: Response, next: NextFunction): 
 
 const router = Router();
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 interface AdminUser {
   id: string;
@@ -722,11 +722,10 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                 const existingWork = castDateAssignments.get(castDateKey)!;
                 errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingWork}」に割り当て済みです（1日1現場まで）` });
                 duplicateCastAssignments++;
-              } else {
-                castDateAssignments.set(castDateKey, workName);
               }
 
-              if (!castDateAssignments.has(castDateKey) || castDateAssignments.get(castDateKey) === workName) {
+              if (!castDateAssignments.has(castDateKey)) {
+                castDateAssignments.set(castDateKey, workName);
                   // DB側の既存割当チェックも procast_staff_no を優先照合する。
                   // No指定があればNo一致だけを既存扱い、No空欄行はNo未付与の同名のみを対象にする。
                   // これにより「同姓同名別人」の row を誤って既存とみなさない。
