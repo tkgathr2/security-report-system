@@ -230,7 +230,8 @@ export default function FieldReport() {
           response = await fetch('/api/cast/exchange-cast-token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cast_token: castToken })
+            body: JSON.stringify({ cast_token: castToken }),
+            credentials: 'include',
           })
 
           if (response && response.ok) {
@@ -344,7 +345,8 @@ export default function FieldReport() {
   const fetchDraft = async (authToken: string) => {
     try {
       const response = await fetch(`/api/drafts/${uniqueUrl}`, {
-        headers: { 'Authorization': `Bearer ${authToken}` }
+        headers: { 'Authorization': `Bearer ${authToken}` },
+        credentials: 'include',
       })
       
       if (response.ok) {
@@ -414,7 +416,8 @@ export default function FieldReport() {
             partner_company_name: partnerCompanyName
           },
           client_updated_at: new Date().toISOString()
-        })
+        }),
+        credentials: 'include',
       })
     } catch {
       // Ignore draft save errors
@@ -466,7 +469,8 @@ export default function FieldReport() {
           notes,
           partner_company_name: partnerCompanyName || undefined,
           signature_png_base64: base64Data
-        })
+        }),
+        credentials: 'include',
       })
       
       if (response.status === 409) {
@@ -507,7 +511,8 @@ export default function FieldReport() {
       setNameSearching(true)
       try {
         const response = await fetch(`/api/staff/search?q=${encodeURIComponent(query)}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 'Authorization': `Bearer ${token}` },
+          credentials: 'include',
         })
       
         if (response.ok) {
@@ -1038,7 +1043,7 @@ export default function FieldReport() {
                       if (q.trim().length === 0) { setGuardSearchResults([]); return; }
                       setGuardSearching(true);
                       try {
-                        const res = await fetch(`/api/staff/search?q=${encodeURIComponent(q)}`, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+                        const res = await fetch(`/api/staff/search?q=${encodeURIComponent(q)}`, { headers: token ? { 'Authorization': `Bearer ${token}` } : {}, credentials: 'include' });
                         if (res.ok) {
                           const data = await res.json();
                           setGuardSearchResults((data.staff || []).filter((s: StaffMember) => !guards.some(g => g.name === s.displayNameKanji)));
@@ -1122,7 +1127,8 @@ export default function FieldReport() {
                           const res = await fetch('/api/staff/register', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
-                            body: JSON.stringify({ display_name_kanji: registerKanji.trim(), display_name_kana: registerKana.trim() })
+                            body: JSON.stringify({ display_name_kanji: registerKanji.trim(), display_name_kana: registerKana.trim() }),
+                            credentials: 'include',
                           });
                           if (res.ok) {
                             const data = await res.json();

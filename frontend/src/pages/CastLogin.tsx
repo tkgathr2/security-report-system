@@ -18,6 +18,7 @@ export default function CastLogin() {
     if (token) {
       fetch(`${API_BASE}/api/cast/me`, {
         headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include',
       })
         .then((res) => {
           if (res.ok) {
@@ -65,6 +66,7 @@ export default function CastLogin() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, pin }),
+        credentials: 'include',
       });
 
       const data = await res.json();

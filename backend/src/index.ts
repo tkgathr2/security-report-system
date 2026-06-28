@@ -4,6 +4,7 @@ import express, { Request, Response } from 'express';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import passport from 'passport';
+import cookieParser from 'cookie-parser';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -51,6 +52,7 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use((req: Request, _res: Response, next: () => void) => {
   if (req.body && typeof req.body === 'object') {

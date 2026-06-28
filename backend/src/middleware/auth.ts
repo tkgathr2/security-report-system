@@ -51,8 +51,16 @@ async function isTokenBlacklisted(token: string): Promise<boolean> {
 
 export async function authenticateCast(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+
+  // Prefer Authorization: Bearer header; fall back to HttpOnly cookie
+  let token: string | undefined;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if (req.cookies && req.cookies.castToken) {
+    token = req.cookies.castToken as string;
+  }
+
+  if (!token) {
     res.status(401).json({
       error: 'UNAUTHORIZED',
       message: '認証が必要です',
@@ -60,8 +68,6 @@ export async function authenticateCast(req: Request, res: Response, next: NextFu
     });
     return;
   }
-
-  const token = authHeader.substring(7);
 
   if (await isTokenBlacklisted(token)) {
     res.status(401).json({
