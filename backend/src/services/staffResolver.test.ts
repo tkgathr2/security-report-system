@@ -159,6 +159,18 @@ describe('resolveStaffForImport', () => {
     });
   });
 
+  it('Noなし行で同名の削除済みレコードがある場合はskippedDeleted=trueを返す（復活・重複防止）', async () => {
+    const { db } = makeDb([
+      { match: /deleted_at IS NOT NULL[\s\S]*procast_staff_no IS NULL/, rows: [{ id: 'deleted-staff' }] },
+    ]);
+
+    const result = await resolveStaffForImport(db, { ...base, staffNo: null });
+
+    expect(result.skippedDeleted).toBe(true);
+    expect(result.staffId).toBe('');
+    expect(result.autoAdded).toBe(false);
+  });
+
   it('INSERTが一意制約で弾かれた場合は既存レコードを引いて返す（取込レース対応）', async () => {
     let insertCount = 0;
     const calls: Array<{ text: string; params: unknown[] }> = [];

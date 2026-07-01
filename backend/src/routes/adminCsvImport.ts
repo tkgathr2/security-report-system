@@ -448,6 +448,7 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
   let duplicateCastAssignments = 0;
   let clientAutoCreatedCount = 0;
   let softDeletedProjectsCount = 0;
+  let skippedDeletedCastCount = 0;
 
   const projectMap = new Map<string, { projectId: string; casts: Set<string> }>();
   const processedStaffKana = new Set<string>();
@@ -779,6 +780,11 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                       castNameKana: castNameKana || null,
                       adminEmail: adminUser.email,
                     });
+                    if (resolved.skippedDeleted) {
+                      skippedDeletedCastCount++;
+                      errors.push({ row: rowNum, reason: `${castName} は削除済みのためスキップしました` });
+                      continue;
+                    }
                     if (resolved.autoAdded) {
                       staffAutoAddedCount++;
                     }
@@ -942,6 +948,7 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
     staff_auto_added_count: staffAutoAddedCount,
     client_auto_created_count: clientAutoCreatedCount,
     duplicate_cast_assignments: duplicateCastAssignments,
+    skipped_deleted_cast_count: skippedDeletedCastCount,
     staff_without_email: staffWithoutEmail,
     errors: errors.slice(0, 10)
   });
