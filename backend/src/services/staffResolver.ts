@@ -26,6 +26,7 @@ export interface ResolveStaffParams {
 export interface ResolveStaffResult {
   staffId: string;
   autoAdded: boolean;
+  skippedDeleted?: true;
 }
 
 // 表記揺れ吸収のための正規化（バグチェックラボ田所High#7対応 2026-06-16）。
@@ -153,6 +154,28 @@ export async function resolveStaffForImport(
   }
 
   // soft-deleted スタッフは名前照合でも復活させない（意図的な削除を CSV 同期が上書きしない）。
+  // Noなし行で同名の削除済みレコードが存在する場合はスキップ（重複登録防止）。
+  if (!no) {
+    const deletedByKanji = await db.query(
+      `SELECT id FROM staff_master
+       WHERE ${NRM('display_name_kanji')} = ${NRM('$1')} AND deleted_at IS NOT NULL
+       AND procast_staff_no IS NULL LIMIT 1`,
+      [castName]
+    );
+    if (!deletedByKanji.rows[0]) {
+      const deletedByKana = await db.query(
+        `SELECT id FROM staff_master
+         WHERE ${NRM('display_name_kana')} = ${NRM('$1')} AND deleted_at IS NOT NULL
+         AND procast_staff_no IS NULL LIMIT 1`,
+        [staffKana]
+      );
+      if (deletedByKana.rows[0]) {
+        return { staffId: '', autoAdded: false, skippedDeleted: true };
+      }
+    } else {
+      return { staffId: '', autoAdded: false, skippedDeleted: true };
+    }
+  }
 
   // 3) 新規作成（取込同時実行のレースは procast_staff_no の一意indexで防ぎ、衝突時は既存を引く）
   const inserted = await db.query(
