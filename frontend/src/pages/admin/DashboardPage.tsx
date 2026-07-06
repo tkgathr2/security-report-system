@@ -201,14 +201,16 @@ export function DashboardPage({
                           </span>
                           <button
                             style={{
-                              background: '#f5f5f5',
-                              border: '1px solid #ddd',
-                              borderRadius: '4px',
-                              padding: '4px 8px',
-                              fontSize: '11px',
-                              color: '#666',
+                              background: '#ff9800',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '6px 12px',
+                              fontSize: '12px',
+                              fontWeight: 'bold',
+                              color: 'white',
                               cursor: 'pointer',
-                              marginLeft: '8px',
+                              marginLeft: '12px',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                             }}
                             onClick={() => handleSuppressWarning(c.id)}
                           >
