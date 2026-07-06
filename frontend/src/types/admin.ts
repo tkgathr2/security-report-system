@@ -255,6 +255,8 @@ export interface Client {
   contact_email: string | null
   address: string | null
   notification_emails: { id: string; email: string; label: string | null }[]
+  /** 直近1か月〜未来に有効案件がある会社（ダッシュボードのメール未登録警告の表示対象） */
+  has_recent_project?: boolean
   created_at: string
   updated_at: string
 }
