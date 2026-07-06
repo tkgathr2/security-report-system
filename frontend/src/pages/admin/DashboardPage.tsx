@@ -141,11 +141,41 @@ export function DashboardPage({
   formatDateTime,
   parseDateParts,
 }: DashboardPageProps) {
+  const [suppressedWarnings, setSuppressedWarnings] = useState<Set<string>>(new Set());
+
+  // 非表示の警告一覧を取得
+  useEffect(() => {
+    const fetchSuppressedWarnings = async () => {
+      try {
+        const response = await fetch('/api/admin/suppressed-warnings');
+        if (response.ok) {
+          const data = await response.json() as { suppressedWarnings: Array<{ client_id: string }> };
+          setSuppressedWarnings(new Set(data.suppressedWarnings.map(sw => sw.client_id)));
+        }
+      } catch (error) {
+        console.error('Failed to fetch suppressed warnings:', error);
+      }
+    };
+    fetchSuppressedWarnings();
+  }, []);
+
+  const handleSuppressWarning = async (clientId: string) => {
+    try {
+      const response = await fetch(`/api/admin/clients/${clientId}/suppress-warning`, { method: 'POST' });
+      if (response.ok) {
+        setSuppressedWarnings(prev => new Set([...prev, clientId]));
+      }
+    } catch (error) {
+      console.error('Failed to suppress warning:', error);
+    }
+  };
+
   // 直近1か月〜未来に案件がない会社は警告に出さない（has_recent_project未定義時は表示側に倒す）
   const clientsWithoutEmail = clients.filter(c =>
     c.is_active &&
     (!c.notification_emails || c.notification_emails.length === 0) &&
-    (c.has_recent_project ?? true)
+    (c.has_recent_project ?? true) &&
+    !suppressedWarnings.has(c.id)
   )
 
   return (
@@ -162,13 +192,28 @@ export function DashboardPage({
                     </p>
                     <ul style={styles.alertList}>
                       {clientsWithoutEmail.map(c => (
-                        <li key={c.id}>
-                          <span 
+                        <li key={c.id} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                          <span
                             style={styles.alertClientLink}
                             onClick={() => { navigateTo('clients'); setEditingClient(c) }}
                           >
                             {c.name}
                           </span>
+                          <button
+                            style={{
+                              background: '#f5f5f5',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              padding: '4px 8px',
+                              fontSize: '11px',
+                              color: '#666',
+                              cursor: 'pointer',
+                              marginLeft: '8px',
+                            }}
+                            onClick={() => handleSuppressWarning(c.id)}
+                          >
+                            非表示
+                          </button>
                         </li>
                       ))}
                     </ul>

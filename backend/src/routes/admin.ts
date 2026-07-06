@@ -1839,4 +1839,60 @@ router.post('/reminders/send-now', requireAdmin, async (req: Request, res: Respo
   }
 });
 
+// POST /api/admin/clients/:clientId/suppress-warning - ダッシュボード警告を非表示化
+router.post('/clients/:clientId/suppress-warning', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { clientId } = req.params;
+
+    const result = await pool.query(
+      `INSERT INTO suppressed_warnings (client_id) VALUES ($1)
+       ON CONFLICT (client_id) DO NOTHING
+       RETURNING client_id`,
+      [clientId]
+    );
+
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'SUPPRESS_WARNING', targetType: 'client', targetId: clientId, payload: {} });
+
+    res.json({ ok: true, message: '警告を非表示にしました' });
+  } catch (error) {
+    handleDbError(res, error, 'Suppress warning');
+  }
+});
+
+// DELETE /api/admin/clients/:clientId/suppress-warning - ダッシュボード警告を表示に戻す
+router.delete('/clients/:clientId/suppress-warning', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { clientId } = req.params;
+
+    await pool.query(
+      `DELETE FROM suppressed_warnings WHERE client_id = $1`,
+      [clientId]
+    );
+
+    const adminUser = req.user as { email: string };
+    logAudit({ req, actorEmail: adminUser.email, action: 'RESTORE_WARNING', targetType: 'client', targetId: clientId, payload: {} });
+
+    res.json({ ok: true, message: '警告を表示に戻しました' });
+  } catch (error) {
+    handleDbError(res, error, 'Restore warning');
+  }
+});
+
+// GET /api/admin/suppressed-warnings - 非表示の警告一覧
+router.get('/suppressed-warnings', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT sw.client_id, c.name, sw.created_at
+       FROM suppressed_warnings sw
+       JOIN clients c ON c.id = sw.client_id
+       ORDER BY sw.created_at DESC`
+    );
+
+    res.json({ suppressedWarnings: result.rows });
+  } catch (error) {
+    handleDbError(res, error, 'Get suppressed warnings');
+  }
+});
+
 export default router;
