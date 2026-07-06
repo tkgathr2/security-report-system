@@ -63,7 +63,9 @@ describe('GET /api/admin/clients (has_recent_project)', () => {
 
     const sql: string = queryMock.mock.calls[0][0];
     expect(sql).toContain('AS has_recent_project');
+    expect(sql).toContain('p.client_id = c.id');
     expect(sql).toContain('p.deleted_at IS NULL');
+    expect(sql).toContain("Asia/Tokyo");
     expect(sql).toMatch(/work_date\s*>=.*INTERVAL '1 month'/s);
   });
 });
