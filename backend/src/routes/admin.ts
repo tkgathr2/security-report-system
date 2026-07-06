@@ -756,7 +756,13 @@ router.get('/clients', requireAdmin, async (req: Request, res: Response) => {
                 SELECT json_agg(json_build_object('id', ce.id, 'email', ce.email, 'label', ce.label) ORDER BY ce.created_at)
                 FROM company_emails ce
                 WHERE ce.company_id = c.id AND ce.is_active = true AND ce.deleted_at IS NULL
-              ), '[]'::json) AS notification_emails
+              ), '[]'::json) AS notification_emails,
+              EXISTS (
+                SELECT 1 FROM projects p
+                WHERE p.client_id = c.id
+                  AND p.deleted_at IS NULL
+                  AND p.work_date >= (NOW() AT TIME ZONE 'Asia/Tokyo')::date - INTERVAL '1 month'
+              ) AS has_recent_project
        FROM clients c
        WHERE c.deleted_at IS NULL
        ORDER BY c.name
