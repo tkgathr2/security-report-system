@@ -36,6 +36,7 @@ interface Draft {
     qualifier_name?: string
     notes?: string
     partner_company_name?: string
+    addressee_company_name?: string
   }
   updated_at: string
 }
@@ -113,6 +114,7 @@ export default function FieldReport() {
   const [qualifierNames, setQualifierNames] = useState<string[]>([])
   const [notes, setNotes] = useState('')
   const [partnerCompanyName, setPartnerCompanyName] = useState('')
+  const [addresseeCompanyName, setAddresseeCompanyName] = useState('')
   
   const [submitting, setSubmitting] = useState(false)
 
@@ -385,6 +387,7 @@ export default function FieldReport() {
           }
           setNotes(data.payload_json.notes || '')
           setPartnerCompanyName(data.payload_json.partner_company_name || '')
+          setAddresseeCompanyName(data.payload_json.addressee_company_name || '')
         }
       }
     } catch {
@@ -413,7 +416,8 @@ export default function FieldReport() {
             has_qualifier: hasQualifier,
             qualifier_name: qualifierNames,
             notes,
-            partner_company_name: partnerCompanyName
+            partner_company_name: partnerCompanyName,
+            addressee_company_name: addresseeCompanyName
           },
           client_updated_at: new Date().toISOString()
         }),
@@ -468,6 +472,7 @@ export default function FieldReport() {
           qualifier_name: hasQualifier ? qualifierNames : [],
           notes,
           partner_company_name: partnerCompanyName || undefined,
+          addressee_company_name: addresseeCompanyName || undefined,
           signature_png_base64: base64Data
         }),
         credentials: 'include',
@@ -609,6 +614,7 @@ export default function FieldReport() {
       qualifierNames,
       notes,
       partnerCompanyName,
+      addresseeCompanyName,
       uniqueUrl,
       emailInput,
       project,
@@ -831,6 +837,17 @@ export default function FieldReport() {
               <div style={styles.infoItem}>
                 <span style={styles.infoLabel}>会社名</span>
                 <span style={styles.infoValue}>{project.client_name_raw}</span>
+              </div>
+              <div style={styles.infoItem}>
+                <label style={styles.infoLabel}>御中宛先（元請け会社名）</label>
+                <input
+                  type="text"
+                  style={styles.input}
+                  value={addresseeCompanyName}
+                  onChange={(e) => setAddresseeCompanyName(e.target.value)}
+                  onBlur={saveDraft}
+                  placeholder="御中宛先（未入力の場合は会社名を使用）"
+                />
               </div>
               <div style={styles.infoItem}>
                 <label style={styles.infoLabel}>協力会社名</label>

@@ -71,7 +71,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       qualifier_name: rawQualifierName,
       signature_png_base64,
       notes: rawNotes,
-      partner_company_name: rawPartnerCompanyName
+      partner_company_name: rawPartnerCompanyName,
+      addressee_company_name: rawAddresseeCompanyName
     } = req.body;
 
     const sanitizeStr = <T,>(v: T): T => (typeof v === 'string' ? (stripHtmlTags(v) as unknown as T) : v);
@@ -93,6 +94,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
       : (typeof rawQualifierName === 'string' ? stripHtmlTags(rawQualifierName) : rawQualifierName);
     const notes: string | undefined = sanitizeStr(rawNotes);
     const partner_company_name: string | undefined = sanitizeStr(rawPartnerCompanyName);
+    const addressee_company_name: string | undefined = sanitizeStr(rawAddresseeCompanyName);
     console.log('[APPROVE] Request body parsed, project_unique_url:', project_unique_url);
 
     if (!signature_png_base64 || typeof signature_png_base64 !== 'string') {
@@ -361,6 +363,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           weather: weather || null,
           notes: typeof notes === 'string' ? notes : null,
           partnerCompanyName: typeof partner_company_name === 'string' && partner_company_name.trim() ? partner_company_name.trim() : null,
+          addresseeCompanyName: typeof addressee_company_name === 'string' && addressee_company_name.trim() ? addressee_company_name.trim() : null,
           layout: pdfLayout as 'classic' | 'handwritten',
           design: pdfDesign as 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J',
         });
