@@ -1,8 +1,8 @@
-exports.shapeChange = function(pgm) {
+exports.up = function(pgm) {
   pgm.createTable('suppressed_warnings', {
     id: 'id',
     client_id: {
-      type: 'varchar',
+      type: 'uuid',
       notNull: true,
       references: '"clients"',
       onDelete: 'cascade',
@@ -17,4 +17,8 @@ exports.shapeChange = function(pgm) {
   pgm.addConstraint('suppressed_warnings', 'suppressed_warnings_client_id_unique', {
     unique: ['client_id'],
   });
+};
+
+exports.down = function(pgm) {
+  pgm.dropTable('suppressed_warnings');
 };
