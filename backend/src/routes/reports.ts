@@ -231,8 +231,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         `INSERT INTO reports (
           project_id, cast_user_id, supervisor_name, writer_staff_id, writer_name, weather,
           guard_contents, guard_other_text, overtime_hours, has_qualifier, qualifier_name,
-          signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json, notes, partner_company_name
-        ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+          signature_png, pdf_bytes, status, approved_at, pdf_generation_status, pdf_generated_at, guards_json, notes, partner_company_name, addressee_company_name
+        ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
         WHERE EXISTS (SELECT 1 FROM projects WHERE id = $1 AND url_expires_at > NOW() AND deleted_at IS NULL)
         ON CONFLICT (project_id) WHERE deleted_at IS NULL DO NOTHING
         RETURNING id`,
@@ -256,7 +256,8 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           null,
           Array.isArray(guards) ? JSON.stringify(guards) : null,
           typeof notes === 'string' ? notes.slice(0, 1000) : null,
-          typeof partner_company_name === 'string' && partner_company_name.trim() ? partner_company_name.trim().slice(0, 200) : null
+          typeof partner_company_name === 'string' && partner_company_name.trim() ? partner_company_name.trim().slice(0, 200) : null,
+          typeof addressee_company_name === 'string' && addressee_company_name.trim() ? addressee_company_name.trim().slice(0, 200) : null
         ]
       );
 
