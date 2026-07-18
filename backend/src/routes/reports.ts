@@ -1,7 +1,7 @@
 import { sendCompanyNotificationEmails, sendWriterAndAdminNotifications } from '../services/emailSender';
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
-import { sendSlackNotification, uploadPdfToSlack } from '../services/notifications';
+import { sendSlackNotification, uploadPdfToSlack, SLACK_REPORT_MENTIONS } from '../services/notifications';
 import { generateReportPdf } from '../services/pdfGenerator';
 import { authenticateCast, requireAdmin } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
@@ -389,7 +389,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
           : 'https://security-report.up.railway.app';
         const pdfUrl = pdfGenerationStatus === 'success' ? `${baseUrl}/api/reports/${reportId}/pdf` : undefined;
         const projectName = project.work_title_raw || project.work_name || '';
-                const slackText = `<!channel>\n【デジタル警備報告書システム ほうこちゃん】報告書承認通知\n\n` +
+                const slackText = `${SLACK_REPORT_MENTIONS}\n【デジタル警備報告書システム ほうこちゃん】報告書承認通知\n\n` +
                   `会社名: ${project.client_name_raw}\n` +
                   `実施日: ${workDateStr}\n` +
                   `作業名称: ${projectName}\n`+

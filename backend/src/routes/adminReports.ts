@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
-import { uploadPdfToSlack, sendSlackNotification } from '../services/notifications';
+import { uploadPdfToSlack, sendSlackNotification, SLACK_REPORT_MENTIONS } from '../services/notifications';
 import { sendCompanyNotificationEmails, sendWriterAndAdminNotifications, sendEmailWithLog } from '../services/emailSender';
 import { logAudit } from '../utils/auditLog';
 import { generateReportPdf } from '../services/pdfGenerator';
@@ -327,7 +327,7 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
         ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
         : 'https://security-report.up.railway.app';
       const pdfUrl = `${baseUrl}/api/reports/${reportId}/pdf`;
-            const slackText = `<!channel>\n【デジタル警備報告書システム ほうこちゃん】報告書再送信\n\n` +
+            const slackText = `${SLACK_REPORT_MENTIONS}\n【デジタル警備報告書システム ほうこちゃん】報告書再送信\n\n` +
               `会社名: ${report.client_name_raw}\n` +
               `実施日: ${workDateStr}\n` +
               `作業名称: ${projectName}\n`+
