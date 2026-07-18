@@ -345,3 +345,125 @@ describe('runCheck DB persistence (Bug-A)', () => {
     expect(mockedQuery).not.toHaveBeenCalled();
   });
 });
+
+describe('sendSlackAlert transport selection', () => {
+  const origEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockedQuery.mockReset();
+    process.env.SLACK_WEBHOOK_URL = '';
+    delete process.env.SLACK_BOT_TOKEN;
+    delete process.env.SLACK_CHANNEL_ID;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    process.env = { ...origEnv };
+    vi.restoreAllMocks();
+  });
+
+  it('prefers chat.postMessage (Bot Token) when SLACK_BOT_TOKEN/SLACK_CHANNEL_ID are set', async () => {
+    vi.setSystemTime(new Date('2026-06-15T12:00:00Z')); // 21:00 JST Mon -> target 2026-06-16, pre_day
+    process.env.SLACK_BOT_TOKEN = 'xoxb-test-token';
+    process.env.SLACK_CHANNEL_ID = 'C12345';
+
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, ts: '1700000000.000100' }), { status: 200 })
+    );
+
+    mockedQuery.mockResolvedValueOnce({ rows: [{ cnt: '0' }], rowCount: 1 } as never); // SELECT count
+    mockedQuery.mockResolvedValueOnce({ rows: [{ target_date: 'x' }], rowCount: 1 } as never); // claim
+
+    await runCheck();
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe('https://slack.com/api/chat.postMessage');
+    expect(((init as RequestInit).headers as Record<string, string>).Authorization).toBe(
+      'Bearer xoxb-test-token'
+    );
+    const body = JSON.parse(String((init as RequestInit).body ?? '{}'));
+    expect(body.channel).toBe('C12345');
+    // ACK機能削除に伴い、SELECT + claim の2クエリのみ（slack_message_ts の UPDATE は発行しない）
+    expect(mockedQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to Incoming Webhook when Bot Token is not configured', async () => {
+    vi.setSystemTime(new Date('2026-06-15T12:00:00Z'));
+    process.env.SLACK_WEBHOOK_URL = 'https://example.invalid/webhook';
+
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('ok', { status: 200 }));
+
+    mockedQuery.mockResolvedValueOnce({ rows: [{ cnt: '0' }], rowCount: 1 } as never); // SELECT count
+    mockedQuery.mockResolvedValueOnce({ rows: [{ target_date: 'x' }], rowCount: 1 } as never); // claim
+
+    await runCheck();
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url] = fetchSpy.mock.calls[0];
+    expect(url).toBe('https://example.invalid/webhook');
+    expect(mockedQuery).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('sendSlackAlert retry on 429/5xx (fetchWithRetry)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockedQuery.mockReset();
+    process.env.SLACK_WEBHOOK_URL = 'https://example.invalid/webhook';
+    delete process.env.SLACK_BOT_TOKEN;
+    delete process.env.SLACK_CHANNEL_ID;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('retries once after a 429 and succeeds on the second attempt', async () => {
+    vi.setSystemTime(new Date('2026-06-15T12:00:00Z'));
+    const fetchSpy = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response('rate limited', { status: 429 }))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    mockedQuery.mockResolvedValueOnce({ rows: [{ cnt: '0' }], rowCount: 1 } as never);
+    mockedQuery.mockResolvedValueOnce({ rows: [{ target_date: 'x' }], rowCount: 1 } as never);
+
+    const runPromise = runCheck();
+    await vi.advanceTimersByTimeAsync(1000);
+    await runPromise;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries once after a 500 and does not throw if the retry also fails', async () => {
+    vi.setSystemTime(new Date('2026-06-15T12:00:00Z'));
+    const fetchSpy = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response('server error', { status: 500 }))
+      .mockResolvedValueOnce(new Response('server error', { status: 500 }));
+
+    mockedQuery.mockResolvedValueOnce({ rows: [{ cnt: '0' }], rowCount: 1 } as never);
+    mockedQuery.mockResolvedValueOnce({ rows: [{ target_date: 'x' }], rowCount: 1 } as never);
+
+    const runPromise = runCheck();
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(runPromise).resolves.toBeUndefined();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry on a non-retryable 4xx status', async () => {
+    vi.setSystemTime(new Date('2026-06-15T12:00:00Z'));
+    const fetchSpy = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response('bad request', { status: 400 }));
+
+    mockedQuery.mockResolvedValueOnce({ rows: [{ cnt: '0' }], rowCount: 1 } as never);
+    mockedQuery.mockResolvedValueOnce({ rows: [{ target_date: 'x' }], rowCount: 1 } as never);
+
+    await runCheck();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});

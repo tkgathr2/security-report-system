@@ -100,15 +100,44 @@ async function tryClaimNotification(
   return result.rowCount === 1;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Slack API 呼び出し用の内部リトライヘルパー。
+ * レスポンスが 429 または 5xx (non-2xx) の場合のみ 1 秒待って 1 回だけ再試行する。
+ * それ以外の non-2xx（4xx 等）はリトライしても解決しないため即座に失敗扱いにする。
+ * 2 回目（リトライ後）も失敗した場合は null を返す（呼び出し元でエラーハンドリングする）。
+ */
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response | null> {
+  let response = await fetch(url, init);
+  if (!response.ok && (response.status === 429 || response.status >= 500)) {
+    await sleep(1000);
+    response = await fetch(url, init);
+  }
+  return response.ok ? response : null;
+}
+
+/**
+ * Slack にアラートを送信する。
+ *
+ * SLACK_BOT_TOKEN + SLACK_CHANNEL_ID が設定されていれば chat.postMessage（Web API）を優先して使う。
+ * 未設定の環境向けに Incoming Webhook (SLACK_WEBHOOK_URL) へのフォールバックも維持する。
+ * 429/5xx はトランジェント障害の可能性が高いため fetchWithRetry で 1 回だけ再試行する。
+ */
 async function sendSlackAlert(
   targetDate: string,
   checkLabel: string,
   useChannelMention: boolean,
   kind: NotificationKind
 ): Promise<void> {
+  const botToken = process.env.SLACK_BOT_TOKEN || '';
+  const channelId = process.env.SLACK_CHANNEL_ID || '';
   const webhookUrl = getSlackWebhookUrl();
-  if (!webhookUrl) {
-    console.log(`[DataMonitor] SLACK_WEBHOOK_URL not set. Would alert: ${targetDate} (${checkLabel}, ${kind})`);
+
+  if (!botToken && !webhookUrl) {
+    console.log(`[DataMonitor] SLACK_WEBHOOK_URL/SLACK_BOT_TOKEN not set. Would alert: ${targetDate} (${checkLabel}, ${kind})`);
     return;
   }
 
@@ -168,14 +197,36 @@ async function sendSlackAlert(
     ]
   };
 
-  const response = await fetch(webhookUrl, {
+  if (botToken && channelId) {
+    const response = await fetchWithRetry('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ channel: channelId, ...message })
+    });
+
+    if (!response) {
+      console.error('[DataMonitor] Slack API (chat.postMessage) failed after retry');
+      return;
+    }
+
+    const data = await response.json() as { ok: boolean; error?: string };
+    if (!data.ok) {
+      throw new Error(`Slack API (chat.postMessage) error: ${data.error}`);
+    }
+    return;
+  }
+
+  const response = await fetchWithRetry(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(message)
   });
 
-  if (!response.ok) {
-    throw new Error(`Slack API returned ${response.status}`);
+  if (!response) {
+    console.error('[DataMonitor] Slack API (webhook) failed after retry');
   }
 }
 
