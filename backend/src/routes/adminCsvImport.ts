@@ -721,7 +721,15 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
               const castDateKey = `${staffNo || castName}::${dateKey}`;
               if (castDateAssignments.has(castDateKey)) {
                 const existingWork = castDateAssignments.get(castDateKey)!;
-                errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingWork}」に割り当て済みです（1日1現場まで）` });
+                // 同一CSV内で同じ人が同じ日に複数現場へ出現（プロキャス元データ由来の重複）。
+                // 手動取込(force_import=false)ではダブルブッキングとしてブロック対象なので errors に載せる。
+                // 自動同期(force_import=true)ではこれは想定内の重複除外であり、元データ側にしか
+                // 直せない状態が毎回同じ行として再検出される。errors に載せると procast-sync が
+                // errorCount>0 を「一部失敗」とみなし、同じ警告を毎日3回鳴らし続ける（社長指摘 2026-07-21）。
+                // よって force_import 時は errors には載せず、duplicate_cast_assignments の集計のみ行う。
+                if (!forceImport) {
+                  errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingWork}」に割り当て済みです（1日1現場まで）` });
+                }
                 duplicateCastAssignments++;
               }
 
