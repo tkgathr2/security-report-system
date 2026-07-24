@@ -26,6 +26,7 @@ import adminControlBoardRouter from './routes/adminControlBoard';
 import adminControlKnowledgeRouter from './routes/adminControlKnowledge';
 import adminProcastSyncRouter from './routes/adminProcastSync';
 import buildControlChatRouter from './routes/adminControlChat';
+import slackInteractiveRouter from './routes/slackInteractive';
 import pool from './db/pool';
 import { requestTimeout } from './middleware/requestTimeout';
 import { requireJsonContentType } from './middleware/contentType';
@@ -115,6 +116,11 @@ app.get('/version', (_req: Request, res: Response) => {
     res.json({ spec: 'plan_v2', app: 'houkochan', build: '2026-02-17-v89', seedStatus, seedError, seedDetail, castFixDetail, cleanupDetail });
   }
 });
+
+// Slack Interactive Components 受信口。Slack は Content-Type: application/x-www-form-urlencoded
+// で送り、Origin/Referer も自サイトと一致しないため、requireJsonContentType / csrfOriginGuard より
+// 先にマウントしてそれらのチェック対象から外す（認証は署名検証で別途行う。slackInteractive.ts 参照）。
+app.use('/api/slack', slackInteractiveRouter);
 
 app.use('/api', requireJsonContentType);
 // CSRF 多層防御: 状態変更リクエストの Origin/Referer を検証（Cookie認証経路を保護）
@@ -343,6 +349,31 @@ async function seedStaffData() {
         const msg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
         seedDetail += ` kanaSchemaFixErr:${msg}`;
       }
+    }
+
+    // 重複ACK(2026-07-24): 「1日1現場」重複をSlackボタンで西村さんが個別に承認できるようにする。
+    // migration 1784700000000_create-duplicate-acks.js と同内容の冪等ガード。本番は startCommand が
+    // `(npm run migrate:up || true)` で migrate 失敗を握り潰すため、スキーマは
+    // この起動時補正で保証する（既存 staff_compatibility と同方式）。staff_master に依存しないため
+    // hasDeletedAt 分岐の外で常に実行する。
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS duplicate_acks (
+          id SERIAL PRIMARY KEY,
+          staff_key TEXT NOT NULL,
+          work_date DATE NOT NULL,
+          acked_by TEXT,
+          acked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+      await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_duplicate_acks_staff_key_work_date
+          ON duplicate_acks (staff_key, work_date);
+      `);
+      seedDetail += ' duplicateAcksEnsured:1';
+    } catch (duplicateAcksErr: unknown) {
+      const msg = duplicateAcksErr instanceof Error ? duplicateAcksErr.message : String(duplicateAcksErr);
+      seedDetail += ` duplicateAcksErr:${msg}`;
     }
 
     const whereClause = hasDeletedAt ? 'WHERE deleted_at IS NULL' : '';

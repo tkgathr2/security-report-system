@@ -50,7 +50,11 @@ npm run dev
 
 ### オプション（通知機能）
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`: メール送信設定
-- `SLACK_WEBHOOK_URL`: Slack通知用Webhook URL
+- `SLACK_WEBHOOK_URL`, `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID`: Slack通知設定
+- `SLACK_SIGNING_SECRET`: Slack Interactive Components（`POST /api/slack/interactive`）の署名検証用。
+  未設定時はこのエンドポイントを503で無効化する。Slack App の Basic Information > App Credentials >
+  Signing Secret を設定し、Slack App 側の Interactivity & Shortcuts で
+  Request URL を `https://<本番ホスト>/api/slack/interactive` に設定すること。
 
 ### オプション（OAuth）
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`: Google OAuth設定
@@ -65,6 +69,7 @@ npm run dev
 - `PUT /api/drafts/{unique_url}` - 下書き保存
 - `POST /api/reports/approve` - 報告書承認
 - `POST /api/admin/csv/import` - CSV取込
+- `POST /api/slack/interactive` - Slack Interactive Components受信（重複ACKボタン。Slack署名検証必須）
 - `GET /api/admin/projects` - 案件一覧
 - `GET /api/admin/reports` - 報告書一覧
 
