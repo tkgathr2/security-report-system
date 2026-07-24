@@ -33,6 +33,22 @@ interface CsvRow {
   [key: string]: string | undefined;
 }
 
+// 「1日1現場」重複の詳細（Slackで西村さんが個別にACKできるようにするため収集する）。
+// staffKey は staffNo 優先、無ければ正規化した氏名。
+interface DuplicateDetail {
+  staffKey: string;
+  castName: string;
+  staffNo: string | null;
+  workDate: string; // YYYY-MM-DD
+  existingWork: string;
+  newWork: string;
+}
+
+function buildStaffKey(staffNo: string | null | undefined, castName: string): string {
+  if (staffNo && staffNo.trim()) return staffNo.trim();
+  return normalizeNameSpaces(castName).replace(/[\s　]/g, '');
+}
+
 type CsvFormat = 'staff_assignment' | 'job_export';
 
 interface HeaderMapping {
@@ -449,6 +465,7 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
   let clientAutoCreatedCount = 0;
   let softDeletedProjectsCount = 0;
   let skippedDeletedCastCount = 0;
+  const duplicateDetails: DuplicateDetail[] = [];
 
   const projectMap = new Map<string, { projectId: string; casts: Set<string> }>();
   const processedStaffKana = new Set<string>();
@@ -731,6 +748,15 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                   errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingWork}」に割り当て済みです（1日1現場まで）` });
                 }
                 duplicateCastAssignments++;
+                // force_import時もSlackでACKできるよう重複詳細は常に収集する（社長指示 2026-07-24）。
+                duplicateDetails.push({
+                  staffKey: buildStaffKey(staffNo, castName),
+                  castName,
+                  staffNo: staffNo || null,
+                  workDate: dateKey,
+                  existingWork,
+                  newWork: workName,
+                });
               }
 
               if (!castDateAssignments.has(castDateKey)) {
@@ -759,8 +785,25 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
                   if (existingAssignment.rows.length > 0 && !forceImport) {
                     errors.push({ row: rowNum, reason: `${castName} は ${dateKey} に既に「${existingAssignment.rows[0].work_name}」に割り当て済みです（1日1現場まで）` });
                     duplicateCastAssignments++;
+                    duplicateDetails.push({
+                      staffKey: buildStaffKey(staffNo, castName),
+                      castName,
+                      staffNo: staffNo || null,
+                      workDate: dateKey,
+                      existingWork: existingAssignment.rows[0].work_name,
+                      newWork: workName,
+                    });
                   } else {
                     if (existingAssignment.rows.length > 0) {
+                      // force_import時もSlackでACKできるよう重複詳細は常に収集する（社長指示 2026-07-24）。
+                      duplicateDetails.push({
+                        staffKey: buildStaffKey(staffNo, castName),
+                        castName,
+                        staffNo: staffNo || null,
+                        workDate: dateKey,
+                        existingWork: existingAssignment.rows[0].work_name,
+                        newWork: workName,
+                      });
                       await dbClient.query(
                         `UPDATE project_casts SET deleted_at = NOW()
                          WHERE staff_id IN (
@@ -945,6 +988,32 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
 
   logAudit({ req, actorEmail: adminUser.email, action: 'CSV_IMPORT', targetType: 'csv_import', payload: { file_name: originalFileName, status: importStatus, created_projects: createdProjectsCount, skipped_rows: skippedRowsCount, staff_auto_added: staffAutoAddedCount, client_auto_created: clientAutoCreatedCount } });
 
+  // 重複ACK照会: duplicateDetails のうち duplicate_acks に未登録（未ACK）のものだけを
+  // procast-sync へ返す。ACK済みの重複は以後の同期で通知対象から除外される。
+  // staffKey+workDate の組が重複して収集されることがあるため、まず一意化する。
+  const uniqueDuplicateDetails = Array.from(
+    new Map(duplicateDetails.map(d => [`${d.staffKey}::${d.workDate}`, d])).values()
+  );
+  let unacknowledgedDuplicates: DuplicateDetail[] = uniqueDuplicateDetails;
+  if (uniqueDuplicateDetails.length > 0) {
+    try {
+      const ackedResult = await pool.query(
+        `SELECT staff_key, work_date::text as work_date FROM duplicate_acks
+         WHERE (staff_key, work_date) IN (
+           SELECT * FROM UNNEST($1::text[], $2::date[])
+         )`,
+        [uniqueDuplicateDetails.map(d => d.staffKey), uniqueDuplicateDetails.map(d => d.workDate)]
+      );
+      const ackedSet = new Set(
+        ackedResult.rows.map((r: { staff_key: string; work_date: string }) => `${r.staff_key}::${r.work_date}`)
+      );
+      unacknowledgedDuplicates = uniqueDuplicateDetails.filter(d => !ackedSet.has(`${d.staffKey}::${d.workDate}`));
+    } catch (ackQueryError) {
+      // 照会失敗時は「未ACK扱い」のまま返す（通知が飛ばないより多重に飛ぶ方が安全）。
+      console.error('duplicate_acks query error:', ackQueryError);
+    }
+  }
+
   res.status(200).json({
     ok: true,
     status: importStatus,
@@ -958,7 +1027,8 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
     duplicate_cast_assignments: duplicateCastAssignments,
     skipped_deleted_cast_count: skippedDeletedCastCount,
     staff_without_email: staffWithoutEmail,
-    errors: errors.slice(0, 10)
+    errors: errors.slice(0, 10),
+    unacknowledged_duplicates: unacknowledgedDuplicates
   });
 });
 

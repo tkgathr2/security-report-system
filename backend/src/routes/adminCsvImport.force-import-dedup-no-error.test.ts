@@ -21,8 +21,10 @@ describe('adminCsvImport 自動同期時の重複除外はerrorsに載せない'
 
   it('In-CSV重複(Place 1)の「1日1現場まで」push が !forceImport でガードされている', () => {
     // castDateAssignments.has(...) ブロック内の errors.push が forceImport 条件で守られていること。
+    // 2026-07-24: 重複ACK対応で duplicateDetails.push(...) がブロック末尾に追加されたため、
+    // 閉じ括弧の手前までを広く拾う（duplicateCastAssignments++; 直後で打ち切らない）。
     const blockMatch = src.match(
-      /if \(castDateAssignments\.has\(castDateKey\)\) \{[\s\S]*?duplicateCastAssignments\+\+;\s*\}/
+      /if \(castDateAssignments\.has\(castDateKey\)\) \{[\s\S]*?duplicateCastAssignments\+\+;[\s\S]*?\n {14}\}/
     );
     expect(blockMatch).not.toBeNull();
     const block = blockMatch![0];
