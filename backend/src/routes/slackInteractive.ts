@@ -60,6 +60,64 @@ function formatDateJp(dateStr: string): string {
   return `${parseInt(m[2], 10)}/${parseInt(m[3], 10)}`;
 }
 
+/**
+ * 「修正する」を押したことを記録に残す。
+ *
+ * duplicate_acks には入れない：修正するを選んだ時点ではまだ直っていないため、
+ * 次回同期でも重複として通知され続けるのが正しい（ACK＝もう通知しない、とは意味が違う）。
+ * 監査ログと、カードのスレッドへの足跡だけを残す。
+ *
+ * 失敗しても呼び出し元には影響させない（ack済み・ユーザーのブラウザ遷移も妨げない）。
+ */
+async function recordFixSelection(payload: any, fixAction: any): Promise<void> {
+  let value: SlackBlockActionValue | undefined;
+  try {
+    value = JSON.parse(fixAction.value);
+  } catch {
+    // value が無い/壊れている場合も、押されたこと自体は残す
+  }
+
+  const actor: string = payload.user?.username || payload.user?.id || 'unknown';
+  const castNameDisplay = value?.castName || value?.staffKey || '対象不明';
+  const workDateDisplay = value?.workDate ? formatDateJp(value.workDate) : '日付不明';
+
+  logAudit({
+    actorEmail: actor,
+    actorType: 'system',
+    action: 'DUPLICATE_FIX_SELECTED',
+    targetType: 'duplicate_acks',
+    targetId: `${value?.staffKey ?? 'unknown'}::${value?.workDate ?? 'unknown'}`,
+    payload: { staffKey: value?.staffKey, workDate: value?.workDate, castName: value?.castName },
+  }).catch(() => { /* 監査ログ失敗は無視 */ });
+
+  // カードのスレッドに足跡を残す。カード本体は書き換えない
+  // （まだ直っていないので、ボタンは押せるままにしておく）。
+  const botToken = process.env.SLACK_BOT_TOKEN;
+  const channelId = payload.channel?.id;
+  const threadTs = payload.message?.ts;
+  if (!botToken || !channelId || !threadTs) return;
+
+  const nowDisplay = new Date().toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+
+  try {
+    await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${botToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channel: channelId,
+        thread_ts: threadTs,
+        text: `〔修正する〕${castNameDisplay} ${workDateDisplay} の重複について、${actor}さんが「修正する」を選びました（${nowDisplay}）`,
+      }),
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch (err) {
+    console.error('[slackInteractive] dup_fix のスレッド記録に失敗:', err);
+  }
+}
+
 router.post('/interactive', raw({ type: '*/*', limit: '1mb' }), async (req: Request, res: Response) => {
   const signingSecret = process.env.SLACK_SIGNING_SECRET;
   if (!signingSecret) {
@@ -114,12 +172,24 @@ router.post('/interactive', raw({ type: '*/*', limit: '1mb' }), async (req: Requ
     return;
   }
 
-  const action = Array.isArray(payload.actions)
-    ? payload.actions.find((a: any) => a?.action_id === 'dup_ok')
-    : undefined;
+  const actions: any[] = Array.isArray(payload.actions) ? payload.actions : [];
+  const action = actions.find((a: any) => a?.action_id === 'dup_ok');
+  const fixAction = actions.find((a: any) => a?.action_id === 'dup_fix');
+
+  // 「修正する」は url 付きボタンなのでブラウザは Slack が開くが、
+  // block_actions 自体は飛んでくる（Slack公式仕様）。どちらを選んだかを
+  // 記録に残すため、ここで受け取ってスレッドへ足跡を残す。
+  // https://docs.slack.dev/reference/block-kit/block-elements/button-element/
+  if (!action && fixAction) {
+    // Slack は3秒以内の ack を要求するため、先に200を返してから記録する
+    // （記録に失敗してもユーザーのブラウザ遷移は妨げない）。
+    res.status(200).send('');
+    void recordFixSelection(payload, fixAction);
+    return;
+  }
 
   if (!action) {
-    // dup_ok 以外のアクションは対象外
+    // dup_ok / dup_fix 以外のアクションは対象外
     res.status(200).send('');
     return;
   }

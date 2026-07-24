@@ -46,8 +46,27 @@ function buildBlockActionsBody(overrides: Partial<{ actionId: string; value: unk
     ],
     user: { id: 'U0AR8F63YBA', username: 'nishimura' },
     response_url: 'https://hooks.slack.com/actions/T000/AAA/BBB',
+    channel: { id: 'C0AAQRA7RGW' },
+    message: { ts: '1784931816.055029' },
   };
   return `payload=${encodeURIComponent(JSON.stringify(payload))}`;
+}
+
+/** 署名付きで POST するテスト用ヘルパー */
+async function postSigned(body: string) {
+  const ts = String(Math.floor(Date.now() / 1000));
+  const sig = sign('test-signing-secret', ts, body);
+  return request(buildApp())
+    .post('/api/slack/interactive')
+    .set('Content-Type', 'application/x-www-form-urlencoded')
+    .set('x-slack-request-timestamp', ts)
+    .set('x-slack-signature', sig)
+    .send(body);
+}
+
+/** 非同期の記録処理（ack後に走る）が終わるのを待つ */
+async function flushAsync() {
+  await new Promise((r) => setTimeout(r, 20));
 }
 
 describe('POST /api/slack/interactive', () => {
@@ -169,5 +188,55 @@ describe('POST /api/slack/interactive', () => {
     expect(insertCalls.length).toBe(1); // INSERTは試みるが ON CONFLICT DO NOTHING で新規行は作られない
     const selectCalls = mockPool.query.mock.calls.filter((c) => /SELECT acked_by, acked_at FROM duplicate_acks/.test(c[0]));
     expect(selectCalls.length).toBe(1); // 既存ACKを取得してカードに反映する
+  });
+
+  describe('dup_fix（修正するボタン）', () => {
+    beforeEach(() => {
+      process.env.SLACK_BOT_TOKEN = 'xoxb-test-token';
+    });
+
+    it('「修正する」を押すとスレッドに足跡を残す（誰がいつ選んだか）', async () => {
+      const res = await postSigned(buildBlockActionsBody({ actionId: 'dup_fix' }));
+      expect(res.status).toBe(200);
+      await flushAsync();
+
+      const postCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes('chat.postMessage'));
+      expect(postCall).toBeTruthy();
+
+      const sent = JSON.parse((postCall![1] as any).body);
+      expect(sent.channel).toBe('C0AAQRA7RGW');
+      expect(sent.thread_ts).toBe('1784931816.055029'); // カードのスレッドに付く
+      expect(sent.text).toContain('修正する');
+      expect(sent.text).toContain('nishimura'); // 誰が押したか
+      expect(sent.text).toContain('川面 直人'); // 対象が分かる
+    });
+
+    it('「修正する」ではACKを記録しない（まだ直っていないので通知は継続する）', async () => {
+      const res = await postSigned(buildBlockActionsBody({ actionId: 'dup_fix' }));
+      expect(res.status).toBe(200);
+      await flushAsync();
+
+      const insertCalls = mockPool.query.mock.calls.filter((c) => /INSERT INTO duplicate_acks/.test(c[0]));
+      expect(insertCalls.length).toBe(0);
+    });
+
+    it('カード本体は書き換えない（ボタンは押せるまま残る）', async () => {
+      const res = await postSigned(buildBlockActionsBody({ actionId: 'dup_fix' }));
+      expect(res.status).toBe(200);
+      await flushAsync();
+
+      const replaceCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes('hooks.slack.com'));
+      expect(replaceCall).toBeFalsy();
+    });
+
+    it('SLACK_BOT_TOKEN 未設定でも 200 を返す（ユーザーのブラウザ遷移を妨げない）', async () => {
+      delete process.env.SLACK_BOT_TOKEN;
+      const res = await postSigned(buildBlockActionsBody({ actionId: 'dup_fix' }));
+      expect(res.status).toBe(200);
+      await flushAsync();
+
+      const postCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes('chat.postMessage'));
+      expect(postCall).toBeFalsy();
+    });
   });
 });
