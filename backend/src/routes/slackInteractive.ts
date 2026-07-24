@@ -55,9 +55,61 @@ function verifySlackSignature(secret: string, timestamp: string, rawBody: string
 
 /** YYYY-MM-DD → M/D（Slack表示用の簡易日本語日付） */
 function formatDateJp(dateStr: string): string {
+  // payload 由来の値は型が保証されないため、文字列以外が来ても throw させない
+  // （ここで throw すると呼び出し元の非同期処理が未処理Promise拒否になり、
+  //   index.ts の unhandledRejection ハンドラがプロセスごと落とす）。
+  if (typeof dateStr !== 'string') return String(dateStr ?? '');
   const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return dateStr;
   return `${parseInt(m[2], 10)}/${parseInt(m[3], 10)}`;
+}
+
+/** work_date として受け入れる形式（DBは date 型なので厳密に絞る） */
+const WORK_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Slack の mrkdwn 制御記法を無害化する。
+ * castName 等は CSV 由来の外部データで、`<!channel>` や
+ * `<https://evil/|正規リンクに見えるテキスト>` を仕込めてしまうため、
+ * Slack 公式のエスケープ規則どおり & < > を実体参照へ置換する（& を先に処理する）。
+ */
+function escapeSlack(s: unknown): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Slack が発行する response_url だけを許可する。
+ * payload はリクエストボディ由来なので、検証せず fetch すると
+ * 内部ネットワークへ任意 POST できる SSRF になる。
+ */
+function isSlackResponseUrl(u: unknown): u is string {
+  if (typeof u !== 'string') return false;
+  try {
+    const parsed = new URL(u);
+    return parsed.protocol === 'https:' && parsed.hostname === 'hooks.slack.com';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 投稿先チャンネルの許可判定。
+ * payload.channel.id をそのまま信じると、署名を作れる相手に
+ * Bot が参加する任意チャンネルへ任意文面を投稿させられる。
+ * 既定は SLACK_CHANNEL_ID（本来の通知先）のみ許可する。
+ */
+function isAllowedChannel(channelId: unknown): channelId is string {
+  if (typeof channelId !== 'string' || !channelId) return false;
+  const allowed = (process.env.SLACK_ALLOWED_CHANNEL_IDS || process.env.SLACK_CHANNEL_ID || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  // 許可リストが未設定なら塞ぐ（fail-closed）
+  if (allowed.length === 0) return false;
+  return allowed.includes(channelId);
 }
 
 /**
@@ -70,51 +122,81 @@ function formatDateJp(dateStr: string): string {
  * 失敗しても呼び出し元には影響させない（ack済み・ユーザーのブラウザ遷移も妨げない）。
  */
 async function recordFixSelection(payload: any, fixAction: any): Promise<void> {
-  let value: SlackBlockActionValue | undefined;
+  // 関数全体を try で包む。ここから漏れた例外は ack 済みで誰も待っていない Promise の
+  // reject になり、index.ts の unhandledRejection ハンドラが gracefulShutdown を
+  // 呼んでプロセスごと落とす（＝Slackボタン1回で全断）。記録の失敗で本体を殺さない。
   try {
-    value = JSON.parse(fixAction.value);
-  } catch {
-    // value が無い/壊れている場合も、押されたこと自体は残す
-  }
+    let value: SlackBlockActionValue | undefined;
+    try {
+      value = JSON.parse(fixAction?.value);
+    } catch {
+      // value が無い/壊れている場合も、押されたこと自体は残す
+    }
 
-  const actor: string = payload.user?.username || payload.user?.id || 'unknown';
-  const castNameDisplay = value?.castName || value?.staffKey || '対象不明';
-  const workDateDisplay = value?.workDate ? formatDateJp(value.workDate) : '日付不明';
+    const actor: string = payload.user?.username || payload.user?.id || 'unknown';
+    const slackUserId: string = payload.user?.id || 'unknown';
+    const castNameDisplay = value?.castName || value?.staffKey || '対象不明';
+    const workDateDisplay = value?.workDate ? formatDateJp(value.workDate) : '日付不明';
 
-  logAudit({
-    actorEmail: actor,
-    actorType: 'system',
-    action: 'DUPLICATE_FIX_SELECTED',
-    targetType: 'duplicate_acks',
-    targetId: `${value?.staffKey ?? 'unknown'}::${value?.workDate ?? 'unknown'}`,
-    payload: { staffKey: value?.staffKey, workDate: value?.workDate, castName: value?.castName },
-  }).catch(() => { /* 監査ログ失敗は無視 */ });
+    logAudit({
+      // 管理者の実メールと混ざらないよう名前空間を付ける（監査証跡の名寄せ用）
+      actorEmail: `slack:${slackUserId}`,
+      actorType: 'system',
+      action: 'DUPLICATE_FIX_SELECTED',
+      targetType: 'duplicate_acks',
+      targetId: `${value?.staffKey ?? 'unknown'}::${value?.workDate ?? 'unknown'}`,
+      payload: {
+        staffKey: value?.staffKey,
+        workDate: value?.workDate,
+        castName: value?.castName,
+        slackUserName: payload.user?.username,
+        channelId: payload.channel?.id,
+      },
+    }).catch(() => { /* 監査ログ失敗は無視 */ });
 
-  // カードのスレッドに足跡を残す。カード本体は書き換えない
-  // （まだ直っていないので、ボタンは押せるままにしておく）。
-  const botToken = process.env.SLACK_BOT_TOKEN;
-  const channelId = payload.channel?.id;
-  const threadTs = payload.message?.ts;
-  if (!botToken || !channelId || !threadTs) return;
+    // カードのスレッドに足跡を残す。カード本体は書き換えない
+    // （まだ直っていないので、ボタンは押せるままにしておく）。
+    const botToken = process.env.SLACK_BOT_TOKEN;
+    const channelId = payload.channel?.id;
+    const threadTs = payload.message?.ts;
+    if (!botToken) {
+      console.warn('[slackInteractive] dup_fix: SLACK_BOT_TOKEN 未設定のためスレッド記録をスキップ');
+      return;
+    }
+    if (!threadTs) {
+      console.warn('[slackInteractive] dup_fix: message.ts が無いためスレッド記録をスキップ');
+      return;
+    }
+    // 投稿先は許可リストで固定する（payload のチャンネルを鵜呑みにしない）
+    if (!isAllowedChannel(channelId)) {
+      console.warn('[slackInteractive] dup_fix: 許可外チャンネルのため破棄:', channelId);
+      return;
+    }
 
-  const nowDisplay = new Date().toLocaleString('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
-  });
+    const nowDisplay = new Date().toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
 
-  try {
-    await fetch('https://slack.com/api/chat.postMessage', {
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: { Authorization: `Bearer ${botToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         channel: channelId,
         thread_ts: threadTs,
-        text: `〔修正する〕${castNameDisplay} ${workDateDisplay} の重複について、${actor}さんが「修正する」を選びました（${nowDisplay}）`,
+        text:
+          `〔修正する〕${escapeSlack(castNameDisplay)} ${escapeSlack(workDateDisplay)} の重複について、` +
+          `${escapeSlack(actor)}さんが「修正する」を選びました（${nowDisplay}）`,
       }),
       signal: AbortSignal.timeout(5_000),
     });
+    // fetch は 4xx/5xx でも reject しない。Slack API は ok:false を本文で返すため明示的に見る
+    const body: any = await res.json().catch(() => null);
+    if (!res.ok || !body?.ok) {
+      console.error('[slackInteractive] dup_fix のスレッド記録に失敗:', res.status, body?.error);
+    }
   } catch (err) {
-    console.error('[slackInteractive] dup_fix のスレッド記録に失敗:', err);
+    console.error('[slackInteractive] dup_fix の記録処理で例外:', err);
   }
 }
 
@@ -183,8 +265,12 @@ router.post('/interactive', raw({ type: '*/*', limit: '1mb' }), async (req: Requ
   if (!action && fixAction) {
     // Slack は3秒以内の ack を要求するため、先に200を返してから記録する
     // （記録に失敗してもユーザーのブラウザ遷移は妨げない）。
+    // void で投げ捨てると万一の例外が未処理Promise拒否になりプロセスが落ちるため、
+    // 必ず catch を繋いで握る（recordFixSelection 内でも二重に守っている）。
     res.status(200).send('');
-    void recordFixSelection(payload, fixAction);
+    recordFixSelection(payload, fixAction).catch((err) => {
+      console.error('[slackInteractive] dup_fix の記録に失敗（ack済みのため処理は継続）:', err);
+    });
     return;
   }
 
@@ -204,6 +290,13 @@ router.post('/interactive', raw({ type: '*/*', limit: '1mb' }), async (req: Requ
 
   if (!value?.staffKey || !value?.workDate) {
     res.status(400).json({ error: 'staffKey/workDate がありません' });
+    return;
+  }
+
+  // work_date は DB の date 型に入る。書式次第で INSERT が落ちたり
+  // 日時付き文字列が黙って通ったりするため、ここで厳密に絞る。
+  if (typeof value.workDate !== 'string' || !WORK_DATE_RE.test(value.workDate)) {
+    res.status(400).json({ error: 'workDate の形式が不正です（YYYY-MM-DD）' });
     return;
   }
 
@@ -254,26 +347,53 @@ router.post('/interactive', raw({ type: '*/*', limit: '1mb' }), async (req: Requ
       minute: '2-digit',
     });
     const castNameDisplay = value.castName || value.staffKey;
-    const cardText = `〔OK済み〕${castNameDisplay} ${formatDateJp(value.workDate)} の重複は今後通知されません（${ackedBy}さんが承認・${ackedAtDisplay}）`;
+    // castName は CSV 由来の外部データ。エスケープしないと <!channel> や
+    // リンクテキスト偽装をカードに流し込まれる。
+    const cardText =
+      `〔OK済み〕${escapeSlack(castNameDisplay)} ${formatDateJp(value.workDate)} の重複は今後通知されません` +
+      `（${escapeSlack(ackedBy)}さんが承認・${ackedAtDisplay}）`;
+
+    // 先に ack を返す。response_url への更新は最大5秒待つ可能性があり、
+    // DB 応答と合わせると Slack の3秒制限を超えて「操作に失敗しました」が出る
+    // （DBには記録済みなのに失敗表示＝西村さんが押し直す）ため、順序を分離する。
+    res.status(200).send('');
 
     // カード更新は response_url 経由で行う（chat.update は使わない＝社内ルール）。
-    if (payload.response_url) {
-      try {
-        await fetch(payload.response_url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ replace_original: true, text: cardText }),
-          signal: AbortSignal.timeout(5_000),
-        });
-      } catch (responseUrlErr) {
-        console.error('[slackInteractive] response_url へのカード更新に失敗:', responseUrlErr);
+    // payload 由来のURLをそのまま叩くと内部ネットワークへ任意POSTできる SSRF になるため、
+    // Slack が発行するホストに限定する。
+    if (!isSlackResponseUrl(payload.response_url)) {
+      if (payload.response_url) {
+        console.warn('[slackInteractive] 想定外の response_url を破棄しました');
       }
+      return;
     }
-
-    res.status(200).send('');
+    try {
+      const updateRes = await fetch(payload.response_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ replace_original: true, text: cardText }),
+        signal: AbortSignal.timeout(5_000),
+      });
+      // fetch は 4xx/5xx でも reject しない。失効した response_url は
+      // ここで非2xx / エラー本文が返るので、黙って成功扱いにしない。
+      if (!updateRes.ok) {
+        const detail = await updateRes.text().catch(() => '');
+        console.error(
+          '[slackInteractive] カード更新に失敗（ACKはDBに記録済み）:',
+          updateRes.status,
+          detail.slice(0, 200)
+        );
+      }
+    } catch (responseUrlErr) {
+      console.error('[slackInteractive] response_url へのカード更新に失敗:', responseUrlErr);
+    }
   } catch (err) {
     console.error('[slackInteractive] duplicate_acks 処理エラー:', err);
-    res.status(500).json({ error: 'ACK処理に失敗しました' });
+    // ack を先に返した後（カード更新中など）に来た例外では、
+    // 二重送信になるため再度レスポンスを書かない。
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'ACK処理に失敗しました' });
+    }
   }
 });
 

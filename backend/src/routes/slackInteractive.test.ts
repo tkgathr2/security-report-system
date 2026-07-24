@@ -193,6 +193,8 @@ describe('POST /api/slack/interactive', () => {
   describe('dup_fix（修正するボタン）', () => {
     beforeEach(() => {
       process.env.SLACK_BOT_TOKEN = 'xoxb-test-token';
+      // 投稿先は許可リストで固定している（payload のチャンネルを鵜呑みにしない）
+      process.env.SLACK_CHANNEL_ID = 'C0AAQRA7RGW';
     });
 
     it('「修正する」を押すとスレッドに足跡を残す（誰がいつ選んだか）', async () => {
@@ -237,6 +239,84 @@ describe('POST /api/slack/interactive', () => {
 
       const postCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes('chat.postMessage'));
       expect(postCall).toBeFalsy();
+    });
+
+    // 以下はバグチェック（bug-check-lab）で実際に見つかった欠陥の回帰テスト
+    it('workDate が文字列でなくてもプロセスを落とさない（未処理Promise拒否の回帰）', async () => {
+      const rejections: unknown[] = [];
+      const onRejection = (r: unknown) => rejections.push(r);
+      process.on('unhandledRejection', onRejection);
+
+      // value.workDate が数値 → formatDateJp 内の .match で TypeError になる経路。
+      // 以前はこれが未処理Promise拒否になり index.ts が gracefulShutdown を呼んでいた。
+      const body = buildBlockActionsBody({
+        actionId: 'dup_fix',
+        value: { staffKey: 'x', workDate: 20260725 as unknown as string, castName: 'A' },
+      });
+      const res = await postSigned(body);
+      expect(res.status).toBe(200);
+      await flushAsync();
+
+      process.off('unhandledRejection', onRejection);
+      expect(rejections).toHaveLength(0);
+    });
+
+    it('許可外チャンネルへは投稿しない（Bot踏み台の防止）', async () => {
+      process.env.SLACK_CHANNEL_ID = 'C_SEIKI_CHANNEL';
+      // payload 側は別チャンネル（攻撃者が差し替えた想定）
+      const res = await postSigned(buildBlockActionsBody({ actionId: 'dup_fix' }));
+      expect(res.status).toBe(200);
+      await flushAsync();
+
+      const postCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes('chat.postMessage'));
+      expect(postCall).toBeFalsy();
+    });
+
+    it('castName の Slack 制御記法をエスケープする（@channel 誘発の防止）', async () => {
+      const body = buildBlockActionsBody({
+        actionId: 'dup_fix',
+        value: { staffKey: 'x', workDate: '2026-07-25', castName: '<!channel> 至急' },
+      });
+      const res = await postSigned(body);
+      expect(res.status).toBe(200);
+      await flushAsync();
+
+      const postCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes('chat.postMessage'));
+      const sent = JSON.parse((postCall![1] as any).body);
+      expect(sent.text).not.toContain('<!channel>');
+      expect(sent.text).toContain('&lt;!channel&gt;');
+    });
+  });
+
+  describe('セキュリティ・堅牢性（バグチェックでの発見分）', () => {
+    it('response_url が Slack 以外のホストなら fetch しない（SSRF防止）', async () => {
+      mockPool.query.mockResolvedValue({ rows: [{ acked_by: 'nishimura', acked_at: new Date() }] });
+
+      const payload = {
+        type: 'block_actions',
+        actions: [{ action_id: 'dup_ok', value: JSON.stringify({ staffKey: 'x', workDate: '2026-07-25', castName: 'A' }) }],
+        user: { id: 'U1', username: 'nishimura' },
+        // 内部ネットワーク/メタデータエンドポイントを狙う想定
+        response_url: 'http://169.254.169.254/latest/api/token',
+      };
+      const body = `payload=${encodeURIComponent(JSON.stringify(payload))}`;
+      const res = await postSigned(body);
+      expect(res.status).toBe(200);
+      await flushAsync();
+
+      const bad = fetchSpy.mock.calls.find((c) => String(c[0]).includes('169.254.169.254'));
+      expect(bad).toBeFalsy();
+    });
+
+    it('workDate が YYYY-MM-DD 形式でなければ 400 で弾く（date列への不正値防止）', async () => {
+      const body = buildBlockActionsBody({
+        actionId: 'dup_ok',
+        value: { staffKey: 'x', workDate: '25/07/2026', castName: 'A' },
+      });
+      const res = await postSigned(body);
+      expect(res.status).toBe(400);
+      const insertCalls = mockPool.query.mock.calls.filter((c) => /INSERT INTO duplicate_acks/.test(c[0]));
+      expect(insertCalls.length).toBe(0);
     });
   });
 });
