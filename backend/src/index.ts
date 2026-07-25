@@ -381,14 +381,39 @@ async function seedStaffData() {
       await pool.query(`
         DROP INDEX IF EXISTS idx_duplicate_acks_staff_key_work_date;
       `);
+      // migration 側は同じ索引を CONSTRAINT として作る（名前が違うので
+      // IF NOT EXISTS では重複を防げず、放置すると索引が二重化して
+      // ACK insert ごとに無駄な書き込みが増える）。
+      // 「3列UNIQUEが既にあるか」を定義で判定してから作る。
       await pool.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_duplicate_acks_staff_work_hash
-          ON duplicate_acks (staff_key, work_date, dup_hash);
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_indexes
+            WHERE tablename = 'duplicate_acks'
+              AND indexdef ILIKE '%UNIQUE%'
+              AND indexdef ILIKE '%dup_hash%'
+          ) THEN
+            CREATE UNIQUE INDEX idx_duplicate_acks_staff_work_hash
+              ON duplicate_acks (staff_key, work_date, dup_hash);
+          END IF;
+        END $$;
       `);
-      // 照会は (staff_key, work_date) で引いてから dup_hash を突き合わせる
+      // 照会は (staff_key, work_date) で引いてから dup_hash を突き合わせる。
+      // 3列UNIQUEが先頭2列の索引として使えるため、追加で作るのは
+      // 3列UNIQUEが無い（＝上のフォールバックも失敗した）場合だけに絞る。
       await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_duplicate_acks_staff_key_work_date_lookup
-          ON duplicate_acks (staff_key, work_date);
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_indexes
+            WHERE tablename = 'duplicate_acks'
+              AND indexdef ILIKE '%(staff_key, work_date%'
+          ) THEN
+            CREATE INDEX idx_duplicate_acks_staff_key_work_date_lookup
+              ON duplicate_acks (staff_key, work_date);
+          END IF;
+        END $$;
       `);
       seedDetail += ' duplicateAcksEnsured:1';
     } catch (duplicateAcksErr: unknown) {
