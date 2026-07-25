@@ -145,10 +145,10 @@ describe('POST /api/slack/interactive', () => {
       .send(body);
 
     expect(res.status).toBe(200);
-    // INSERT ON CONFLICT DO NOTHING で ACK作成
+    // INSERT ON CONFLICT DO UPDATE（自己代入）で ACK作成。dup_hash は ACK の粒度。
     const insertCall = mockPool.query.mock.calls.find((c) => /INSERT INTO duplicate_acks/.test(c[0]));
     expect(insertCall).toBeTruthy();
-    expect(insertCall![1]).toEqual(['no-123', '2026-07-21', 'nishimura']);
+    expect(insertCall![1]).toEqual(['no-123', '2026-07-21', 'nishimura', '']);
 
     // response_url へ replace_original のカード更新
     expect(fetchSpy).toHaveBeenCalledOnce();
@@ -160,34 +160,46 @@ describe('POST /api/slack/interactive', () => {
     expect(sentBody.text).toContain('川面 直人');
   });
 
-  it('二重押し: ON CONFLICT DO NOTHING で新規ACKは作られず、既存ACK情報でカードを更新する', async () => {
+  it('二重押し: ON CONFLICT DO UPDATE の自己代入で既存ACKが1クエリで返る（後追いSELECT不要）', async () => {
+    // 競合時も RETURNING で既存行が返るのが DO UPDATE 自己代入の狙い。
+    // 以前は DO NOTHING + 後追いSELECT の2クエリで、その隙間に行が消えると
+    // 「行が無いのに今後通知されません」と表示していた。
     mockPool.query.mockImplementation((sql: string) => {
       if (/INSERT INTO duplicate_acks/.test(sql)) {
-        // ON CONFLICT DO NOTHING がヒット → RETURNING 行なし
-        return Promise.resolve({ rows: [] });
-      }
-      if (/SELECT acked_by, acked_at FROM duplicate_acks/.test(sql)) {
-        return Promise.resolve({ rows: [{ acked_by: 'nishimura', acked_at: new Date('2026-07-24T09:00:00Z') }] });
+        return Promise.resolve({
+          rows: [{ acked_by: 'nishimura', acked_at: new Date('2026-07-24T09:00:00Z') }],
+        });
       }
       return Promise.resolve({ rows: [] });
     });
 
-    const body = buildBlockActionsBody();
-    const ts = String(Math.floor(Date.now() / 1000));
-    const sig = sign('test-signing-secret', ts, body);
-
-    const res = await request(buildApp())
-      .post('/api/slack/interactive')
-      .set('Content-Type', 'application/x-www-form-urlencoded')
-      .set('x-slack-request-timestamp', ts)
-      .set('x-slack-signature', sig)
-      .send(body);
+    const res = await postSigned(buildBlockActionsBody());
 
     expect(res.status).toBe(200);
     const insertCalls = mockPool.query.mock.calls.filter((c) => /INSERT INTO duplicate_acks/.test(c[0]));
-    expect(insertCalls.length).toBe(1); // INSERTは試みるが ON CONFLICT DO NOTHING で新規行は作られない
+    expect(insertCalls.length).toBe(1);
+    // 原子化したので後追いSELECTは発行しない
     const selectCalls = mockPool.query.mock.calls.filter((c) => /SELECT acked_by, acked_at FROM duplicate_acks/.test(c[0]));
-    expect(selectCalls.length).toBe(1); // 既存ACKを取得してカードに反映する
+    expect(selectCalls.length).toBe(0);
+
+    await flushAsync();
+    const sentBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+    expect(sentBody.text).toContain('nishimura');
+  });
+
+  it('dupHash を INSERT に通す（ACKの粒度が現場の組み合わせになる）', async () => {
+    mockPool.query.mockResolvedValue({ rows: [{ acked_by: 'nishimura', acked_at: new Date() }] });
+
+    const body = buildBlockActionsBody({
+      actionId: 'dup_ok',
+      value: { staffKey: 'no-9', workDate: '2026-07-25', castName: 'A', dupHash: 'hash-xyz' } as any,
+    });
+    const res = await postSigned(body);
+    expect(res.status).toBe(200);
+
+    const insertCall = mockPool.query.mock.calls.find((c) => /INSERT INTO duplicate_acks/.test(c[0]));
+    expect(insertCall![0]).toMatch(/ON CONFLICT \(staff_key, work_date, dup_hash\)/);
+    expect(insertCall![1]).toEqual(['no-9', '2026-07-25', 'nishimura', 'hash-xyz']);
   });
 
   describe('dup_fix（修正するボタン）', () => {

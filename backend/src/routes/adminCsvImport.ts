@@ -34,7 +34,7 @@ interface CsvRow {
 }
 
 // 「1日1現場」重複の詳細（Slackで西村さんが個別にACKできるようにするため収集する）。
-// staffKey は staffNo 優先、無ければ正規化した氏名。
+// staffKey は staffNo 優先、無ければ `name:` 付きの正規化氏名。
 interface DuplicateDetail {
   staffKey: string;
   castName: string;
@@ -42,11 +42,31 @@ interface DuplicateDetail {
   workDate: string; // YYYY-MM-DD
   existingWork: string;
   newWork: string;
+  // その日に関係している現場名の全件（3現場以上の日に一部が消えるのを防ぐ）。
+  // 集約後に必ず入る。dupHash はこの集合から作るのでACKの粒度もここに揃う。
+  works?: string[];
+  // works から作る順序非依存のハッシュ。重複の「中身」が変わったら別物として再通知する。
+  dupHash?: string;
+}
+
+/**
+ * その日に関係する現場名の集合から、順序に依存しないハッシュを作る。
+ * ACK は「その人のその日」ではなく「この現場の組み合わせ」に対して行う。
+ */
+function buildDupHash(works: string[]): string {
+  const normalized = works
+    .map((w) => normalizeNameSpaces(w ?? '').trim())
+    .filter(Boolean)
+    .sort();
+  return crypto.createHash('sha256').update(normalized.join('|'), 'utf8').digest('hex').slice(0, 32);
 }
 
 function buildStaffKey(staffNo: string | null | undefined, castName: string): string {
   if (staffNo && staffNo.trim()) return staffNo.trim();
-  return normalizeNameSpaces(castName).replace(/[\s　]/g, '');
+  // No未付与のときだけ氏名でキー化する。No由来のキーと同じ空間に混ぜると
+  // 「No付与前に押したACK」と「No付与後の重複」が取り違えられるため接頭辞で分ける。
+  // なお同姓同名でNo未付与の別人同士は依然として同一キーになる（取込時のNo必須化が根治）。
+  return `name:${normalizeNameSpaces(castName).replace(/[\s　]/g, '')}`;
 }
 
 type CsvFormat = 'staff_assignment' | 'job_export';
@@ -991,23 +1011,54 @@ router.post('/import', requireAdminOrApiKey, upload.single('file'), async (req: 
   // 重複ACK照会: duplicateDetails のうち duplicate_acks に未登録（未ACK）のものだけを
   // procast-sync へ返す。ACK済みの重複は以後の同期で通知対象から除外される。
   // staffKey+workDate の組が重複して収集されることがあるため、まず一意化する。
-  const uniqueDuplicateDetails = Array.from(
-    new Map(duplicateDetails.map(d => [`${d.staffKey}::${d.workDate}`, d])).values()
-  );
+  // 同一 (staffKey, workDate) の重複を1件にまとめる。
+  // 単純な Map の後勝ちだと、同じ人が同じ日に3現場以上入っているとき中間の
+  // 組み合わせが消えて「実際は3現場なのにカードには2件」になっていたため、
+  // 潰さずに現場名を集合として全部集める。
+  const groupedDuplicates = new Map<string, DuplicateDetail & { works: string[] }>();
+  for (const d of duplicateDetails) {
+    const key = `${d.staffKey}::${d.workDate}`;
+    const existing = groupedDuplicates.get(key);
+    if (existing) {
+      for (const w of [d.existingWork, d.newWork]) {
+        if (w && !existing.works.includes(w)) existing.works.push(w);
+      }
+      // staffNo は後から判明することがあるので、埋まっている方を残す
+      if (!existing.staffNo && d.staffNo) existing.staffNo = d.staffNo;
+    } else {
+      const works: string[] = [];
+      for (const w of [d.existingWork, d.newWork]) {
+        if (w && !works.includes(w)) works.push(w);
+      }
+      groupedDuplicates.set(key, { ...d, works });
+    }
+  }
+  const uniqueDuplicateDetails: DuplicateDetail[] = Array.from(groupedDuplicates.values()).map((g) => ({
+    ...g,
+    dupHash: buildDupHash(g.works),
+  }));
+
   let unacknowledgedDuplicates: DuplicateDetail[] = uniqueDuplicateDetails;
   if (uniqueDuplicateDetails.length > 0) {
     try {
       const ackedResult = await pool.query(
-        `SELECT staff_key, work_date::text as work_date FROM duplicate_acks
+        `SELECT staff_key, work_date::text as work_date, dup_hash FROM duplicate_acks
          WHERE (staff_key, work_date) IN (
            SELECT * FROM UNNEST($1::text[], $2::date[])
          )`,
         [uniqueDuplicateDetails.map(d => d.staffKey), uniqueDuplicateDetails.map(d => d.workDate)]
       );
+      // ACK は「その人のその日」ではなく「この現場の組み合わせ」に対して有効。
+      // 後日シフトが変わって別の現場どうしの重複になったら再通知する。
       const ackedSet = new Set(
-        ackedResult.rows.map((r: { staff_key: string; work_date: string }) => `${r.staff_key}::${r.work_date}`)
+        ackedResult.rows.map(
+          (r: { staff_key: string; work_date: string; dup_hash: string }) =>
+            `${r.staff_key}::${r.work_date}::${r.dup_hash ?? ''}`
+        )
       );
-      unacknowledgedDuplicates = uniqueDuplicateDetails.filter(d => !ackedSet.has(`${d.staffKey}::${d.workDate}`));
+      unacknowledgedDuplicates = uniqueDuplicateDetails.filter(
+        d => !ackedSet.has(`${d.staffKey}::${d.workDate}::${d.dupHash ?? ''}`)
+      );
     } catch (ackQueryError) {
       // 照会失敗時は「未ACK扱い」のまま返す（通知が飛ばないより多重に飛ぶ方が安全）。
       console.error('duplicate_acks query error:', ackQueryError);
