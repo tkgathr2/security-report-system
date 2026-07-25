@@ -366,8 +366,28 @@ async function seedStaffData() {
           acked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
       `);
+      // dup_hash(2026-07-25): ACK の粒度を「その人のその日」から「承認した重複の中身」へ変える。
+      // 旧仕様では一度OKするとその日が永久に黙るため、後日別の現場どうしの重複が
+      // 発生しても握り潰されていた。NULL は UNIQUE が効かない（NULL != NULL）ので空文字で埋める。
       await pool.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_duplicate_acks_staff_key_work_date
+        ALTER TABLE duplicate_acks ADD COLUMN IF NOT EXISTS dup_hash TEXT NOT NULL DEFAULT '';
+      `);
+      // 旧 UNIQUE(staff_key, work_date) が残っていると dup_hash 違いの2件目を入れられない。
+      // migration 由来の制約と起動時補正由来のインデックスの両方を落としてから張り直す。
+      await pool.query(`
+        ALTER TABLE duplicate_acks
+          DROP CONSTRAINT IF EXISTS duplicate_acks_staff_key_work_date_unique;
+      `);
+      await pool.query(`
+        DROP INDEX IF EXISTS idx_duplicate_acks_staff_key_work_date;
+      `);
+      await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_duplicate_acks_staff_work_hash
+          ON duplicate_acks (staff_key, work_date, dup_hash);
+      `);
+      // 照会は (staff_key, work_date) で引いてから dup_hash を突き合わせる
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_duplicate_acks_staff_key_work_date_lookup
           ON duplicate_acks (staff_key, work_date);
       `);
       seedDetail += ' duplicateAcksEnsured:1';

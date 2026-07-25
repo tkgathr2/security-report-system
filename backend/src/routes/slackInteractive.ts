@@ -32,6 +32,10 @@ interface SlackBlockActionValue {
   staffKey: string;
   workDate: string; // YYYY-MM-DD
   castName: string;
+  // その日に関係する現場名の集合から作るハッシュ。ACK はこの組み合わせに対して行う。
+  // 旧カード（この値を持たない）を押した場合は空文字で記録され、
+  // 新形式の通知は止まらない（安全側＝通知が出続ける方を選ぶ）。
+  dupHash?: string;
   existingWork?: string;
   newWork?: string;
   displayText?: string;
@@ -302,31 +306,29 @@ router.post('/interactive', raw({ type: '*/*', limit: '1mb' }), async (req: Requ
 
   const ackedByDisplay: string = payload.user?.username || payload.user?.id || 'unknown';
 
+  // ACK は「その人のその日」ではなく「この現場の組み合わせ」に対して行う。
+  // 旧カード（dupHash を持たない）は空文字で記録され、新形式の通知は止まらない
+  // （通知が消えるより出続ける方が安全）。
+  const dupHash: string = typeof value.dupHash === 'string' ? value.dupHash : '';
+
   try {
-    // 二重押し防止: DB条件付きINSERT（ON CONFLICT DO NOTHING）で先着1件だけ確定させる。
+    // 二重押し防止 兼 原子化: ON CONFLICT DO UPDATE の自己代入にすることで、
+    // 競合時も必ず既存行が RETURNING で返る。DO NOTHING + 後追いSELECT だと
+    // その隙間で行が消えた場合に「行が無いのに今後通知されません」と表示していた。
     const insertResult = await pool.query(
-      `INSERT INTO duplicate_acks (staff_key, work_date, acked_by)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (staff_key, work_date) DO NOTHING
+      `INSERT INTO duplicate_acks (staff_key, work_date, acked_by, dup_hash)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (staff_key, work_date, dup_hash)
+         DO UPDATE SET acked_by = duplicate_acks.acked_by
        RETURNING acked_by, acked_at`,
-      [value.staffKey, value.workDate, ackedByDisplay]
+      [value.staffKey, value.workDate, ackedByDisplay, dupHash]
     );
 
     let ackedBy: string = ackedByDisplay;
     let ackedAt: Date = new Date();
     if (insertResult.rows.length > 0) {
-      ackedBy = insertResult.rows[0].acked_by;
-      ackedAt = insertResult.rows[0].acked_at;
-    } else {
-      // 既にACK済み（二重押し）。既存の記録をそのままカードに反映する。
-      const existing = await pool.query(
-        `SELECT acked_by, acked_at FROM duplicate_acks WHERE staff_key = $1 AND work_date = $2`,
-        [value.staffKey, value.workDate]
-      );
-      if (existing.rows.length > 0) {
-        ackedBy = existing.rows[0].acked_by ?? ackedByDisplay;
-        ackedAt = existing.rows[0].acked_at ?? ackedAt;
-      }
+      ackedBy = insertResult.rows[0].acked_by ?? ackedByDisplay;
+      ackedAt = insertResult.rows[0].acked_at ?? ackedAt;
     }
 
     logAudit({

@@ -26,14 +26,35 @@ describe('adminCsvImport 重複ACK対応（unacknowledged_duplicates）', () => 
     expect(src).toMatch(/if \(staffNo && staffNo\.trim\(\)\) return staffNo\.trim\(\);/);
   });
 
+  it('No未付与の氏名キーは name: 接頭辞で分離する（No付与前後のACK取り違え防止）', () => {
+    expect(src).toMatch(/return `name:\$\{normalizeNameSpaces\(castName\)/);
+  });
+
+  it('dupHash は現場名の集合から順序非依存に作る（ACKの粒度＝現場の組み合わせ）', () => {
+    expect(src).toMatch(/function buildDupHash\(/);
+    // ソートしてから結合＝順序に依存しない
+    expect(src).toMatch(/\.sort\(\);/);
+    expect(src).toMatch(/createHash\('sha256'\)/);
+  });
+
+  it('同一(staffKey,workDate)は潰さず現場名を集約する（3現場以上で一部が落ちる回帰の防止）', () => {
+    // 後勝ちのMapではなく、works配列へ集約している
+    expect(src).toMatch(/groupedDuplicates/);
+    expect(src).toMatch(/existing\.works\.includes\(w\)/);
+    expect(src).not.toMatch(/new Map\(duplicateDetails\.map\(d => \[`\$\{d\.staffKey\}::\$\{d\.workDate\}`, d\]\)\)/);
+  });
+
   it('In-CSV重複(Place 1)・DB既存重複(Place 2)の両方で duplicateDetails.push が呼ばれる（forceImportの内外を問わず）', () => {
     const pushCount = (src.match(/duplicateDetails\.push\(/g) || []).length;
     expect(pushCount).toBeGreaterThanOrEqual(3); // Place1(1箇所) + Place2(!forceImport分・forceImport分の2箇所)
   });
 
   it('レスポンス構築前に duplicate_acks を照会し、ACK済みを除外している', () => {
-    expect(src).toMatch(/SELECT staff_key, work_date::text as work_date FROM duplicate_acks/);
-    expect(src).toMatch(/unacknowledgedDuplicates = uniqueDuplicateDetails\.filter\(d => !ackedSet\.has/);
+    // dup_hash まで取得して突き合わせる（その人のその日を永久に黙らせないため）
+    expect(src).toMatch(/SELECT staff_key, work_date::text as work_date, dup_hash FROM duplicate_acks/);
+    expect(src).toMatch(/unacknowledgedDuplicates = uniqueDuplicateDetails\.filter\(/);
+    // 照合キーに dup_hash を含める
+    expect(src).toMatch(/\$\{d\.staffKey\}::\$\{d\.workDate\}::\$\{d\.dupHash \?\? ''\}/);
   });
 
   it('ACK照会が失敗しても未ACK扱いのまま返す（通知が飛ばないより多重の方が安全というフェイルセーフ）', () => {
