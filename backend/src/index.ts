@@ -34,6 +34,7 @@ import { csrfOriginGuard } from './middleware/csrf';
 import { sanitizeInput } from './utils/validation';
 import { startDataUploadMonitor, stopDataUploadMonitor } from './services/dataUploadMonitor';
 import { startDailyReminderService, stopDailyReminderService } from './services/dailyReminderService';
+import { buildOrphanCastUsersDeleteQuery } from './services/castUserCleanup';
 
 dotenv.config();
 
@@ -772,13 +773,10 @@ async function cleanupData() {
     );
     cleanupDetail += ` emailVerifiedBackfill:${verifyFix.rowCount}`;
 
-    const orphanNoLink= await pool.query(
-      `UPDATE cast_users SET deleted_at = NOW()
-       WHERE deleted_at IS NULL
-         AND (staff_id IS NULL
-              OR staff_id NOT IN (SELECT id FROM staff_master WHERE deleted_at IS NULL))
-         AND NOT (email_verified = true AND pin_hash IS NOT NULL)`
-    );
+    // KZ-127: grace period 無しで即削除すると、自己登録直後〜スタッフ紐付け前の
+    // 正常な待機状態のキャストを誤って消してしまう（本番実例で確認済み）。
+    // クエリ本体は backend/src/services/castUserCleanup.ts に切り出してテストしている。
+    const orphanNoLink = await pool.query(buildOrphanCastUsersDeleteQuery());
     cleanupDetail += ` orphanCastUsersDeleted:${orphanNoLink.rowCount}`;
   } catch (err: unknown) {
     cleanupDetail += ' err:' + (err instanceof Error ? err.message : String(err));
