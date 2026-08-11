@@ -1061,7 +1061,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
     const result = await pool.query(
             `INSERT INTO cast_users (email, pin_hash, magic_link_token, magic_link_expires, staff_id, email_verified)
              VALUES ($1, $2, $3, $4, $5, true)
-             ON CONFLICT (email) WHERE deleted_at IS NULL DO NOTHING
+             ON CONFLICT (LOWER(email)) WHERE deleted_at IS NULL DO NOTHING
              RETURNING id, email, created_at`,
       [email, pinHash, sessionToken, sessionExpires, matchedStaffId]
     );
