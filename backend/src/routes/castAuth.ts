@@ -158,8 +158,10 @@ router.post('/register', async (req: Request, res: Response) => {
         [normalizedEmail]
       );
       if (softDeleted.rows.length > 0) {
+        // 復活時は、削除済み(=無効になった旧staff_master)を指す既存staff_idより
+        // メールアドレスで新たに特定した現行staff_idを優先する（KZ-127）
         await pool.query(
-          `UPDATE cast_users SET deleted_at = NULL, verification_token = $1, verification_token_expires = $2, staff_id = COALESCE(staff_id, $3), updated_at = NOW() WHERE id = $4`,
+          `UPDATE cast_users SET deleted_at = NULL, verification_token = $1, verification_token_expires = $2, staff_id = COALESCE($3, staff_id), updated_at = NOW() WHERE id = $4`,
           [token, tokenExpires, linkedStaffId, softDeleted.rows[0].id]
         );
       } else {
@@ -1003,9 +1005,11 @@ router.post('/field-register', async (req: Request, res: Response) => {
         const pinHash = await bcrypt.hash(pinStr, 10);
         const sessionToken = generateToken();
         const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        const staffId = existing.staff_id || matchedStaffId;
+        // 既存staff_idが削除済みstaff_masterを指している場合があるため、
+        // メールアドレスで新たに特定した現行staff_idを優先する（KZ-127）
+        const staffId = matchedStaffId || existing.staff_id;
         await pool.query(
-          'UPDATE cast_users SET pin_hash = $1, magic_link_token = $2, magic_link_expires = $3, staff_id = COALESCE(staff_id, $5), email_verified = true, updated_at = NOW() WHERE id = $4',
+          'UPDATE cast_users SET pin_hash = $1, magic_link_token = $2, magic_link_expires = $3, staff_id = COALESCE($5, staff_id), email_verified = true, updated_at = NOW() WHERE id = $4',
           [pinHash, sessionToken, sessionExpires, existing.id, staffId]
         );
 
@@ -1221,8 +1225,10 @@ router.post('/mail-help', async (req: Request, res: Response) => {
         [normalizedEmail]
       );
       if (softDeleted2.rows.length > 0) {
+        // 復活時は、削除済み(=無効になった旧staff_master)を指す既存staff_idより
+        // メールアドレスで新たに特定した現行staff_idを優先する（KZ-127）
         await pool.query(
-          `UPDATE cast_users SET deleted_at = NULL, verification_token = $1, verification_token_expires = $2, staff_id = COALESCE(staff_id, $3), updated_at = NOW() WHERE id = $4`,
+          `UPDATE cast_users SET deleted_at = NULL, verification_token = $1, verification_token_expires = $2, staff_id = COALESCE($3, staff_id), updated_at = NOW() WHERE id = $4`,
           [token, tokenExpires, linkedStaffId2, softDeleted2.rows[0].id]
         );
       } else {
