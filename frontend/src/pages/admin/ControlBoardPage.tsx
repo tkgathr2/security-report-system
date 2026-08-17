@@ -66,6 +66,20 @@ async function deleteAssign(projectId: string, staffId: string): Promise<void> {
   }
 }
 
+// プロキャスから現場・配置データを手動で取り込む（backend proxy: /api/admin/procast-sync/trigger）。
+// TRIGGER_API_TOKEN はブラウザへは渡らず backend が Bearer 認証で procast-sync を叩く。
+async function triggerProcastSyncApi(): Promise<{ message: string }> {
+  const res = await fetch('/api/admin/procast-sync/trigger', {
+    method: 'POST',
+    credentials: 'include',
+  })
+  const body = await res.json().catch(() => ({}) as { message?: string; error?: string; retryAfterSec?: number })
+  if (!res.ok) {
+    throw new Error((body as { error?: string }).error || `HTTP ${res.status}`)
+  }
+  return { message: (body as { message?: string }).message || '取り込みを開始しました。' }
+}
+
 // pool の各スタッフを draggable に
 function DraggableStaff({
   staffId,
@@ -133,6 +147,8 @@ const C = {
   blueBg: '#eff4ff',
   red: '#e0264b',
   redBg: '#fdeef1',
+  green: '#16a34a',
+  greenBg: '#eff8f0',
   night: '#f4f6f9',
   tag: '#f3f4f6',
   tagLine: '#e3e5e8',
@@ -363,6 +379,10 @@ export function ControlBoardPage() {
   const [assignBusy, setAssignBusy] = useState(false)
   const [assignError, setAssignError] = useState<string | null>(null)
   const [weekReloadToken, setWeekReloadToken] = useState(0)
+  // プロキャスからの手動データ取得（現場・配置データの取り込み）の状態
+  const [procastSyncing, setProcastSyncing] = useState(false)
+  const [procastMessage, setProcastMessage] = useState<string | null>(null)
+  const [procastError, setProcastError] = useState<string | null>(null)
 
   // 入力デバイスを総当たりでサポート：
   //  - PointerSensor: モダンブラウザ標準（マウス＋タッチ＋ペン統合）
@@ -411,6 +431,24 @@ export function ControlBoardPage() {
   // 日付移動
   const go = (offset: number) => setDate((prev) => offsetDate(prev, offset))
   const goToday = () => setDate(todayJST())
+
+  // 「データ取得」ボタン：プロキャスから現場・配置データを今すぐ取り込む
+  // (backend proxy /api/admin/procast-sync/trigger → procast-sync /trigger の非同期バッチを起動)。
+  // 取り込み自体は数十秒〜数分かかる非同期処理のため、ここではトリガーのみ行い、
+  // 完了はSlack通知で確認する運用（西村さんが数分後に「更新」ボタンで盤面を取り直す）。
+  const triggerProcastSync = useCallback(async () => {
+    setProcastError(null)
+    setProcastMessage(null)
+    setProcastSyncing(true)
+    try {
+      const { message } = await triggerProcastSyncApi()
+      setProcastMessage(message)
+    } catch (err) {
+      setProcastError(err instanceof Error ? err.message : 'データ取得に失敗しました')
+    } finally {
+      setProcastSyncing(false)
+    }
+  }, [])
 
   // ===== D&D：プール or 配置済みスタッフ → 現場セル =====
   const handleDragEnd = useCallback(async (e: DragEndEvent) => {
@@ -936,6 +974,44 @@ export function ControlBoardPage() {
           配置を更新中…
         </div>
       )}
+      {procastMessage && (
+        <div
+          style={{
+            padding: '8px 24px',
+            background: C.greenBg,
+            color: C.green,
+            fontSize: 13,
+            borderBottom: `1px solid ${C.line}`,
+          }}
+        >
+          {procastMessage}
+          <button
+            onClick={() => setProcastMessage(null)}
+            style={{ marginLeft: 12, background: 'transparent', border: 'none', color: C.green, cursor: 'pointer', fontWeight: 700 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {procastError && (
+        <div
+          style={{
+            padding: '8px 24px',
+            background: C.redBg,
+            color: C.red,
+            fontSize: 13,
+            borderBottom: `1px solid ${C.line}`,
+          }}
+        >
+          データ取得エラー: {procastError}
+          <button
+            onClick={() => setProcastError(null)}
+            style={{ marginLeft: 12, background: 'transparent', border: 'none', color: C.red, cursor: 'pointer', fontWeight: 700 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {/* ヘッダー */}
       <header style={headerStyle}>
         <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: '0.02em' }}>
@@ -977,6 +1053,14 @@ export function ControlBoardPage() {
         </button>
         <button style={btnStyle} onClick={() => go(1)}>
           翌日
+        </button>
+        <button
+          style={{ ...btnStyle, borderColor: C.green, color: C.green, fontWeight: 600 }}
+          onClick={triggerProcastSync}
+          disabled={procastSyncing}
+          title="プロキャスから最新の現場・配置データを取り込みます（完了まで約1〜2分・Slackに通知）。完了後は「更新」ボタンで盤面に反映してください。"
+        >
+          {procastSyncing ? '取得中…' : '📥 データ取得'}
         </button>
         <button
           style={{ ...btnStyle, borderColor: C.blue, color: C.blue, fontWeight: 600 }}
