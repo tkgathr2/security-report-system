@@ -450,11 +450,27 @@ async function seedStaffData() {
     }
 
     if (hasDeletedAt) {
-      const placeholders = seedIds.map((_, i) => `$${i + 1}`).join(', ');
-      const restored = await pool.query(
-        `UPDATE staff_master SET deleted_at = NULL WHERE id IN (${placeholders}) AND deleted_at IS NOT NULL`,
-        seedIds
+      // 管理画面から意図的に削除(DELETE_STAFF監査ログあり)されたスタッフはseed復活の対象外にする。
+      // 2026-09-10修正：この関数はプロセス起動のたび（Railway再起動・再デプロイのたび）に
+      // 無条件実行されており、寺町さん報告「キャスト管理画面から削除したスタッフが翌日になると
+      // 再表示される」の真因だった（seedIds に実在スタッフ30名が含まれ、削除後の初回起動で復活していた）。
+      const deletedByAdmin = await pool.query(
+        `SELECT DISTINCT target_id FROM admin_audit_logs
+         WHERE action = 'DELETE_STAFF' AND target_type = 'staff_master' AND target_id = ANY($1::text[])`,
+        [seedIds]
       );
+      const intentionallyDeletedIds = new Set(deletedByAdmin.rows.map((r: { target_id: string }) => r.target_id as string));
+      const restoreCandidateIds = seedIds.filter(id => !intentionallyDeletedIds.has(id));
+      seedDetail += ` intentionallyDeletedSkipped:${intentionallyDeletedIds.size}`;
+
+      let restored = { rowCount: 0 as number | null };
+      if (restoreCandidateIds.length > 0) {
+        const restorePlaceholders = restoreCandidateIds.map((_, i) => `$${i + 1}`).join(', ');
+        restored = await pool.query(
+          `UPDATE staff_master SET deleted_at = NULL WHERE id IN (${restorePlaceholders}) AND deleted_at IS NOT NULL`,
+          restoreCandidateIds
+        );
+      }
       seedDetail += ` restored:${restored.rowCount}`;
 
       const afterRestoreSeed = await pool.query(
@@ -462,7 +478,11 @@ async function seedStaffData() {
         [seedIds]
       );
       const afterRestoreIds = new Set(afterRestoreSeed.rows.map((r: { id: string }) => r.id));
-      missingSeedIds = seedIds.filter(id => !afterRestoreIds.has(id));
+      // 意図的に削除されたIDは「復活させない」が正しい状態なので missingSeedIds からも除外する。
+      // 除外しないと、後続の enforce ループ(495行目〜)に毎起動入り続け、PKが復活しないため
+      // 必ず conflict エラーで ROLLBACK し、seed insert still conflicted が起動ログに出続ける
+      // （2026-09-10追加：堀内の逆検証指摘。データは壊れないが本物の障害を埋もれさせるため解消）。
+      missingSeedIds = seedIds.filter(id => !afterRestoreIds.has(id) && !intentionallyDeletedIds.has(id));
       seedDetail += ` missingAfterRestore:${missingSeedIds.length}`;
       if (missingSeedIds.length > 0) {
         const missingSeedNames = staffData
@@ -819,10 +839,20 @@ async function seedTakagiProjectData() {
       `SELECT 1 FROM admin_audit_logs WHERE action = 'SEED_TAKAGI_PROJECTS' LIMIT 1`
     );
 
-    await pool.query(
-      `UPDATE staff_master SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL`,
+    // 管理画面から意図的に削除(DELETE_STAFF監査ログあり)されていれば復活させない
+    // （2026-09-10追加：seedStaffData()と同じガード。堀内の逆検証で、このTAKAGI_ID復活処理が
+    //  同一起動シーケンス内でseedStaffData()の削除尊重を素通りしていることが判明したため）
+    const takagiDeletedByAdmin = await pool.query(
+      `SELECT 1 FROM admin_audit_logs WHERE action = 'DELETE_STAFF' AND target_type = 'staff_master' AND target_id = $1 LIMIT 1`,
       [TAKAGI_ID]
     );
+
+    if (takagiDeletedByAdmin.rows.length === 0) {
+      await pool.query(
+        `UPDATE staff_master SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL`,
+        [TAKAGI_ID]
+      );
+    }
 
     // KZ-16: 高木 豊大（seed 用 staff）は盤面・日報の両方で必ず非表示にする。
     // 盤面は staff_master.hidden で除外済みだが、日報の castsAgg も hidden を見るよう変更したため、

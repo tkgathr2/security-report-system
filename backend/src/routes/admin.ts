@@ -1172,7 +1172,7 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
       return;
     }
 
-    let inserted = 0, updated = 0, skipped = 0;
+    let inserted = 0, updated = 0, skipped = 0, skippedDeleted = 0;
 
     // データ行を処理
     for (let i = 1; i < lines.length; i++) {
@@ -1185,13 +1185,47 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
         continue;
       }
 
-      // カナで既存検索
-      const existing = await pool.query(
-        'SELECT id, display_name_kanji, deleted_at FROM staff_master WHERE display_name_kana = $1',
+      // カナで既存検索（staffResolver.ts と同じ二段構え・2026-09-10修正）：
+      // display_name_kana の部分UNIQUEは同姓同名を別人として共存させるため廃止済みのため、
+      // 単純な `rows[0]` 参照は複数行(active重複／削除済み+active共存)がある場合に非決定になる。
+      // まずactiveな1行だけを確定的に取得し、無ければ削除済みの存在だけを確認する。
+      // normalize_kana() は staffResolver.ts / migration 1781500000000 と同じ正規化関数
+      // （表記ゆれで別レコード扱いされ「削除済みなのに復活したように見える」事故を防ぐ）。
+      const existingActive = await pool.query(
+        `SELECT id, display_name_kanji FROM staff_master
+         WHERE normalize_kana(display_name_kana) = normalize_kana($1) AND deleted_at IS NULL
+         ORDER BY created_at ASC LIMIT 1`,
         [nameKana]
       );
 
-      if (existing.rows.length === 0) {
+      if (existingActive.rows.length > 0) {
+        const row = existingActive.rows[0] as { id: string; display_name_kanji: string };
+        if (row.display_name_kanji !== nameKanji && nameKanji) {
+          // 漢字更新（id指定。同カナの他レコード＝同姓同名の別人を巻き込まない）
+          await pool.query(
+            'UPDATE staff_master SET display_name_kanji = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [nameKanji, row.id]
+          );
+          updated++;
+        } else {
+          skipped++;
+        }
+        continue;
+      }
+
+      const existingDeleted = await pool.query(
+        `SELECT id FROM staff_master
+         WHERE normalize_kana(display_name_kana) = normalize_kana($1) AND deleted_at IS NOT NULL LIMIT 1`,
+        [nameKana]
+      );
+
+      if (existingDeleted.rows.length > 0) {
+        // 意図的に削除された(soft-delete)スタッフはCSV同期で復活させない
+        // （staffResolver.ts の現場配置CSV取込と同じ方針。従来は無条件で復活させており、
+        //  管理画面から削除したスタッフが翌日のCSVインポートで再表示されるバグの原因だった）
+        skipped++;
+        skippedDeleted++;
+      } else {
         // 新規追加
         await pool.query(
           `INSERT INTO staff_master (display_name_kanji, display_name_kana, created_at, updated_at, created_by)
@@ -1199,22 +1233,6 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
           [nameKanji, nameKana, adminUser.email]
         );
         inserted++;
-      } else if (existing.rows[0].deleted_at) {
-        // soft-deleted → 復活
-        await pool.query(
-          'UPDATE staff_master SET display_name_kanji = COALESCE(NULLIF($1, \'\'), display_name_kanji), deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-          [nameKanji, existing.rows[0].id]
-        );
-        updated++;
-      } else if (existing.rows[0].display_name_kanji !== nameKanji && nameKanji) {
-        // 漢字更新
-        await pool.query(
-          'UPDATE staff_master SET display_name_kanji = $1, updated_at = CURRENT_TIMESTAMP WHERE display_name_kana = $2',
-          [nameKanji, nameKana]
-        );
-        updated++;
-      } else {
-        skipped++;
       }
     }
 
@@ -1226,11 +1244,13 @@ router.post('/staff/import', requireAdmin, upload.single('file'), async (req: Re
         adminUser.email,
         'staff_import',
         'staff_master',
-        JSON.stringify({ file_name: file.originalname, inserted, updated, skipped })
+        JSON.stringify({ file_name: file.originalname, inserted, updated, skipped, skipped_deleted: skippedDeleted })
       ]
     );
 
-    res.json({ inserted, updated, skipped });
+    // inserted/updated/skipped は既存フロント(App.tsx/StaffPage.tsx)との後方互換のため維持。
+    // skipped_deleted は「削除済みのため復活させずスキップした」件数の内訳（2026-09-10追加）。
+    res.json({ inserted, updated, skipped, skipped_deleted: skippedDeleted });
   } catch (error) {
     handleDbError(res, error, 'Staff import');
   }

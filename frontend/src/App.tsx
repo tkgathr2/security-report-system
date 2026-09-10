@@ -50,7 +50,7 @@ function AdminApp() {
   const [newStaff, setNewStaff] = useState({ display_name_kanji: '', display_name_kana: '' })
   const [creating, setCreating] = useState(false)
   const [staffImporting, setStaffImporting] = useState(false)
-  const [staffImportResult, setStaffImportResult] = useState<{ inserted: number; updated: number; skipped: number } | null>(null)
+  const [staffImportResult, setStaffImportResult] = useState<{ inserted: number; updated: number; skipped: number; skipped_deleted?: number } | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [sortColumn, setSortColumn] = useState<keyof Project | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
