@@ -625,6 +625,31 @@ let cleanupDetail = '';
 
 async function fixProjectCasts() {
   try {
+    // KZ-145: migration 1789006613815 と同内容の冪等ガード。本番は startCommand が
+    // `(npm run migrate:up || true)` で migrate 失敗を握り潰すため、日次リマインダーの
+    // 認証絡みのスキーマ変更はここでも保証する（既存 cast_name 追加と同方式）。
+    await pool.query(`ALTER TABLE cast_users ADD COLUMN IF NOT EXISTS reminder_link_token TEXT`);
+    await pool.query(`ALTER TABLE cast_users ADD COLUMN IF NOT EXISTS reminder_link_expires TIMESTAMPTZ`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS cast_users_reminder_link_token_index ON cast_users (reminder_link_token)`);
+
+    // KZ-145: migration 1784200000000 (reminder_sends) が本番で未適用だった実例を本番ログで確認
+    // （INSERT が "relation reminder_sends does not exist" ではなく "constraint ... does not exist"
+    // で失敗していたため、テーブル自体は存在していたが、ON CONFLICT が参照するユニーク索引の
+    // 存在は別途保証しておく。既存の duplicate_acks と同方式で「無ければ作る」）。
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS reminder_sends (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        cast_user_id UUID NOT NULL,
+        target_date DATE NOT NULL,
+        timing TEXT NOT NULL,
+        sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS reminder_sends_unique_per_user_date_timing
+        ON reminder_sends (cast_user_id, target_date, timing)
+    `);
+
     await pool.query(`ALTER TABLE project_casts ADD COLUMN IF NOT EXISTS cast_name TEXT`);
 
     // KZ-15: project_casts の partial unique index を冪等に保証する。
