@@ -122,7 +122,18 @@ export async function resolveStaffForImport(
       return { staffId: row.id, autoAdded: false };
     }
 
-    // 意図的に削除された（soft-delete）スタッフはCSV同期で復活させない。
+    // 意図的に削除された（soft-delete）スタッフはCSV同期で復活させない（No指定行にも適用）。
+    // 2026-09-10修正：従来はここでガード無くfall-throughし、下の「3) 新規作成」で
+    // 同じNoの新規active行を作ってしまっていた＝削除したスタッフが procast 自動同期のたびに
+    // （日次実行のため「翌日には戻っている」ように）復活したように見えるバグだった。
+    // Noなし照合（下の2・157行目）と同じ方針に統一する。
+    const deletedByNo = await db.query(
+      `SELECT id FROM staff_master WHERE procast_staff_no = $1 AND deleted_at IS NOT NULL LIMIT 1`,
+      [no]
+    );
+    if (deletedByNo.rows[0]) {
+      return { staffId: '', autoAdded: false, skippedDeleted: true };
+    }
     // fall-through して新規レコードを作成する（部分UNIQUEはdeleted_at IS NULLのみが対象のため競合しない）。
   }
 

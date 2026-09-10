@@ -82,18 +82,22 @@ describe('resolveStaffForImport', () => {
     expect(result).toEqual({ staffId: 'staff-4', autoAdded: false });
   });
 
-  it('soft-deleted済みの同Noキャストは復活させず、新規レコードを作成する（意図的な削除をCSV同期が上書きしない）', async () => {
-    // 削除済み検索では何もせず fall-through → INSERT で新規スタッフを作る。
+  it('soft-deleted済みの同Noキャストは復活させず、新規レコードも作成せずスキップする（意図的な削除をCSV同期が上書きしない）', async () => {
+    // 2026-09-10修正（堀内の逆検証で判明）：従来はNo照合でヒットしなかった削除済みスタッフに
+    // ガードが無く、fall-throughしてINSERTで「同じNoの新規active行」を作ってしまっていた。
+    // procast自動同期は定期実行のため、これが「削除したスタッフが翌日には復活している」症状の
+    // 真因の一つだった。Noなし照合と同じ方針（skippedDeletedを返す）に統一する。
     const { db, calls } = makeDb([
-      // soft-deleted照合は削除済みのため何も返さない → fall-through
-      { match: /INSERT INTO staff_master/, rows: [{ id: 'staff-new' }] },
+      { match: /procast_staff_no = \$1 AND deleted_at IS NOT NULL/, rows: [{ id: 'staff-deleted' }] },
     ]);
 
     const result = await resolveStaffForImport(db, { ...base, staffNo: 'S005' });
 
-    expect(result).toEqual({ staffId: 'staff-new', autoAdded: true });
+    expect(result).toEqual({ staffId: '', autoAdded: false, skippedDeleted: true });
     const revive = calls.find(c => /SET deleted_at = NULL/.test(c.text));
     expect(revive).toBeUndefined(); // 復活しない
+    const insert = calls.find(c => /INSERT INTO staff_master/.test(c.text));
+    expect(insert).toBeUndefined(); // 新規作成もしない（同じNoで別レコードを量産しない）
   });
 
   it('新規作成が残存ユニーク制約で弾かれ続け、Noなし行なら同名既存へ縮退して取込を止めない', async () => {

@@ -23,8 +23,8 @@ interface StaffPageProps {
   staffSearchQuery: string
   setStaffSearchQuery: (query: string) => void
   staffImporting: boolean
-  staffImportResult: { inserted: number; updated: number; skipped: number } | null
-  setStaffImportResult: (result: { inserted: number; updated: number; skipped: number } | null) => void
+  staffImportResult: { inserted: number; updated: number; skipped: number; skipped_deleted?: number } | null
+  setStaffImportResult: (result: { inserted: number; updated: number; skipped: number; skipped_deleted?: number } | null) => void
   showStaffModal: boolean
   setShowStaffModal: (show: boolean) => void
   newStaff: { display_name_kanji: string; display_name_kana: string }
@@ -692,6 +692,9 @@ export function StaffPage({
         <div style={styles.staffImportResult}>
           <span style={styles.staffImportResultText}>
             インポート完了: 追加 {staffImportResult.inserted}件、更新 {staffImportResult.updated}件、スキップ {staffImportResult.skipped}件
+            {!!staffImportResult.skipped_deleted && (
+              <>（うち削除済みのため復活させなかった: {staffImportResult.skipped_deleted}件）</>
+            )}
           </span>
           <button
             style={styles.staffImportResultClose}

@@ -142,7 +142,7 @@ railway.json:
 ### 3.2 起動時の自動処理（index.ts）
 サーバー起動時に以下の順番で実行される（`seedStaffData().then(() => fixProjectCasts()).then(() => cleanupData()).then(() => app.listen(...))`）:
 
-1. `seedStaffData()` — スタッフ29名のシードデータ。active 10名以上存在すればスキップ。seed対象IDのみ`deleted_at = NULL`に復元
+1. `seedStaffData()` — スタッフ30名のシードデータ。早期returnは「seed対象IDが全員active」の場合のみ（旧記述の「active 10名以上存在すればスキップ」は実装と乖離しており誤り。`count`はログ用で条件には未使用）。2026-09-10修正：管理画面から意図的に削除(`DELETE_STAFF`監査ログあり)されたIDは`deleted_at = NULL`復元の対象から除外する（従来は無条件復元しており、削除したスタッフがプロセス再起動のたびに復活するバグだった。`seedTakagiProjectData()`側の同種処理も同じガードを追加済み）
 2. `fixProjectCasts()` — `project_casts`テーブルに`cast_name`カラムを自動追加。`staff_id`未設定のレコードを`cast_name`でスタッフマスタと照合し自動修復（スペース正規化あり）
 3. `cleanupData()` — 1時間以内の再実行はスキップ。テストデータ（佐藤花子・田中太郎・鈴木一郎）をソフトデリート、カナ重複マージ、文字化けCSVインポート物理削除、「漢字名＝カナ名かつカタカナなし」のスタッフをソフトデリート
 
