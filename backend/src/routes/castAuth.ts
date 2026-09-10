@@ -467,11 +467,18 @@ router.post('/magic', async (req: Request, res: Response) => {
       return res.status(400).json({ message: '無効なリンクです' });
     }
 
+    // KZ-145: 日次リマインダーメールのリンクは専用列 reminder_link_token（セッションと分離）。
+    // magic-link エンドポイント発行のトークンは従来どおり magic_link_token を見る。
+    // どちらか一致した方を採用（両方一致は起きない前提だが、念のため OR で1クエリに統一）。
     const result = await pool.query(
       `SELECT cu.id, cu.email, cu.staff_id, sm.display_name_kanji as name
        FROM cast_users cu
        LEFT JOIN staff_master sm ON cu.staff_id = sm.id
-       WHERE cu.magic_link_token = $1 AND cu.magic_link_expires > NOW() AND cu.deleted_at IS NULL`,
+       WHERE cu.deleted_at IS NULL
+         AND (
+           (cu.magic_link_token = $1 AND cu.magic_link_expires > NOW())
+           OR (cu.reminder_link_token = $1 AND cu.reminder_link_expires > NOW())
+         )`,
       [token]
     );
 
@@ -482,9 +489,12 @@ router.post('/magic', async (req: Request, res: Response) => {
     const user = result.rows[0];
 
     // Create new session token
+    // KZ-145: reminder_link_token 経由でログインした場合、使い切りにするためクリアする
+    // （同一メールのリンクを再クリックしても再ログインできてしまうのを防ぐ）。
     const sessionToken = generateToken();
     await pool.query(
-      `UPDATE cast_users SET magic_link_token = $1, magic_link_expires = $2, last_login_at = NOW()
+      `UPDATE cast_users SET magic_link_token = $1, magic_link_expires = $2, last_login_at = NOW(),
+              reminder_link_token = NULL, reminder_link_expires = NULL
        WHERE id = $3`,
       [sessionToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), user.id]
     );

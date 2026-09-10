@@ -149,8 +149,12 @@ async function sendReminders(
       const token = generateToken();
       const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
+      // KZ-145: magic_link_token はログインセッション（cast/today 等の認証）と共有の列。
+      // ここで書き換えると、既にログイン中のキャスト（ホーム画面に追加して常時ログイン）の
+      // セッションが毎回の一斉送信で無条件に失効し、「ログインしても閲覧できない」原因になる。
+      // メール用のリンクは専用列 reminder_link_token に分離し、ログインセッションは触らない。
       await pool.query(
-        `UPDATE cast_users SET magic_link_token = $1, magic_link_expires = $2
+        `UPDATE cast_users SET reminder_link_token = $1, reminder_link_expires = $2
          WHERE id = $3`,
         [token, tokenExpires, cast.cast_user_id]
       );
@@ -174,10 +178,16 @@ async function sendReminders(
         console.log(`[DailyReminder] Sent to ${cast.staff_name} (${cast.email}) [${timing}]`);
 
         // 送信成功後に個人単位の記録を挿入（冪等: ON CONFLICT DO NOTHING）
+        // KZ-145: migration 1784200000000 は createIndex(unique:true) で「ユニークインデックス」を
+        // 作っており、Postgres上は制約(pg_constraint)として登録されない。ON CONFLICT ON CONSTRAINT
+        // は制約名しか解決できないため「constraint ... does not exist」で毎回失敗し、
+        // ①この記録が一切残らない ②次回バッチが「未送信」と誤認して同じ人に何度も再送する、
+        // の二重の実害があった（実測: 本番ログで同一キャストへ複数バッチ連続送信を確認）。
+        // インデックスの列を直接指定する ON CONFLICT (columns) に修正（対象インデックスと一致）。
         await pool.query(
           `INSERT INTO reminder_sends (cast_user_id, target_date, timing)
            VALUES ($1, $2, $3)
-           ON CONFLICT ON CONSTRAINT reminder_sends_unique_per_user_date_timing DO NOTHING`,
+           ON CONFLICT (cast_user_id, target_date, timing) DO NOTHING`,
           [cast.cast_user_id, targetDate, timing]
         );
       } else {
