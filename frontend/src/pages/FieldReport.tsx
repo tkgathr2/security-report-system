@@ -370,7 +370,13 @@ export default function FieldReport() {
                 const draft = draftMap.get(g.name);
                 if (draft) {
                   draftMap.delete(g.name);
-                  return { ...g, start_time: draft.start_time, end_time: draft.end_time, early_overtime_hours: draft.early_overtime_hours };
+                  // KZ-148: 案件の時刻が未取込の時点で保存された下書きの「空の時刻」で、あとから入った案件の時刻を上書きしない
+                  return {
+                    ...g,
+                    start_time: draft.start_time || g.start_time,
+                    end_time: draft.end_time || g.end_time,
+                    early_overtime_hours: draft.early_overtime_hours,
+                  };
                 }
                 return g;
               });
@@ -448,7 +454,11 @@ export default function FieldReport() {
       setErrorMessage('氏名が未入力の警備員がいます。名前を入力するか、不要な行を削除してください。')
       return
     }
-    
+    if (guards.some(g => !g.start_time?.trim() || !g.end_time?.trim())) {
+      setErrorMessage('開始時刻・終了時刻が未入力の警備員がいます。すべての警備員の時刻を入力してください。')
+      return
+    }
+
     setSubmitting(true)
     
     try {
@@ -828,7 +838,9 @@ export default function FieldReport() {
     }
 
     const hasNamelessGuard = guards.some(g => !g.name || g.name.trim() === '')
-    const isFormValid = signatureDataUrl !== null && guardContents.length > 0 && !hasNamelessGuard
+    // KZ-148: 開始/終了時刻が空のまま取引先へ報告書が送られていたため、全警備員の時刻を必須にする
+    const hasGuardWithoutTime = guards.some(g => !g.start_time?.trim() || !g.end_time?.trim())
+    const isFormValid = signatureDataUrl !== null && guardContents.length > 0 && !hasNamelessGuard && !hasGuardWithoutTime
 
   const handleCloseTutorial = () => {
     setShowTutorial(false)
@@ -1308,6 +1320,7 @@ export default function FieldReport() {
                 <p style={{ margin: '0 0 8px', color: '#E65100', fontSize: '14px', fontWeight: 'bold' }}>未入力の必須項目:</p>
                 <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'disc' }}>
                   {guardContents.length === 0 && <li style={{ color: '#E65100', fontSize: '14px', marginBottom: '4px' }}>警備内容（1つ以上選択）</li>}
+                  {hasGuardWithoutTime && <li style={{ color: '#E65100', fontSize: '14px', marginBottom: '4px' }}>警備員の開始時刻・終了時刻</li>}
                   {!signatureDataUrl && <li style={{ color: '#E65100', fontSize: '14px', marginBottom: '4px' }}>署名</li>}
                 </ul>
               </div>
