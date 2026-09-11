@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveStaffForImport, normalizeForLookup, DbClient } from './staffResolver';
+import { resolveStaffForImport, normalizeForLookup, isOutsourcedStaffKana, DbClient } from './staffResolver';
 
 // SQLパターンに応じて応答を返すスクリプト式のフェイクDB。
 // 実行されたクエリを記録し、照合順序と更新内容を検証する。
@@ -196,5 +196,87 @@ describe('resolveStaffForImport', () => {
 
     expect(result).toEqual({ staffId: 'staff-raced', autoAdded: false });
     expect(insertCount).toBe(1);
+  });
+
+  describe('外注スタッフ（カナ：ガイチュウスタッフ）の扱い（KZ-147）', () => {
+    const tiger2 = { staffNo: '60', castName: 'タイガーセキュリティー２', castNameKana: 'ガイチュウスタッフ', adminEmail: 'sync@example.com' };
+
+    it('同じNoの個人レコードを外注枠の名前で上書きせず、Noを外して外注枠を別レコードとして作る', async () => {
+      // 本番 2026-09-07 13:00 の再現: No.60 が付いていた川面さんのレコードが「タイガーセキュリティー２」に書き換わった
+      const { db, calls } = makeDb([
+        {
+          match: /procast_staff_no = \$1 AND deleted_at IS NULL/,
+          rows: [{ id: 'st-kawamo', display_name_kanji: '川面 直人', display_name_kana: 'カワオモ ナオト' }],
+        },
+        { match: /INSERT INTO staff_master/, rows: [{ id: 'st-tiger2-new' }] },
+      ]);
+
+      const result = await resolveStaffForImport(db, tiger2);
+
+      expect(result).toEqual({ staffId: 'st-tiger2-new', autoAdded: true });
+      expect(calls.some(c => /UPDATE staff_master SET display_name_kanji/.test(c.text))).toBe(false);
+      const detach = calls.find(c => /SET procast_staff_no = NULL/.test(c.text));
+      expect(detach!.params).toEqual(['st-kawamo']);
+      const audit = calls.find(c => /PROCAST_NO_REASSIGNED/.test(c.text));
+      expect(audit).toBeDefined();
+      // 削除済みの同No（過去の外注枠）があっても、振り直しなのでスキップしない
+      expect(calls.some(c => /procast_staff_no = \$1 AND deleted_at IS NOT NULL/.test(c.text))).toBe(false);
+      const insert = calls.find(c => /INSERT INTO staff_master/.test(c.text));
+      expect(insert!.params).toEqual(['タイガーセキュリティー２', 'ガイチュウスタッフ', '60', 'sync@example.com']);
+    });
+
+    it('外注枠だったNoに個人が振られた場合も、外注枠レコードを個人名へ上書きせずNoを外す', async () => {
+      const { db, calls } = makeDb([
+        {
+          match: /procast_staff_no = \$1 AND deleted_at IS NULL/,
+          rows: [{ id: 'st-tiger2', display_name_kanji: 'タイガーセキュリティー２', display_name_kana: 'ガイチュウスタッフ' }],
+        },
+        { match: /normalize_kana\(display_name_kanji/, rows: [{ id: 'st-kawamo', procast_staff_no: null }] },
+      ]);
+
+      const result = await resolveStaffForImport(db, { ...base, staffNo: '60', castName: '川面 直人', castNameKana: 'カワオモ ナオト' });
+
+      expect(result).toEqual({ staffId: 'st-kawamo', autoAdded: false });
+      expect(calls.some(c => /UPDATE staff_master SET display_name_kanji/.test(c.text))).toBe(false);
+      expect(calls.find(c => /SET procast_staff_no = NULL/.test(c.text))!.params).toEqual(['st-tiger2']);
+      expect(calls.find(c => /SET procast_staff_no = \$1/.test(c.text))!.params).toEqual(['60', 'st-kawamo']);
+    });
+
+    it('外注枠同士のNo一致は従来どおり名前の変更を追従する', async () => {
+      const { db, calls } = makeDb([
+        {
+          match: /procast_staff_no = \$1 AND deleted_at IS NULL/,
+          rows: [{ id: 'st-tiger2', display_name_kanji: 'タイガーセキュリティ２', display_name_kana: 'ガイチュウスタッフ' }],
+        },
+      ]);
+
+      const result = await resolveStaffForImport(db, tiger2);
+
+      expect(result).toEqual({ staffId: 'st-tiger2', autoAdded: false });
+      expect(calls.find(c => /UPDATE staff_master SET display_name_kanji/.test(c.text))!.params)
+        .toEqual(['タイガーセキュリティー２', 'ガイチュウスタッフ', 'st-tiger2']);
+      expect(calls.some(c => /PROCAST_NO_REASSIGNED/.test(c.text))).toBe(false);
+    });
+
+    it('外注枠はカナ名で照合しない（全員同じカナのため別の外注枠や別人に吸収される）', async () => {
+      const { db, calls } = makeDb([
+        { match: /INSERT INTO staff_master/, rows: [{ id: 'st-tiger7' }] },
+      ]);
+
+      const result = await resolveStaffForImport(db, { ...tiger2, staffNo: null, castName: 'タイガーセキュリティー７' });
+
+      expect(result).toEqual({ staffId: 'st-tiger7', autoAdded: true });
+      expect(calls.some(c => /normalize_kana\(display_name_kana\)/.test(c.text))).toBe(false);
+    });
+  });
+
+  describe('isOutsourcedStaffKana', () => {
+    it('スペースやひらがなのゆれがあっても外注枠のカナを判定する', () => {
+      expect(isOutsourcedStaffKana('ガイチュウスタッフ')).toBe(true);
+      expect(isOutsourcedStaffKana('ガイチュウ スタッフ')).toBe(true);
+      expect(isOutsourcedStaffKana('がいちゅうすたっふ')).toBe(true);
+      expect(isOutsourcedStaffKana('カワオモ ナオト')).toBe(false);
+      expect(isOutsourcedStaffKana(null)).toBe(false);
+    });
   });
 });

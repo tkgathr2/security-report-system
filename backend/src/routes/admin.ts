@@ -9,6 +9,7 @@ import { isValidEmail, validateStringField, validateArrayItems, MAX_LENGTHS, str
 import { logAudit } from '../utils/auditLog';
 import { sendLoginUrlEmail } from '../utils/email';
 import { sendRemindersNow } from '../services/dailyReminderService';
+import { isOutsourcedStaffKana } from '../services/staffResolver';
 import { checkAndIncrementRateLimitDb } from '../utils/rateLimit';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key');
@@ -332,6 +333,12 @@ router.put('/staff/:id', requireAdmin, async (req: Request, res: Response) => {
 
     if (email && !isValidEmail(email)) {
       sendBadRequest(res, '正しいメールアドレスを入力してください');
+      return;
+    }
+
+    // KZ-147: 外注スタッフの枠は個人ではないため、メールアドレス（=案内メールの宛先）を持たせない
+    if (email && isOutsourcedStaffKana(display_name_kana)) {
+      sendBadRequest(res, '外注スタッフ（カナ名：ガイチュウスタッフ）にはメールアドレスを登録できません');
       return;
     }
 
@@ -1646,7 +1653,7 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
 
     if (staff_id) {
       const result = await pool.query(
-        `SELECT sm.display_name_kanji as name,
+        `SELECT sm.display_name_kanji as name, sm.display_name_kana as kana,
                 CASE WHEN sm.email = '' THEN NULL ELSE sm.email END as sm_email,
                 cu.email as cu_email
          FROM staff_master sm
@@ -1656,6 +1663,11 @@ router.post('/send-login-url', requireAdmin, async (req: Request, res: Response)
       );
       if (result.rows.length === 0) {
         sendNotFound(res, 'スタッフが見つかりません');
+        return;
+      }
+      // KZ-147: 外注スタッフの枠へメールを入れると、その枠の現場案内が入力した人に届くようになる
+      if (isOutsourcedStaffKana(result.rows[0].kana)) {
+        sendBadRequest(res, '外注スタッフにはログインURLを送信できません');
         return;
       }
       targetName = result.rows[0].name;

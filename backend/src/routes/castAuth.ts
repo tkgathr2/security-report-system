@@ -10,6 +10,12 @@ import { logAudit } from '../utils/auditLog';
 import { checkRateLimitDb, recordFailedAttemptDb, resetAttemptsDb, checkAndIncrementRateLimitDb } from '../utils/rateLimit';
 import { todayJST, escapeLikePattern } from '../utils/dateUtil';
 import { magicLinkHash, authenticateCast } from '../middleware/auth';
+import { notOutsourcedStaffSql } from '../services/staffResolver';
+
+// KZ-147: 登録時に staff_master.email を補完する際、外注スタッフの枠にはメールを書き込まない
+const STAFF_EMAIL_BACKFILL_SQL =
+  `UPDATE staff_master SET email = $1, updated_at = NOW()
+   WHERE id = $2 AND (email IS NULL OR email = '') AND ${notOutsourcedStaffSql('display_name_kana')}`;
 
 const inquiryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -258,10 +264,7 @@ router.post('/verify', async (req: Request, res: Response) => {
         [pinHash, staffId, user.id]
       );
 
-      await pool.query(
-        `UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2 AND (email IS NULL OR email = '')`,
-        [user.email, staffId]
-      );
+      await pool.query(STAFF_EMAIL_BACKFILL_SQL, [user.email, staffId]);
 
       // Send welcome email
       const baseUrl = getBaseUrl(req);
@@ -1024,10 +1027,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
         );
 
         if (staffId) {
-          await pool.query(
-            'UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2 AND (email IS NULL OR email = \'\')',
-            [email, staffId]
-          );
+          await pool.query(STAFF_EMAIL_BACKFILL_SQL, [email, staffId]);
         }
 
         const baseUrl = getBaseUrl(req);
@@ -1086,10 +1086,7 @@ router.post('/field-register', async (req: Request, res: Response) => {
     }
 
     if (matchedStaffId) {
-      await pool.query(
-        'UPDATE staff_master SET email = $1, updated_at = NOW() WHERE id = $2 AND (email IS NULL OR email = \'\')',
-        [email, matchedStaffId]
-      );
+      await pool.query(STAFF_EMAIL_BACKFILL_SQL, [email, matchedStaffId]);
     }
 
     const user = result.rows[0];

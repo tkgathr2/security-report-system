@@ -89,6 +89,8 @@ export default function FieldReport() {
     const [nameSearchResults, setNameSearchResults] = useState<StaffMember[]>([])
     const [nameSearching, setNameSearching] = useState(false)
     const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null)
+    // 「登録情報を変更」を押す前の登録名。変更がサーバーに拒否されたら元に戻すために保持する（KZ-147）
+    const [staffBeforeChange, setStaffBeforeChange] = useState<StaffMember | null>(null)
   
   const [writerName, setWriterName] = useState('')
   const [writerEmail, setWriterEmail] = useState('')
@@ -553,9 +555,28 @@ export default function FieldReport() {
         })
       
         if (!response.ok) {
+          // 別人の名前・既に使われている名前・紐付け済みの変更はサーバーが 404/409 で拒否する（KZ-147）。
+          // 行き止まりのエラー画面にせず、理由を伝えて元の状態へ戻す。
+          if (response.status === 404 || response.status === 409) {
+            const err = await response.json().catch(() => null)
+            window.alert(err?.message || 'このお名前は選択できません')
+            if (staffBeforeChange) {
+              localStorage.setItem(`selected_staff_id_${uniqueUrl}`, staffBeforeChange.id)
+              localStorage.setItem(`selected_staff_name_${uniqueUrl}`, staffBeforeChange.displayNameKanji)
+              setSelectedStaff(staffBeforeChange)
+              setWriterName(staffBeforeChange.displayNameKanji)
+              setStaffBeforeChange(null)
+              setPageState('form')
+            } else {
+              setSelectedStaff(null)
+              setPageState('name_selection')
+            }
+            return
+          }
           throw new Error('Failed to save name selection')
         }
-      
+
+        setStaffBeforeChange(null)
         localStorage.setItem(`selected_staff_id_${uniqueUrl}`, selectedStaff.id)
         localStorage.setItem(`selected_staff_name_${uniqueUrl}`, selectedStaff.displayNameKanji)
         setWriterName(selectedStaff.displayNameKanji)
@@ -582,6 +603,7 @@ export default function FieldReport() {
     }
 
     const handleChangeRegistration = () => {
+      setStaffBeforeChange(selectedStaff)
       localStorage.removeItem(`selected_staff_id_${uniqueUrl}`)
       localStorage.removeItem(`selected_staff_name_${uniqueUrl}`)
       setSelectedStaff(null)
