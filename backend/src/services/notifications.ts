@@ -9,10 +9,11 @@ const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || '';
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || '';
 const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID || '';
 
-// 報告書承認通知のメンション先。既定＝西村さん(U0AR8F63YBA)・京谷さん(U09U1UHQ79C)。
-// これまでの <!channel>（チャンネル全員通知）をやめ、2名だけに通知する。
+// 報告書承認通知のメンション先。既定＝西村さん(U0AR8F63YBA)のみ。
+// 京谷さん(U09U1UHQ79C)は退職・Slackアカウント解除済みのため2026-09-11に除外。
+// これまでの <!channel>（チャンネル全員通知）をやめ、対象者だけに通知する。
 // 宛先変更は env SLACK_REPORT_MENTIONS（例: "<@Uxxxx> <@Uyyyy>"）で上書き可能。
-export const SLACK_REPORT_MENTIONS = process.env.SLACK_REPORT_MENTIONS || '<@U0AR8F63YBA> <@U09U1UHQ79C>';
+export const SLACK_REPORT_MENTIONS = process.env.SLACK_REPORT_MENTIONS || '<@U0AR8F63YBA>';
 
 interface EmailOptions {
   to: string[];
