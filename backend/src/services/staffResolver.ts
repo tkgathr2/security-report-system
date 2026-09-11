@@ -2,6 +2,7 @@
 // 方針（2026-06 スタッフNoキー化）:
 //   1. スタッフNo(procast_staff_no)で照合する。名前は表示項目であり identity ではない。
 //      No一致時はプロキャスト側の名前を正として表記（改姓・スペースゆれ）を追従更新する。
+//      ただし「個人 ⇄ 外注枠」の入れ替わりはNoの振り直しとみなし、旧レコードからNoを外す（KZ-147）。
 //   2. Noで見つからない場合のみ名前(漢字→カナ)で照合する。ただし対象は
 //      「No未付与のレコード」だけ。別のNoが付いた同姓同名レコードは別人なので吸収しない。
 //      名前一致したNo未付与レコードにはNoをバックフィルする。
@@ -95,6 +96,19 @@ export function normalizeForLookup(input: string | null | undefined): string {
 // SQL側は normalize_kana() 関数で同じ正規化を行う（migration 1781500000000）。
 const NRM = (col: string) => `normalize_kana(${col})`;
 
+// 外注スタッフ（プロキャストの外注枠「タイガーセキュリティー２」等）は、カナ名が全員この値の「枠」レコードで、
+// 個人ではない。カナ名は照合キーにならず、メールアドレスやログインアカウントを持たせてはならない（KZ-147）。
+export const OUTSOURCED_STAFF_KANA = 'ガイチュウスタッフ';
+
+export function isOutsourcedStaffKana(kana: string | null | undefined): boolean {
+  return normalizeForLookup(kana) === OUTSOURCED_STAFF_KANA;
+}
+
+// SQL側の同じ判定。kana が NULL の行は外注扱いにしない。
+export function notOutsourcedStaffSql(kanaCol: string): string {
+  return `COALESCE(${NRM(kanaCol)}, '') <> '${OUTSOURCED_STAFF_KANA}'`;
+}
+
 export async function resolveStaffForImport(
   db: DbClient,
   { staffNo, castName, castNameKana, adminEmail }: ResolveStaffParams
@@ -102,6 +116,8 @@ export async function resolveStaffForImport(
   const staffKana = castNameKana || castName;
   const normalizedKana = staffKana.replace(/\s+/g, ' ').replace(/　/g, ' ').trim();
   const no = staffNo && staffNo.trim() !== '' ? staffNo.trim() : null;
+  const outsourced = isOutsourcedStaffKana(staffKana);
+  let noReassigned = false;
 
   // 1) スタッフNoで照合（最優先）
   if (no) {
@@ -112,16 +128,35 @@ export async function resolveStaffForImport(
     );
     if (byNo.rows[0]) {
       const row = byNo.rows[0] as { id: string; display_name_kanji: string; display_name_kana: string };
-      if (row.display_name_kanji !== castName || row.display_name_kana !== normalizedKana) {
+      if (isOutsourcedStaffKana(row.display_name_kana) !== outsourced) {
+        // KZ-147: 同じNoで「個人 ⇄ 外注枠」が入れ替わるのは、プロキャスト側でNoが別人に振り直されたケース。
+        // 名前を上書きすると、旧レコードのメール・ログイン・報告書履歴が別人（外注枠）に付いたまま残る
+        // （本番で川面さんのレコードが「タイガーセキュリティー２」に書き換わった）。
+        // 旧レコードからNoを外して別人として扱い、以降の名前照合→新規作成に進む。
         await db.query(
-          `UPDATE staff_master SET display_name_kanji = $1, display_name_kana = $2, updated_at = CURRENT_TIMESTAMP
-           WHERE id = $3`,
-          [castName, normalizedKana, row.id]
+          `UPDATE staff_master SET procast_staff_no = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [row.id]
         );
+        await db.query(
+          `INSERT INTO admin_audit_logs (admin_email, action, target_type, target_id, payload_json, actor_type)
+           VALUES ($1, 'PROCAST_NO_REASSIGNED', 'staff_master', $2, $3::jsonb, 'system')`,
+          [adminEmail, row.id, JSON.stringify({ procast_staff_no: no, previous_name: row.display_name_kanji, new_name: castName })]
+        );
+        noReassigned = true;
+      } else {
+        if (row.display_name_kanji !== castName || row.display_name_kana !== normalizedKana) {
+          await db.query(
+            `UPDATE staff_master SET display_name_kanji = $1, display_name_kana = $2, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $3`,
+            [castName, normalizedKana, row.id]
+          );
+        }
+        return { staffId: row.id, autoAdded: false };
       }
-      return { staffId: row.id, autoAdded: false };
     }
+  }
 
+  if (no && !noReassigned) {
     // 意図的に削除された（soft-delete）スタッフはCSV同期で復活させない（No指定行にも適用）。
     // 2026-09-10修正：従来はここでガード無くfall-throughし、下の「3) 新規作成」で
     // 同じNoの新規active行を作ってしまっていた＝削除したスタッフが procast 自動同期のたびに
@@ -145,7 +180,8 @@ export async function resolveStaffForImport(
      WHERE ${NRM('display_name_kanji')} = ${NRM('$1')} AND deleted_at IS NULL ${noGuard} LIMIT 1`,
     nameParams
   );
-  if (!byName.rows[0]) {
+  // 外注枠はカナ名が全員同じなので、カナ照合すると別の外注枠や別人に吸収してしまう（漢字名のみで照合）。
+  if (!byName.rows[0] && !outsourced) {
     const kanaParams = no ? [staffKana, no] : [staffKana];
     byName = await db.query(
       `SELECT id, procast_staff_no FROM staff_master
@@ -173,7 +209,7 @@ export async function resolveStaffForImport(
        AND procast_staff_no IS NULL LIMIT 1`,
       [castName]
     );
-    if (!deletedByKanji.rows[0]) {
+    if (!deletedByKanji.rows[0] && !outsourced) {
       const deletedByKana = await db.query(
         `SELECT id FROM staff_master
          WHERE ${NRM('display_name_kana')} = ${NRM('$1')} AND deleted_at IS NOT NULL
@@ -183,7 +219,7 @@ export async function resolveStaffForImport(
       if (deletedByKana.rows[0]) {
         return { staffId: '', autoAdded: false, skippedDeleted: true };
       }
-    } else {
+    } else if (deletedByKanji.rows[0]) {
       return { staffId: '', autoAdded: false, skippedDeleted: true };
     }
   }
@@ -229,11 +265,13 @@ export async function resolveStaffForImport(
   // → No指定時は (procast_staff_no IS NULL OR procast_staff_no = $no) のレコードのみ許容。
   const lastResortParams = no ? [staffKana, no] : [staffKana];
   const lastResortNoGuard = no ? `AND (procast_staff_no IS NULL OR procast_staff_no = $2)` : '';
-  const lastResort = await db.query(
-    `SELECT id FROM staff_master
-     WHERE ${NRM('display_name_kana')} = ${NRM('$1')} AND deleted_at IS NULL ${lastResortNoGuard} LIMIT 1`,
-    lastResortParams
-  );
+  const lastResort = outsourced
+    ? { rows: [] }
+    : await db.query(
+      `SELECT id FROM staff_master
+       WHERE ${NRM('display_name_kana')} = ${NRM('$1')} AND deleted_at IS NULL ${lastResortNoGuard} LIMIT 1`,
+      lastResortParams
+    );
   if (lastResort.rows[0]) {
     return { staffId: (lastResort.rows[0] as { id: string }).id, autoAdded: false };
   }

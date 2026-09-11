@@ -735,37 +735,11 @@ async function cleanupData() {
     }
     cleanupDetail = `testDeleted:${deletedTest}`;
 
-    const seedIds = new Set(SEEDED_STAFF_DATA.map(s => s[0]));
-
-    const dupeResult = await pool.query(`
-      SELECT REPLACE(REPLACE(display_name_kana, ' ', ''), '　', '') as norm_kana,
-             array_agg(id ORDER BY created_at ASC) as ids,
-             array_agg(display_name_kana ORDER BY created_at ASC) as kanas
-      FROM staff_master
-      WHERE deleted_at IS NULL
-      GROUP BY REPLACE(REPLACE(display_name_kana, ' ', ''), '　', '')
-      HAVING COUNT(*) > 1
-    `);
-    let mergedCount = 0;
-    for (const row of dupeResult.rows) {
-      const allIds: string[] = row.ids;
-      const seedInGroup = allIds.find(id => seedIds.has(id));
-      const keepId = seedInGroup || allIds[0];
-      const removeIds = allIds.filter(id => id !== keepId);
-      for (const removeId of removeIds) {
-        await pool.query(
-          `UPDATE project_casts SET staff_id = $1 WHERE staff_id = $2`,
-          [keepId, removeId]
-        );
-        await pool.query(
-          `UPDATE cast_users SET staff_id = $1 WHERE staff_id = $2`,
-          [keepId, removeId]
-        );
-        await pool.query(`UPDATE staff_master SET deleted_at = NOW() WHERE id = $1`, [removeId]);
-        mergedCount++;
-      }
-    }
-    cleanupDetail += ` dupesMerged:${mergedCount}`;
+    // KZ-147: ここにあった「カナ名が同じ有効スタッフを重複とみなし、最古(またはseed)の1件へ
+    // project_casts / cast_users を寄せて残りを soft-delete する」起動時統合は廃止した。
+    // スタッフNoキー化(2026-06)以降は同姓同名の別人や、全員カナが「ガイチュウスタッフ」の外注スタッフが
+    // 正当に共存するため、この統合は起動のたびに別人のレコードを監査ログなしで消していた
+    // （本番で川面さんのレコードが171件作成→削除を繰り返し、外注スタッフも26件削除されていた）。
 
     const garbled = await pool.query(
       `DELETE FROM csv_imports WHERE original_file_name ~ '[À-ÿ][-¿]'`
