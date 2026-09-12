@@ -1,0 +1,10 @@
+# ビルド成果物はコンテナ内で作り直すため、ビルドコンテキストに含めない。
+# .gitignoreのみだとRailway/Nixpacksのビルドワークスペースに古いdist/が
+# 残存した場合にビルド後のCOPYで新しいビルド成果物を上書きしうるため明示的に除外する。
+node_modules/
+dist/
+backend/dist/
+backend/frontend-dist/
+frontend-dist/
+frontend/dist/
+.git/
