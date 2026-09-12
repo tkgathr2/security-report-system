@@ -1,10 +1,25 @@
-# ビルド成果物はコンテナ内で作り直すため、ビルドコンテキストに含めない。
-# .gitignoreのみだとRailway/Nixpacksのビルドワークスペースに古いdist/が
-# 残存した場合にビルド後のCOPYで新しいビルド成果物を上書きしうるため明示的に除外する。
-node_modules/
-dist/
-backend/dist/
-backend/frontend-dist/
-frontend-dist/
-frontend/dist/
+# ビルド成果物・秘匿情報・内部資料はイメージに含めない。
+# Docker除外パターンは.gitignoreと異なり非再帰(コンテキストルート基準)なので **/ を使う。
+**/node_modules/
+**/dist/
+**/frontend-dist/
 .git/
+
+# 秘匿情報(本コミットの主眼：.gitignoreだけでは不十分な場合の保険)
+.env
+.env.*
+!.env.example
+docker-compose.yml
+
+# 内部資料・デバッグ用途(本番構成や既知の弱点が書かれておりイメージに含める必要がない)
+# ※ tscのビルド対象(tsconfig.jsonのinclude)に影響しうるテストファイルは
+#   安全側に倒してここでは除外しない(実害はイメージサイズの微増のみ)。
+docs/
+.github/
+.devin/
+.omc/
+README.md
+check-*.mjs
+verify-*.mjs
+verify-*.js
+db_check*.js
