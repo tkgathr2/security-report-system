@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { requireAdmin } from '../middleware/auth';
-import { uploadPdfToSlack, sendSlackNotification, SLACK_REPORT_MENTIONS } from '../services/notifications';
+import { uploadPdfToSlack, sendSlackNotification, SLACK_REPORT_MENTIONS, notifySystemError } from '../services/notifications';
 import { sendCompanyNotificationEmails, sendWriterAndAdminNotifications, sendEmailWithLog } from '../services/emailSender';
 import { logAudit } from '../utils/auditLog';
 import { generateReportPdf } from '../services/pdfGenerator';
@@ -452,6 +452,11 @@ router.post('/:reportId/resend', requireAdmin, async (req: Request, res: Respons
 
     const adminUser = req.user as { email: string };
     logAudit({ req, actorEmail: adminUser.email, action: 'RESEND_REPORT', targetType: 'report', targetId: reportId, payload: { slack_sent: slackSent, writer_sent: writerSent, admin_sent: adminSent } });
+
+    const resendWarnings = [...emailWarnings, ...companyEmailWarnings];
+    if (resendWarnings.length > 0) {
+      await notifySystemError(reportId, resendWarnings).catch(() => {});
+    }
 
     res.json({
       ok: true,

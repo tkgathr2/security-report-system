@@ -1,7 +1,7 @@
 import { sendCompanyNotificationEmails, sendWriterAndAdminNotifications } from '../services/emailSender';
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
-import { sendSlackNotification, uploadPdfToSlack, SLACK_REPORT_MENTIONS } from '../services/notifications';
+import { sendSlackNotification, uploadPdfToSlack, SLACK_REPORT_MENTIONS, notifySystemError } from '../services/notifications';
 import { generateReportPdf } from '../services/pdfGenerator';
 import { authenticateCast, requireAdmin } from '../middleware/auth';
 import { AuthenticatedCastRequest } from '../types';
@@ -433,6 +433,7 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         }
       } catch (slackError) {
         console.error(`[ASYNC] Slack notification failed for report ${reportId}:`, slackError);
+        await notifySystemError(reportId, [`Slack通知処理で例外: ${String(slackError)}`]).catch(() => {});
       }
 
       // クライアントメール送信フラグを確認
@@ -493,8 +494,12 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
         });
 
         console.log(`[ASYNC] Writer/Admin email notifications for report ${reportId}:`, notificationResult);
+        if (notificationResult.warnings.length > 0) {
+          await notifySystemError(reportId, notificationResult.warnings).catch(() => {});
+        }
       } catch (emailError) {
         console.error(`[ASYNC] Writer/Admin email notification failed for report ${reportId}:`, emailError);
+        await notifySystemError(reportId, [`Writer/Admin メール通知処理で例外: ${String(emailError)}`]).catch(() => {});
       }
 
       // 新機能: company_emails経由での取引先メール送信（冪等性・リトライ・ログ記録付き）
@@ -515,12 +520,17 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
             pdfBuffer,
           });
           console.log(`[ASYNC] Company notification emails for report ${reportId}:`, companyEmailResult);
+          if (companyEmailResult.warnings.length > 0) {
+            await notifySystemError(reportId, companyEmailResult.warnings).catch(() => {});
+          }
         }
       } catch (companyEmailErr) {
         console.error(`[ASYNC] Company notification email failed for report ${reportId}:`, companyEmailErr);
+        await notifySystemError(reportId, [`取引先メール通知処理で例外: ${String(companyEmailErr)}`]).catch(() => {});
       }
       } catch (asyncError) {
         console.error(`[ASYNC] Unhandled error in background processing for report ${reportId}:`, asyncError);
+        await notifySystemError(reportId, [`承認後バックグラウンド処理で未捕捉の例外: ${String(asyncError)}`]).catch(() => {});
       }
     });
 

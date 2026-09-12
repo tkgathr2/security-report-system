@@ -8,6 +8,10 @@ const EMAIL_FROM = process.env.SMTP_FROM || 'noreply@takagi.bz';
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || '';
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || '';
 const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID || '';
+// 技術的エラー（メール/Slack送信失敗、PDF関連の失敗等）の通知先。
+// 未設定時は #システムエラー報告 にフォールバックする（他システムと統一した設計、
+// [[project_slack_error_notification_consolidation]] 2026-09-12）。
+const SLACK_ERROR_CHANNEL_ID = process.env.SLACK_ERROR_CHANNEL_ID || 'C0B5W304M4P';
 
 // 報告書承認通知のメンション先。既定＝西村さん(U0AR8F63YBA)のみ。
 // 京谷さん(U09U1UHQ79C)は退職・Slackアカウント解除済みのため2026-09-11に除外。
@@ -211,6 +215,54 @@ export async function uploadPdfToSlack(params: {
     }
   } catch (error) {
     console.error('[SLACK-PDF] Failed to upload PDF to Slack:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * 報告書送信処理中に起きた技術的エラー（メール/Slack送信失敗、PDF関連の失敗等）を
+ * #システムエラー報告 へ通知する。これまでこの種のエラーはwarningsに溜まるだけで
+ * 誰にも通知されていなかった（サイレント障害）ため新設した
+ * （[[project_slack_error_notification_consolidation]] 2026-09-12）。
+ * ベストエフォート・失敗しても呼び出し元の処理は止めない。
+ */
+export async function notifySystemError(reportId: string, warnings: string[]): Promise<{ success: boolean; error?: string }> {
+  if (warnings.length === 0) return { success: true };
+  if (!SLACK_BOT_TOKEN) {
+    console.log('[SLACK-ERROR] Bot token not configured, skipping system error notification');
+    return { success: false, error: 'Slack bot token not configured' };
+  }
+
+  try {
+    const text =
+      `:rotating_light: *【ほうこちゃん】技術エラー*\n` +
+      `*時刻:* ${new Date().toISOString()}\n` +
+      `*報告書ID:* ${reportId}\n` +
+      `*内容:*\n` + warnings.map(w => `• ${w}`).join('\n');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ channel: SLACK_ERROR_CHANNEL_ID, text }),
+        signal: controller.signal
+      });
+      const data = await response.json() as { ok: boolean; error?: string };
+      if (!data.ok) {
+        throw new Error(`chat.postMessage failed: ${data.error}`);
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[SLACK-ERROR] Failed to notify system error:', error);
     return { success: false, error: String(error) };
   }
 }
