@@ -127,6 +127,15 @@ router.post('/approve', authenticateCast, async (req: Request, res: Response) =>
     if (Array.isArray(guards)) {
       const guardsErr = validateArrayItems(guards.map((g: { name?: string }) => g?.name || ''), '警備員', MAX_LENGTHS.PERSON_NAME, MAX_LENGTHS.GUARDS_MAX_ITEMS);
       if (guardsErr) { sendBadRequest(res, guardsErr); return; }
+
+      // KZ-148: 開始/終了時刻が空のまま報告書（PDF・メール）が取引先へ送られていたため、全警備員の時刻を必須にする
+      const isBlank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
+      const guardWithoutTime = (guards as { name?: string; start_time?: unknown; end_time?: unknown }[])
+        .find(g => isBlank(g?.start_time) || isBlank(g?.end_time));
+      if (guardWithoutTime) {
+        sendBadRequest(res, `警備員「${guardWithoutTime.name || ''}」の開始時刻と終了時刻を入力してください`);
+        return;
+      }
     }
 
     if (has_qualifier === true) {
